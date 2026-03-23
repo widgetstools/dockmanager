@@ -1,0 +1,912 @@
+import type { TabGroupNode, PanelConfig, DockManagerState } from '../../types/dock';
+import type { DockResourceStrings } from '../../types/resourceStrings';
+import { defaultResourceStrings } from '../../types/resourceStrings';
+import { TabOverflowObserver, type TabOverflowState } from '../TabOverflowObserver';
+import {
+  iconClose,
+  iconMaximize,
+  iconRestore,
+  iconFloat,
+  iconUnpin,
+} from '../icons';
+
+// ─── Interfaces ──────────────────────────────────────────────────────
+
+export interface IDisposable {
+  dispose(): void;
+}
+
+export interface TabGroupViewCallbacks {
+  onClosePanel: (panelId: string) => void;
+  onFloatPanel: (panelId: string) => void;
+  onMaximizePanel: (panelId: string) => void;
+  onRestorePanel: (panelId: string) => void;
+  onUnpinPanel: (panelId: string) => void;
+  onSetActivePanel: (tabGroupId: string, panelId: string) => void;
+  onSetActivePane: (panelId: string) => void;
+  onToggleMaximize?: (panelId: string) => void;
+  createContent: (panelId: string, container: HTMLElement) => IDisposable;
+  createTab?: (panelId: string, container: HTMLElement, isActive: boolean) => IDisposable;
+  createHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string, container: HTMLElement) => IDisposable;
+}
+
+// ─── TabGroupView ────────────────────────────────────────────────────
+
+export class TabGroupView {
+  readonly element: HTMLDivElement;
+
+  private node: TabGroupNode;
+  private panels: Record<string, PanelConfig>;
+  private previousPanels: Record<string, PanelConfig> | null = null;
+  private activePaneId: string;
+  private maximizedPanelId: string | undefined;
+  private callbacks: TabGroupViewCallbacks;
+
+  // DOM references
+  private headerEl: HTMLDivElement;
+  private bottomTabStripEl: HTMLDivElement | null = null;
+  private tabContainerEl: HTMLDivElement | null = null;
+  private titleEl: HTMLSpanElement | null = null;
+  private contentAreaEl: HTMLDivElement;
+  private actionButtonsEl: HTMLDivElement;
+  private scrollLeftBtn: HTMLButtonElement | null = null;
+  private scrollRightBtn: HTMLButtonElement | null = null;
+
+  // Header action slots
+  private prefixSlotEl: HTMLDivElement | null = null;
+  private leftSlotEl: HTMLDivElement | null = null;
+  private rightSlotEl: HTMLDivElement | null = null;
+  private prefixSlotDisposable: IDisposable | null = null;
+  private leftSlotDisposable: IDisposable | null = null;
+  private rightSlotDisposable: IDisposable | null = null;
+
+  // Content management
+  private contentSlots = new Map<string, { container: HTMLDivElement; disposable: IDisposable }>();
+  private tabDisposables = new Map<string, IDisposable>();
+
+  // Tab overflow
+  private tabOverflowObserver: TabOverflowObserver;
+  private overflowState: TabOverflowState = { visibleTabs: [], overflowTabs: [], hasOverflow: false };
+  // (scroll arrows replace the old dropdown)
+
+  // rAF throttle for scroll events
+  private scrollRafPending = false;
+
+  // Resource strings for localization
+  private resourceStrings: DockResourceStrings;
+
+  constructor(
+    node: TabGroupNode,
+    panels: Record<string, PanelConfig>,
+    activePaneId: string,
+    maximizedPanelId: string | undefined,
+    callbacks: TabGroupViewCallbacks,
+    resourceStrings?: Partial<DockResourceStrings>,
+  ) {
+    this.node = node;
+    this.panels = panels;
+    this.activePaneId = activePaneId;
+    this.maximizedPanelId = maximizedPanelId;
+    this.callbacks = callbacks;
+    this.resourceStrings = { ...defaultResourceStrings, ...resourceStrings };
+
+    // Create root element
+    this.element = document.createElement('div');
+    this.element.style.cssText = 'display:flex;flex-direction:column;height:100%;width:100%;position:relative;';
+    this.element.className = this.getRootClassName();
+    this.element.setAttribute('data-dock-target', node.id);
+    this.element.setAttribute('role', 'region');
+    this.element.setAttribute('aria-label', panels[node.activePanel]?.title || 'Panel');
+    this.element.tabIndex = -1;
+
+    this.applyHasTabsAttr();
+    this.element.setAttribute('data-panel-id', node.activePanel);
+
+    // Focus handler
+    this.element.addEventListener('focus', () => {
+      this.callbacks.onSetActivePane(this.node.activePanel);
+    });
+
+    const isBottomTabs = node.headerPosition === 'bottom' && node.panels.length > 1;
+
+    // Create header (title bar — always at top)
+    this.headerEl = document.createElement('div');
+    this.headerEl.className = 'dock-panel-header';
+    this.headerEl.style.cssText =
+      'display:flex;align-items:center;justify-content:space-between;min-height:32px;padding:0 12px;flex-shrink:0;';
+    this.element.appendChild(this.headerEl);
+
+    // Create content area
+    this.contentAreaEl = document.createElement('div');
+    this.contentAreaEl.setAttribute('role', 'tabpanel');
+    this.contentAreaEl.id = `panel-${node.activePanel}`;
+    this.contentAreaEl.setAttribute('aria-labelledby', `tab-${node.activePanel}`);
+    this.contentAreaEl.style.cssText = 'flex:1;position:relative;overflow:hidden;';
+    this.element.appendChild(this.contentAreaEl);
+
+    // For bottom tabs: create a separate bottom tab strip element
+    if (isBottomTabs) {
+      this.bottomTabStripEl = document.createElement('div');
+      this.bottomTabStripEl.className = 'dock-panel-header dock-bottom-tab-strip';
+      this.bottomTabStripEl.style.cssText =
+        'display:flex;align-items:center;min-height:28px;padding:0 8px;flex-shrink:0;border-top:1px solid hsl(var(--dock-border));border-bottom:none;';
+      this.element.appendChild(this.bottomTabStripEl);
+    }
+
+    // Create action buttons container
+    this.actionButtonsEl = document.createElement('div');
+    this.actionButtonsEl.style.cssText = 'display:flex;align-items:center;gap:0;flex-shrink:0;margin-left:8px;';
+
+    // Build header contents
+    this.buildHeader();
+
+    // Build content for active panel
+    this.buildContent();
+
+    // Tab overflow observer
+    this.tabOverflowObserver = new TabOverflowObserver((state) => {
+      this.overflowState = state;
+      this.updateOverflowButton();
+    });
+    if (this.tabContainerEl) {
+      this.tabOverflowObserver.observe(this.tabContainerEl);
+    }
+  }
+
+  // ── Public API ──────────────────────────────────────────────────
+
+  update(
+    node: TabGroupNode,
+    panels: Record<string, PanelConfig>,
+    activePaneId: string,
+    maximizedPanelId: string | undefined,
+  ): void {
+    const prevNode = this.node;
+    const prevActivePaneId = this.activePaneId;
+
+    this.node = node;
+    this.panels = panels;
+    this.activePaneId = activePaneId;
+    this.maximizedPanelId = maximizedPanelId;
+
+    // Update data attributes
+    this.element.setAttribute('data-panel-id', node.activePanel);
+    this.element.setAttribute('aria-label', panels[node.activePanel]?.title || 'Panel');
+    this.applyHasTabsAttr();
+    this.element.className = this.getRootClassName();
+    this.contentAreaEl.id = `panel-${node.activePanel}`;
+    this.contentAreaEl.setAttribute('aria-labelledby', `tab-${node.activePanel}`);
+
+    const panelsChanged =
+      prevNode.panels.length !== node.panels.length ||
+      prevNode.panels.some((p, i) => p !== node.panels[i]);
+    const activePanelChanged = prevNode.activePanel !== node.activePanel;
+    const activePaneChanged = prevActivePaneId !== activePaneId;
+
+    // Detect panel config changes (title, icon, badge changed via PanelApi)
+    const prevPanels = this.previousPanels;
+    this.previousPanels = panels;
+    const configChanged = !panelsChanged && node.panels.some(id => {
+      const prev = prevPanels?.[id];
+      const curr = panels[id];
+      if (!prev || !curr) return false;
+      return prev.title !== curr.title || prev.icon !== curr.icon || prev.badge !== curr.badge;
+    });
+
+    if (panelsChanged) {
+      const needsBottomTabs = node.headerPosition === 'bottom' && node.panels.length > 1;
+
+      // Create bottom tab strip if transitioning to multi-panel bottom-tabs
+      if (needsBottomTabs && !this.bottomTabStripEl) {
+        this.bottomTabStripEl = document.createElement('div');
+        this.bottomTabStripEl.className = 'dock-panel-header dock-bottom-tab-strip';
+        this.bottomTabStripEl.style.cssText =
+          'display:flex;align-items:center;min-height:28px;padding:0 8px;flex-shrink:0;border-top:1px solid hsl(var(--dock-border));border-bottom:none;';
+        this.element.appendChild(this.bottomTabStripEl);
+      }
+      // Remove bottom tab strip if transitioning to single-panel
+      if (!needsBottomTabs && this.bottomTabStripEl) {
+        this.bottomTabStripEl.parentNode?.removeChild(this.bottomTabStripEl);
+        this.bottomTabStripEl = null;
+      }
+
+      this.clearHeader();
+      this.buildHeader();
+      // Reattach overflow observer and update scroll arrows after layout
+      if (this.tabContainerEl) {
+        this.tabOverflowObserver.observe(this.tabContainerEl);
+        requestAnimationFrame(() => this.updateScrollArrows());
+      }
+    } else if (activePanelChanged || activePaneChanged) {
+      // Just update tab styling
+      this.updateTabStyles();
+      this.updateActionButtons();
+      this.updateTitleElement();
+    }
+
+    // Update tab labels/icons if panel config changed (without full rebuild)
+    if (configChanged) {
+      if (this.callbacks.createTab) {
+        // Custom tabs: re-invoke createTab only for tabs whose config changed
+        this.updateCustomTabs(prevPanels);
+      } else {
+        this.updateTabLabels();
+      }
+      this.updateTitleElement();
+    }
+
+    if (activePanelChanged || panelsChanged) {
+      this.buildContent();
+    }
+  }
+
+  dispose(): void {
+    this.hideTabContextMenu();
+    this.tabOverflowObserver.dispose();
+
+    // Dispose content slots
+    for (const [, slot] of this.contentSlots) {
+      slot.disposable.dispose();
+    }
+    this.contentSlots.clear();
+
+    // Dispose tab disposables
+    for (const [, d] of this.tabDisposables) {
+      d.dispose();
+    }
+    this.tabDisposables.clear();
+
+    // Dispose header action slots
+    this.prefixSlotDisposable?.dispose();
+    this.leftSlotDisposable?.dispose();
+    this.rightSlotDisposable?.dispose();
+
+    if (this.element.parentNode) {
+      this.element.parentNode.removeChild(this.element);
+    }
+  }
+
+  // ── Private: Root class ─────────────────────────────────────────
+
+  private getRootClassName(): string {
+    const isActive = this.node.panels.includes(this.activePaneId);
+    return `dock-tab-group${isActive ? ' dock-pane-active' : ''}`;
+  }
+
+  private applyHasTabsAttr(): void {
+    if (this.node.panels.length > 1) {
+      this.element.setAttribute('data-has-tabs', '');
+    } else {
+      this.element.removeAttribute('data-has-tabs');
+    }
+  }
+
+  // ── Private: Header building ────────────────────────────────────
+
+  private clearHeader(): void {
+    // Dispose tab disposables
+    for (const [, d] of this.tabDisposables) {
+      d.dispose();
+    }
+    this.tabDisposables.clear();
+
+    // Dispose header action slots
+    this.prefixSlotDisposable?.dispose();
+    this.prefixSlotDisposable = null;
+    this.leftSlotDisposable?.dispose();
+    this.leftSlotDisposable = null;
+    this.rightSlotDisposable?.dispose();
+    this.rightSlotDisposable = null;
+
+    this.headerEl.innerHTML = '';
+    if (this.bottomTabStripEl) {
+      this.bottomTabStripEl.innerHTML = '';
+    }
+    this.tabContainerEl = null;
+    this.titleEl = null;
+    this.overflowBtnContainer = null;
+    this.prefixSlotEl = null;
+    this.leftSlotEl = null;
+    this.rightSlotEl = null;
+  }
+
+  private buildHeader(): void {
+    const hasTabs = this.node.panels.length > 1;
+    const isBottomTabs = this.node.headerPosition === 'bottom' && hasTabs;
+
+    // Prefix header actions slot
+    if (this.callbacks.createHeaderActions) {
+      this.prefixSlotEl = document.createElement('div');
+      this.prefixSlotEl.style.cssText = 'display:flex;align-items:center;margin-right:4px;flex-shrink:0;';
+      this.headerEl.appendChild(this.prefixSlotEl);
+      this.prefixSlotDisposable = this.callbacks.createHeaderActions('prefix', this.node.id, this.prefixSlotEl);
+    }
+
+    // Left header actions slot
+    if (this.callbacks.createHeaderActions) {
+      this.leftSlotEl = document.createElement('div');
+      this.leftSlotEl.style.cssText = 'display:flex;align-items:center;margin-right:4px;flex-shrink:0;';
+      this.headerEl.appendChild(this.leftSlotEl);
+      this.leftSlotDisposable = this.callbacks.createHeaderActions('left', this.node.id, this.leftSlotEl);
+    }
+
+    if (isBottomTabs) {
+      // Bottom-tabs layout: title + actions in top header, tabs in bottom strip
+      this.buildSingleTitle(); // Title bar at top shows active panel title
+      // Build tab strip inside the bottom element
+      if (this.bottomTabStripEl) {
+        this.buildTabStrip(this.bottomTabStripEl);
+      }
+    } else if (hasTabs) {
+      // Default: tabs in the header
+      this.buildTabStrip(this.headerEl);
+    } else {
+      // Single panel: just title
+      this.buildSingleTitle();
+    }
+
+    // Right header actions slot
+    if (this.callbacks.createHeaderActions) {
+      this.rightSlotEl = document.createElement('div');
+      this.rightSlotEl.style.cssText = 'display:flex;align-items:center;margin-left:4px;flex-shrink:0;';
+      this.headerEl.appendChild(this.rightSlotEl);
+      this.rightSlotDisposable = this.callbacks.createHeaderActions('right', this.node.id, this.rightSlotEl);
+    }
+
+    // Action buttons go in the top header always
+    this.buildActionButtons();
+    this.headerEl.appendChild(this.actionButtonsEl);
+  }
+
+  private buildTabStrip(parentEl?: HTMLElement): void {
+    const outerWrap = document.createElement('div');
+    outerWrap.style.cssText = 'display:flex;align-items:center;gap:0;flex:1;overflow:hidden;position:relative;';
+
+    this.tabContainerEl = document.createElement('div');
+    this.tabContainerEl.setAttribute('role', 'tablist');
+    this.tabContainerEl.setAttribute('aria-label', 'Panel tabs');
+    this.tabContainerEl.style.cssText = 'display:flex;align-items:center;gap:0;overflow:hidden;flex:1;';
+
+    for (const panelId of this.node.panels) {
+      const panel = this.panels[panelId];
+      if (!panel) continue;
+
+      const isSelected = panelId === this.node.activePanel;
+      const isActivePane = this.node.panels.includes(this.activePaneId);
+      const isSelectedAndActive = isSelected && isActivePane;
+
+      const tabEl = document.createElement('div');
+      tabEl.setAttribute('data-tab-id', panelId);
+      tabEl.id = `tab-${panelId}`;
+      tabEl.setAttribute('role', 'tab');
+      tabEl.setAttribute('aria-selected', String(isSelected));
+      tabEl.setAttribute('aria-controls', `panel-${panelId}`);
+      tabEl.tabIndex = isSelected ? 0 : -1;
+      const isDisabled = panel.disabled === true;
+      let tabClass = isSelected ? 'dock-tab dock-tab-selected' : 'dock-tab';
+      if (isDisabled) tabClass += ' dock-tab-disabled';
+      tabEl.className = tabClass;
+      if (isDisabled) {
+        tabEl.setAttribute('data-disabled', 'true');
+      }
+      // Apply color directly to ensure correct state
+      if (isSelectedAndActive) {
+        tabEl.style.color = 'hsl(var(--dock-tab-text-active))';
+        tabEl.style.borderBottomColor = 'hsl(var(--dock-primary))';
+      } else if (isSelected) {
+        tabEl.style.color = 'hsl(var(--dock-tab-text))';
+        tabEl.style.borderBottomColor = 'transparent';
+      }
+
+      if (this.callbacks.createTab) {
+        const d = this.callbacks.createTab(panelId, tabEl, isSelected);
+        this.tabDisposables.set(panelId, d);
+      } else {
+        this.buildDefaultTabContent(tabEl, panel, panelId, isSelected);
+      }
+
+      // Double-click tab → maximize/restore panel
+      tabEl.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        if (panel.disabled) return;
+        if (this.callbacks.onToggleMaximize) {
+          this.callbacks.onToggleMaximize(panelId);
+        } else {
+          // Fallback: use maximize/restore directly
+          if (this.maximizedPanelId === panelId) {
+            this.callbacks.onRestorePanel(panelId);
+          } else {
+            this.callbacks.onMaximizePanel(panelId);
+          }
+        }
+      });
+
+      // Right-click context menu (skip for disabled panels)
+      tabEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (panel.disabled) return;
+        this.showTabContextMenu(panelId, panel, e.clientX, e.clientY);
+      });
+
+      this.tabContainerEl.appendChild(tabEl);
+    }
+
+    // Left scroll arrow (hidden initially)
+    const scrollBtnStyle = 'flex-shrink:0;padding:2px 4px;color:hsl(var(--dock-text-muted));cursor:pointer;background:none;border:none;display:none;align-items:center;justify-content:center;';
+
+    this.scrollLeftBtn = document.createElement('button');
+    this.scrollLeftBtn.style.cssText = scrollBtnStyle;
+    this.scrollLeftBtn.setAttribute('aria-label', 'Scroll tabs left');
+    this.scrollLeftBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>';
+    this.scrollLeftBtn.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      this.scrollTabs('left');
+    });
+    outerWrap.appendChild(this.scrollLeftBtn);
+    outerWrap.appendChild(this.tabContainerEl);
+
+    // Right scroll arrow (hidden initially)
+    this.scrollRightBtn = document.createElement('button');
+    this.scrollRightBtn.style.cssText = scrollBtnStyle;
+    this.scrollRightBtn.setAttribute('aria-label', 'Scroll tabs right');
+    this.scrollRightBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>';
+    this.scrollRightBtn.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      this.scrollTabs('right');
+    });
+    outerWrap.appendChild(this.scrollRightBtn);
+
+    // Listen to scroll events on the tab container to update arrow visibility (rAF-throttled)
+    this.tabContainerEl.addEventListener('scroll', () => {
+      if (!this.scrollRafPending) {
+        this.scrollRafPending = true;
+        requestAnimationFrame(() => {
+          this.scrollRafPending = false;
+          this.updateScrollArrows();
+        });
+      }
+    });
+
+    const target = parentEl || this.headerEl;
+    target.appendChild(outerWrap);
+  }
+
+  private buildSingleTitle(): void {
+    const panelId = this.node.activePanel;
+    const activePanel = this.panels[panelId];
+    this.titleEl = document.createElement('span');
+    this.titleEl.className = 'dock-panel-title';
+    this.titleEl.setAttribute('data-tab-id', panelId);
+    this.titleEl.textContent = activePanel?.title || 'Panel';
+
+    // Right-click context menu on single title (skip for disabled panels)
+    this.titleEl.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (activePanel && !activePanel.disabled) {
+        this.showTabContextMenu(panelId, activePanel, e.clientX, e.clientY);
+      }
+    });
+
+    this.headerEl.appendChild(this.titleEl);
+  }
+
+  private buildDefaultTabContent(
+    tabEl: HTMLDivElement,
+    panel: PanelConfig,
+    panelId: string,
+    isSelected: boolean,
+  ): void {
+    // Icon
+    if (panel.icon) {
+      const iconSpan = document.createElement('span');
+      iconSpan.style.marginRight = '4px';
+      iconSpan.textContent = panel.icon;
+      tabEl.appendChild(iconSpan);
+    }
+
+    // Title label
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'dock-tab-label';
+    labelSpan.style.whiteSpace = 'nowrap';
+    labelSpan.textContent = panel.title;
+    tabEl.appendChild(labelSpan);
+
+    // Close button — hover visibility is handled by CSS:
+    //   .dock-tab:hover .dock-tab-close, .dock-tab.dock-tab-selected .dock-tab-close { opacity: 0.5 }
+    //   .dock-tab-close:hover { opacity: 1 !important }
+    // No JS mouseenter/mouseleave needed — avoids memory leaks when tabs are rebuilt.
+    if (panel.closable !== false) {
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'dock-tab-close';
+      closeBtn.setAttribute('data-action', 'close');
+      closeBtn.setAttribute('data-panel-id', panelId);
+      closeBtn.setAttribute('aria-label', `Close ${panel.title}`);
+      closeBtn.innerHTML = iconClose(12);
+      tabEl.appendChild(closeBtn);
+    }
+  }
+
+  // ── Context Menu ──────────────────────────────────────────────────
+
+  private contextMenuEl: HTMLDivElement | null = null;
+  private contextMenuCleanup: (() => void) | null = null;
+
+  private showTabContextMenu(panelId: string, panel: PanelConfig, x: number, y: number): void {
+    this.hideTabContextMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'dock-context-menu';
+    menu.style.cssText = `
+      position:fixed; left:${x}px; top:${y}px; z-index:10010;
+      background:hsl(var(--dock-surface)); border:1px solid hsl(var(--dock-border));
+      border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,0.15);
+      padding:4px 0; min-width:140px; font-size:12px;
+      color:hsl(var(--dock-text));
+    `;
+
+    const addItem = (label: string, action: () => void, disabled = false) => {
+      const item = document.createElement('div');
+      // Use CSS classes for hover effects — no JS listeners needed.
+      item.className = disabled ? 'dock-context-menu-item disabled' : 'dock-context-menu-item';
+      item.textContent = label;
+      if (!disabled) {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.hideTabContextMenu();
+          action();
+        });
+      }
+      menu.appendChild(item);
+    };
+
+    const addSeparator = () => {
+      const sep = document.createElement('div');
+      sep.className = 'dock-context-menu-separator';
+      menu.appendChild(sep);
+    };
+
+    // Close
+    addItem(this.resourceStrings.close, () => this.callbacks.onClosePanel(panelId), panel.closable === false);
+
+    // Close Others (only if multiple tabs)
+    if (this.node.panels.length > 1) {
+      addItem(this.resourceStrings.closeOthers, () => {
+        for (const pid of this.node.panels) {
+          if (pid !== panelId && this.panels[pid]?.closable !== false) {
+            this.callbacks.onClosePanel(pid);
+          }
+        }
+      });
+
+      // Close All
+      addItem(this.resourceStrings.closeAll, () => {
+        for (const pid of this.node.panels) {
+          if (this.panels[pid]?.closable !== false) {
+            this.callbacks.onClosePanel(pid);
+          }
+        }
+      });
+
+      // Close to the Right
+      const panelIndex = this.node.panels.indexOf(panelId);
+      if (panelIndex < this.node.panels.length - 1) {
+        addItem('Close to the Right', () => {
+          for (let i = panelIndex + 1; i < this.node.panels.length; i++) {
+            const pid = this.node.panels[i];
+            if (this.panels[pid]?.closable !== false) {
+              this.callbacks.onClosePanel(pid);
+            }
+          }
+        });
+      }
+    }
+
+    addSeparator();
+
+    // Float
+    addItem(this.resourceStrings.float, () => this.callbacks.onFloatPanel(panelId), panel.floatable === false);
+
+    // Unpin
+    if (panel.allowPinning !== false) {
+      addItem(this.resourceStrings.unpin, () => this.callbacks.onUnpinPanel(panelId));
+    }
+
+    addSeparator();
+
+    // Maximize
+    addItem(this.resourceStrings.maximize, () => this.callbacks.onMaximizePanel(panelId));
+
+    document.body.appendChild(menu);
+    this.contextMenuEl = menu;
+
+    // Close on click outside — use capture phase to fire before any other handler.
+    // No setTimeout needed; capture phase ensures the current right-click event
+    // won't immediately close the menu we just opened.
+    const onOutsideClick = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) {
+        this.hideTabContextMenu();
+      }
+    };
+    document.addEventListener('mousedown', onOutsideClick, true);
+
+    this.contextMenuCleanup = () => {
+      document.removeEventListener('mousedown', onOutsideClick, true);
+    };
+  }
+
+  private hideTabContextMenu(): void {
+    if (this.contextMenuEl) {
+      if (this.contextMenuEl.parentNode) {
+        this.contextMenuEl.parentNode.removeChild(this.contextMenuEl);
+      }
+      this.contextMenuEl = null;
+    }
+    if (this.contextMenuCleanup) {
+      this.contextMenuCleanup();
+      this.contextMenuCleanup = null;
+    }
+  }
+
+  // ── Tab styling ──────────────────────────────────────────────────
+
+  private getTabStyle(isSelected: boolean, isSelectedAndActive: boolean): string {
+    const base = 'display:flex;align-items:center;gap:4px;padding:6px 12px;cursor:pointer;user-select:none;font-size:12px;transition:color 0.15s,border-color 0.15s;border-bottom:2px solid transparent;margin-bottom:-1px;';
+    if (isSelectedAndActive) {
+      return base + 'color:hsl(var(--dock-tab-text-active));border-bottom-color:hsl(var(--dock-primary));font-weight:500;';
+    }
+    if (isSelected) {
+      return base + 'color:hsl(var(--dock-tab-text));font-weight:500;';
+    }
+    return base + 'color:hsl(var(--dock-tab-text));';
+  }
+
+  // ── Private: Action buttons ─────────────────────────────────────
+
+  private buildActionButtons(): void {
+    this.actionButtonsEl.innerHTML = '';
+    const activePanel = this.panels[this.node.activePanel];
+    const isMaximized = this.maximizedPanelId === this.node.activePanel;
+    const allowMaximize = activePanel?.allowMaximize !== false;
+    const allowPinning = activePanel?.allowPinning !== false;
+
+    // Hide all action buttons for disabled panels
+    if (activePanel?.disabled) return;
+
+    // Unpin button
+    if (allowPinning) {
+      const unpinBtn = this.createActionButton('unpin', this.node.activePanel, this.resourceStrings.unpin, iconUnpin());
+      this.actionButtonsEl.appendChild(unpinBtn);
+    }
+
+    // Maximize/Restore button
+    if (allowMaximize) {
+      if (isMaximized) {
+        const restoreBtn = this.createActionButton('restore', this.node.activePanel, this.resourceStrings.restore, iconRestore());
+        this.actionButtonsEl.appendChild(restoreBtn);
+      } else {
+        const maxBtn = this.createActionButton('maximize', this.node.activePanel, this.resourceStrings.maximize, iconMaximize());
+        this.actionButtonsEl.appendChild(maxBtn);
+      }
+    }
+
+    // Float button (only when not maximized)
+    if (!isMaximized) {
+      const floatBtn = this.createActionButton('float', this.node.activePanel, this.resourceStrings.float, iconFloat());
+      this.actionButtonsEl.appendChild(floatBtn);
+    }
+
+    // Close button
+    if (activePanel?.closable !== false) {
+      const closeBtn = this.createActionButton('close', this.node.activePanel, this.resourceStrings.close, iconClose(14));
+      closeBtn.style.color = 'hsl(var(--dock-text-muted))';
+      this.actionButtonsEl.appendChild(closeBtn);
+    }
+  }
+
+  private updateActionButtons(): void {
+    this.buildActionButtons();
+  }
+
+  private createActionButton(action: string, panelId: string, title: string, iconHtml: string): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.className = 'dock-action-btn';
+    btn.setAttribute('data-action', action);
+    btn.setAttribute('data-panel-id', panelId);
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
+    btn.innerHTML = iconHtml;
+    // Hover is handled by CSS: .dock-action-btn:hover { color: hsl(var(--dock-text)); }
+    // No JS mouseenter/mouseleave needed — avoids memory leaks when buttons are rebuilt.
+    return btn;
+  }
+
+  // ── Private: Content ────────────────────────────────────────────
+
+  private previousActiveId: string | null = null;
+
+  private buildContent(): void {
+    // Only hide the previously active slot (not ALL slots)
+    if (this.previousActiveId && this.previousActiveId !== this.node.activePanel) {
+      const prev = this.contentSlots.get(this.previousActiveId);
+      if (prev) prev.container.style.display = 'none';
+    }
+
+    const activeId = this.node.activePanel;
+    this.previousActiveId = activeId;
+    if (!activeId || !this.panels[activeId]) {
+      // Show empty placeholder
+      if (!this.contentAreaEl.querySelector('.dock-empty-placeholder')) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'dock-empty-placeholder';
+        placeholder.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:hsl(var(--dock-text-muted));font-size:14px;';
+        placeholder.textContent = 'Empty';
+        this.contentAreaEl.appendChild(placeholder);
+      }
+      return;
+    }
+
+    // Remove empty placeholder if present
+    const placeholder = this.contentAreaEl.querySelector('.dock-empty-placeholder');
+    if (placeholder) placeholder.remove();
+
+    // Show or create the content slot for the active panel
+    const existing = this.contentSlots.get(activeId);
+    if (existing) {
+      existing.container.style.display = '';
+      return;
+    }
+
+    // Create new content slot
+    const container = document.createElement('div');
+    container.style.cssText = 'width:100%;height:100%;overflow:hidden;';
+    this.contentAreaEl.appendChild(container);
+
+    const disposable = this.callbacks.createContent(activeId, container);
+    this.contentSlots.set(activeId, { container, disposable });
+
+    // Remove content slots for panels no longer in this group
+    for (const [id, slot] of this.contentSlots) {
+      if (!this.node.panels.includes(id)) {
+        slot.disposable.dispose();
+        slot.container.remove();
+        this.contentSlots.delete(id);
+      }
+    }
+  }
+
+  // ── Private: Tab style updates ─────────────────────────────────
+
+  private updateTabStyles(): void {
+    if (!this.tabContainerEl) return;
+    const isActivePane = this.node.panels.includes(this.activePaneId);
+
+    const tabs = this.tabContainerEl.querySelectorAll<HTMLElement>('[data-tab-id]');
+    tabs.forEach((tabEl) => {
+      const panelId = tabEl.getAttribute('data-tab-id');
+      const isSelected = panelId === this.node.activePanel;
+      const isSelectedAndActive = isSelected && isActivePane;
+      tabEl.className = isSelected ? 'dock-tab dock-tab-selected' : 'dock-tab';
+      tabEl.setAttribute('aria-selected', String(isSelected));
+      tabEl.tabIndex = isSelected ? 0 : -1;
+      // Apply color directly to avoid CSS specificity/recalculation issues
+      if (isSelectedAndActive) {
+        tabEl.style.color = 'hsl(var(--dock-tab-text-active))';
+        tabEl.style.borderBottomColor = 'hsl(var(--dock-primary))';
+      } else if (isSelected) {
+        tabEl.style.color = 'hsl(var(--dock-tab-text))';
+        tabEl.style.borderBottomColor = 'transparent';
+      } else {
+        tabEl.style.color = '';
+        tabEl.style.borderBottomColor = '';
+      }
+    });
+  }
+
+  private updateTitleElement(): void {
+    if (!this.titleEl) return;
+    const activePanel = this.panels[this.node.activePanel];
+    this.titleEl.textContent = activePanel?.title || 'Panel';
+    this.titleEl.setAttribute('data-tab-id', this.node.activePanel);
+  }
+
+  /** Re-invoke createTab for tabs whose panel config changed (title/icon/badge) */
+  private updateCustomTabs(prevPanels: Record<string, PanelConfig> | null): void {
+    if (!this.tabContainerEl || !this.callbacks.createTab) return;
+    for (const panelId of this.node.panels) {
+      const prev = prevPanels?.[panelId];
+      const curr = this.panels[panelId];
+      if (!prev || !curr) continue;
+      if (prev.title === curr.title && prev.icon === curr.icon && prev.badge === curr.badge) continue;
+      // This tab's config changed — dispose old content and re-render
+      const tabEl = this.tabContainerEl.querySelector<HTMLElement>(`[data-tab-id="${panelId}"]`);
+      if (!tabEl) continue;
+      const oldDisposable = this.tabDisposables.get(panelId);
+      if (oldDisposable) {
+        oldDisposable.dispose();
+        this.tabDisposables.delete(panelId);
+      }
+      const isSelected = panelId === this.node.activePanel;
+      const d = this.callbacks.createTab(panelId, tabEl, isSelected);
+      this.tabDisposables.set(panelId, d);
+    }
+  }
+
+  /** Update tab label text/icons without full header rebuild (for PanelApi.setTitle/setIcon/setBadge) */
+  private updateTabLabels(): void {
+    if (!this.tabContainerEl) return;
+    const tabs = this.tabContainerEl.querySelectorAll<HTMLElement>('[data-tab-id]');
+    tabs.forEach(tabEl => {
+      const panelId = tabEl.getAttribute('data-tab-id');
+      if (!panelId) return;
+      const panel = this.panels[panelId];
+      if (!panel) return;
+
+      // Update label text
+      const labelEl = tabEl.querySelector('.dock-tab-label');
+      if (labelEl) labelEl.textContent = panel.title;
+
+      // Update icon
+      const iconEl = tabEl.querySelector('.dock-tab-icon');
+      if (panel.icon) {
+        if (iconEl) {
+          iconEl.textContent = panel.icon;
+        } else {
+          const newIcon = document.createElement('span');
+          newIcon.className = 'dock-tab-icon';
+          newIcon.textContent = panel.icon;
+          tabEl.insertBefore(newIcon, tabEl.firstChild);
+        }
+      } else if (iconEl) {
+        iconEl.remove();
+      }
+
+      // Update badge
+      const badgeEl = tabEl.querySelector('.dock-tab-badge');
+      if (panel.badge) {
+        if (badgeEl) {
+          badgeEl.textContent = panel.badge;
+        } else {
+          const newBadge = document.createElement('span');
+          newBadge.className = 'dock-tab-badge';
+          newBadge.textContent = panel.badge;
+          tabEl.appendChild(newBadge);
+        }
+      } else if (badgeEl) {
+        badgeEl.remove();
+      }
+    });
+  }
+
+  // ── Private: Scroll arrows ─────────────────────────────────────
+
+  private updateOverflowButton(): void {
+    // Called by the TabOverflowObserver when overflow state changes.
+    // Update scroll arrow visibility based on current scroll position.
+    this.updateScrollArrows();
+  }
+
+  private updateScrollArrows(): void {
+    if (!this.tabContainerEl || !this.scrollLeftBtn || !this.scrollRightBtn) return;
+
+    const el = this.tabContainerEl;
+    const canScrollLeft = el.scrollLeft > 0;
+    const canScrollRight = el.scrollLeft < el.scrollWidth - el.clientWidth - 1;
+
+    this.scrollLeftBtn.style.display = canScrollLeft ? 'flex' : 'none';
+    this.scrollRightBtn.style.display = canScrollRight ? 'flex' : 'none';
+  }
+
+  private scrollTabs(direction: 'left' | 'right'): void {
+    if (!this.tabContainerEl) return;
+    const scrollAmount = 120; // pixels per click
+    this.tabContainerEl.scrollBy({
+      left: direction === 'right' ? scrollAmount : -scrollAmount,
+      behavior: 'smooth',
+    });
+    // The scroll event handler (rAF-throttled) will naturally update arrow visibility
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "name": "@widgetstools/dock-manager-core",
+  "version": "0.1.0",
+  "description": "Zero-dependency layout manager supporting tabs, splits, floating windows, and auto-hide panels. Framework-agnostic core.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./styles.css": "./dist/styles/dock-manager.css"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "npx tsup src/index.ts --format esm,cjs --dts --clean && cp -r src/styles dist/",
+    "dev": "npx tsup src/index.ts --format esm,cjs --dts --watch"
+  },
+  "devDependencies": {
+    "tsup": "^7.2.0",
+    "typescript": "~5.9.3"
+  },
+  "keywords": [
+    "dock-manager",
+    "layout",
+    "tabs",
+    "split-pane",
+    "floating-panels",
+    "drag-and-drop",
+    "docking",
+    "auto-hide",
+    "zero-dependencies"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nndrao/dockmanager.git",
+    "directory": "packages/dock-manager-core"
+  },
+  "homepage": "https://github.com/nndrao/dockmanager#readme",
+  "bugs": {
+    "url": "https://github.com/nndrao/dockmanager/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

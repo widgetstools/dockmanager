@@ -1,0 +1,32 @@
+{
+  "name": "trading-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@widgetstools/dock-manager-core": "*",
+    "@widgetstools/react-dock-manager": "*",
+    "ag-grid-community": "^33.0.0",
+    "ag-grid-enterprise": "^33.0.0",
+    "ag-grid-react": "^33.0.0",
+    "lucide-react": "^0.462.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^24.12.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^6.0.1",
+    "tailwindcss": "^4.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.1"
+  }
+}

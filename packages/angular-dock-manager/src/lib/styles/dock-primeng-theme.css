@@ -1,0 +1,151 @@
+/* PrimeNG Theme Bridge for Dock Manager */
+
+/* Map PrimeNG light theme to dock properties */
+:root.p-light {
+  --dock-bg: 220 20% 96%;
+  --dock-surface: 0 0% 100%;
+  --dock-surface-alt: 220 14% 95%;
+  --dock-panel-header: 220 14% 95%;
+  --dock-tab-bar: 220 14% 93%;
+  --dock-tab-active: 0 0% 100%;
+  --dock-tab-text: 0 0% 30%;
+  --dock-tab-text-active: 217 91% 50%;
+  --dock-text: 0 0% 15%;
+  --dock-text-secondary: 0 0% 40%;
+  --dock-text-muted: 0 0% 55%;
+  --dock-border: 220 13% 87%;
+  --dock-splitter: 220 13% 87%;
+  --dock-splitter-hover: 217 91% 60%;
+  --dock-hover: 220 14% 93%;
+  --dock-float-shadow: 0 0% 0%;
+  --dock-unpinned-bg: 220 14% 95%;
+}
+
+/* Map PrimeNG dark theme to dock properties */
+:root.p-dark,
+:root.dark {
+  --dock-bg: 222 47% 7%;
+  --dock-surface: 222 47% 10%;
+  --dock-surface-alt: 222 47% 12%;
+  --dock-panel-header: 222 47% 13%;
+  --dock-tab-bar: 222 47% 11%;
+  --dock-tab-active: 222 47% 10%;
+  --dock-tab-text: 215 20% 60%;
+  --dock-tab-text-active: 217 91% 70%;
+  --dock-text: 210 40% 96%;
+  --dock-text-secondary: 215 20% 65%;
+  --dock-text-muted: 215 15% 45%;
+  --dock-border: 217 33% 20%;
+  --dock-splitter: 217 33% 20%;
+  --dock-splitter-hover: 217 91% 60%;
+  --dock-hover: 217 33% 16%;
+  --dock-float-shadow: 0 0% 0%;
+  --dock-unpinned-bg: 222 47% 12%;
+}
+
+/* PrimeNG Lara theme (light variant) */
+:root.p-lara.p-light {
+  --dock-bg: 220 20% 96%;
+  --dock-surface: 0 0% 100%;
+  --dock-surface-alt: 220 14% 95%;
+  --dock-panel-header: 220 14% 95%;
+  --dock-tab-bar: 220 14% 93%;
+  --dock-tab-active: 0 0% 100%;
+  --dock-tab-text: 0 0% 30%;
+  --dock-tab-text-active: 217 91% 50%;
+  --dock-text: 0 0% 15%;
+  --dock-text-secondary: 0 0% 40%;
+  --dock-text-muted: 0 0% 55%;
+  --dock-border: 220 13% 87%;
+  --dock-splitter: 220 13% 87%;
+  --dock-splitter-hover: 217 91% 60%;
+  --dock-hover: 220 14% 93%;
+  --dock-float-shadow: 0 0% 0%;
+  --dock-unpinned-bg: 220 14% 95%;
+}
+
+/* PrimeNG Lara theme (dark variant) */
+:root.p-lara.p-dark,
+:root.p-lara.dark {
+  --dock-bg: 222 47% 7%;
+  --dock-surface: 222 47% 10%;
+  --dock-surface-alt: 222 47% 12%;
+  --dock-panel-header: 222 47% 13%;
+  --dock-tab-bar: 222 47% 11%;
+  --dock-tab-active: 222 47% 10%;
+  --dock-tab-text: 215 20% 60%;
+  --dock-tab-text-active: 217 91% 70%;
+  --dock-text: 210 40% 96%;
+  --dock-text-secondary: 215 20% 65%;
+  --dock-text-muted: 215 15% 45%;
+  --dock-border: 217 33% 20%;
+  --dock-splitter: 217 33% 20%;
+  --dock-splitter-hover: 217 91% 60%;
+  --dock-hover: 217 33% 16%;
+  --dock-float-shadow: 0 0% 0%;
+  --dock-unpinned-bg: 222 47% 12%;
+}
+
+/* PrimeNG Soho theme (light variant) */
+:root.p-soho.p-light {
+  --dock-bg: 220 20% 96%;
+  --dock-surface: 0 0% 100%;
+  --dock-surface-alt: 220 14% 95%;
+  --dock-panel-header: 220 14% 95%;
+  --dock-tab-bar: 220 14% 93%;
+  --dock-tab-active: 0 0% 100%;
+  --dock-tab-text: 0 0% 30%;
+  --dock-tab-text-active: 217 91% 50%;
+  --dock-text: 0 0% 15%;
+  --dock-text-secondary: 0 0% 40%;
+  --dock-text-muted: 0 0% 55%;
+  --dock-border: 220 13% 87%;
+  --dock-splitter: 220 13% 87%;
+  --dock-splitter-hover: 217 91% 60%;
+  --dock-hover: 220 14% 93%;
+  --dock-float-shadow: 0 0% 0%;
+  --dock-unpinned-bg: 220 14% 95%;
+}
+
+/* PrimeNG Soho theme (dark variant) */
+:root.p-soho.p-dark,
+:root.p-soho.dark {
+  --dock-bg: 222 47% 7%;
+  --dock-surface: 222 47% 10%;
+  --dock-surface-alt: 222 47% 12%;
+  --dock-panel-header: 222 47% 13%;
+  --dock-tab-bar: 222 47% 11%;
+  --dock-tab-active: 222 47% 10%;
+  --dock-tab-text: 215 20% 60%;
+  --dock-tab-text-active: 217 91% 70%;
+  --dock-text: 210 40% 96%;
+  --dock-text-secondary: 215 20% 65%;
+  --dock-text-muted: 215 15% 45%;
+  --dock-border: 217 33% 20%;
+  --dock-splitter: 217 33% 20%;
+  --dock-splitter-hover: 217 91% 60%;
+  --dock-hover: 217 33% 16%;
+  --dock-float-shadow: 0 0% 0%;
+  --dock-unpinned-bg: 222 47% 12%;
+}
+
+/* Ensure backward compatibility with direct dark class */
+.dark {
+  --dock-bg: 222 47% 7%;
+  --dock-surface: 222 47% 10%;
+  --dock-surface-alt: 222 47% 12%;
+  --dock-panel-header: 222 47% 13%;
+  --dock-tab-bar: 222 47% 11%;
+  --dock-tab-active: 222 47% 10%;
+  --dock-tab-text: 215 20% 60%;
+  --dock-tab-text-active: 217 91% 70%;
+  --dock-text: 210 40% 96%;
+  --dock-text-secondary: 215 20% 65%;
+  --dock-text-muted: 215 15% 45%;
+  --dock-border: 217 33% 20%;
+  --dock-splitter: 217 33% 20%;
+  --dock-splitter-hover: 217 91% 60%;
+  --dock-hover: 217 33% 16%;
+  --dock-float-shadow: 0 0% 0%;
+  --dock-unpinned-bg: 222 47% 12%;
+}

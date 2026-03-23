@@ -1,0 +1,21 @@
+/* Dock Manager theme styles - import from core (single source of truth) */
+@import '../../../packages/dock-manager-core/src/styles/dock-manager.css';
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+app-root {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

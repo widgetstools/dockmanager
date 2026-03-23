@@ -1,0 +1,632 @@
+/**
+ * Dock Manager - Shared CSS Custom Properties & Base Styles
+ *
+ * This file defines the CSS variables and base styles shared between
+ * React and Angular dock manager packages. Both frameworks import this
+ * file to ensure visual consistency.
+ *
+ * Usage:
+ *   React:   import '@widgetstools/dock-manager-core/dist/styles/dock-manager.css'
+ *   Angular: @import '@widgetstools/dock-manager-core/dist/styles/dock-manager.css'
+ */
+
+/* ══════════════════════════════════════════════════════════════════════
+ * CSS Custom Properties – Light Mode (default)
+ * ══════════════════════════════════════════════════════════════════════ */
+:root {
+  --dock-bg: 220 20% 96%;
+  --dock-surface: 0 0% 100%;
+  --dock-surface-alt: 220 14% 94%;
+  --dock-panel-header: 220 14% 92%;
+  --dock-tab-bar: 220 14% 90%;
+  --dock-tab-active: 0 0% 100%;
+  --dock-tab-text: 0 0% 38%;
+  --dock-tab-text-active: 217 91% 48%;
+  --dock-text: 0 0% 12%;
+  --dock-text-secondary: 0 0% 35%;
+  --dock-text-muted: 0 0% 50%;
+  --dock-border: 220 13% 82%;
+  --dock-splitter: 220 13% 82%;
+  --dock-splitter-hover: 217 91% 55%;
+  --dock-hover: 220 14% 90%;
+  --dock-primary: 217 91% 48%;
+  --dock-float-shadow: 0 0% 0%;
+  --dock-unpinned-bg: 220 14% 92%;
+  --dock-maximize-overlay-bg: 220 20% 96%;
+  --dock-tab-overflow-bg: 220 14% 92%;
+  --dock-tab-overflow-hover: 220 14% 88%;
+  --dock-scrollbar-thumb: 0 0% 55%;
+  --dock-scrollbar-track: transparent;
+  --dock-scrollbar-width: 6px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * CSS Custom Properties – Dark Mode
+ * ══════════════════════════════════════════════════════════════════════ */
+.dark {
+  --dock-bg: 222 47% 7%;
+  --dock-surface: 222 47% 10%;
+  --dock-surface-alt: 222 47% 13%;
+  --dock-panel-header: 222 47% 15%;
+  --dock-tab-bar: 222 47% 12%;
+  --dock-tab-active: 222 47% 10%;
+  --dock-tab-text: 215 20% 65%;
+  --dock-tab-text-active: 217 91% 72%;
+  --dock-text: 210 40% 96%;
+  --dock-text-secondary: 215 20% 70%;
+  --dock-text-muted: 215 15% 50%;
+  --dock-border: 217 33% 24%;
+  --dock-splitter: 217 33% 24%;
+  --dock-splitter-hover: 217 91% 60%;
+  --dock-hover: 217 33% 18%;
+  --dock-primary: 217 91% 72%;
+  --dock-float-shadow: 0 0% 0%;
+  --dock-unpinned-bg: 222 47% 14%;
+  --dock-maximize-overlay-bg: 222 47% 7%;
+  --dock-tab-overflow-bg: 222 47% 12%;
+  --dock-tab-overflow-hover: 222 47% 16%;
+  --dock-scrollbar-thumb: 215 20% 40%;
+  --dock-scrollbar-track: transparent;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Base font & box-sizing (applied to dock containers)
+ * ══════════════════════════════════════════════════════════════════════ */
+dock-manager,
+.dock-manager-root,
+[data-dock-target] {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+
+dock-manager *,
+.dock-manager-root *,
+[data-dock-target] * {
+  box-sizing: border-box;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Tab overflow dropdown animation
+ * ══════════════════════════════════════════════════════════════════════ */
+.dock-overflow-dropdown {
+  animation: dock-fade-in 0.1s ease-out;
+}
+
+@keyframes dock-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Focus ring for dock targets
+ * ══════════════════════════════════════════════════════════════════════ */
+[data-dock-target]:focus-visible {
+  outline: 2px solid hsl(var(--dock-splitter-hover));
+  outline-offset: -2px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Core layout structure (used by DockviewComponent DOM renderer)
+ * ══════════════════════════════════════════════════════════════════════ */
+.dock-manager-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: hsl(var(--dock-bg));
+  color: hsl(var(--dock-text));
+  position: relative;
+}
+
+.dock-tab-group {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: hsl(var(--dock-surface));
+  overflow: hidden;
+  position: relative;
+}
+
+.dock-panel-header {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 8px;
+  background: hsl(var(--dock-panel-header));
+  border-bottom: 1px solid hsl(var(--dock-border));
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* ── Tab styling (Infragistics-inspired) ── */
+
+.dock-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  white-space: nowrap;
+  color: hsl(var(--dock-tab-text));
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, background-color 0.15s;
+  position: relative;
+}
+
+/* Vertical separator between tabs */
+.dock-tab + .dock-tab::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 15%;
+  height: 70%;
+  width: 1px;
+  background: hsl(var(--dock-border));
+  opacity: 1;
+}
+
+.dock-tab:hover {
+  color: hsl(var(--dock-tab-text-active));
+  background: hsl(var(--dock-hover));
+}
+
+/* Remove separator when hovering adjacent tabs */
+.dock-tab:hover + .dock-tab::before,
+.dock-tab:hover::before {
+  opacity: 0;
+}
+
+/* Selected tab in inactive group: bolder text + raised appearance */
+.dock-tab.dock-tab-selected {
+  font-weight: 500;
+  color: hsl(var(--dock-text));
+  background: hsl(var(--dock-surface));
+  border-bottom-color: hsl(var(--dock-surface));
+  box-shadow: -1px 0 0 hsl(var(--dock-border)), 1px 0 0 hsl(var(--dock-border)), 0 -1px 0 hsl(var(--dock-border));
+  z-index: 1;
+}
+
+/* Remove separator next to selected tab */
+.dock-tab.dock-tab-selected + .dock-tab::before,
+.dock-tab.dock-tab-selected::before {
+  opacity: 0;
+}
+
+/* Selected tab in ACTIVE group: blue text + blue underline + raised appearance */
+.dock-pane-active .dock-tab.dock-tab-selected {
+  color: hsl(var(--dock-tab-text-active));
+  background: hsl(var(--dock-surface));
+  border-bottom-color: hsl(var(--dock-primary));
+}
+
+.dock-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 3px;
+  color: inherit;
+  opacity: 0;
+  transition: opacity 0.15s, background-color 0.15s;
+  margin-left: 2px;
+}
+
+.dock-tab:hover .dock-tab-close,
+.dock-tab.dock-tab-selected .dock-tab-close {
+  opacity: 0.5;
+}
+
+.dock-tab-close:hover {
+  opacity: 1 !important;
+  background: hsl(var(--dock-hover));
+}
+
+/* Inactive pane title — uses secondary text for clear visibility */
+.dock-panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: hsl(var(--dock-text-secondary));
+}
+
+/* Active pane title turns blue */
+.dock-pane-active > .dock-panel-header > .dock-panel-title {
+  color: hsl(var(--dock-primary));
+}
+
+.dock-content-slot {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.dock-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: hsl(var(--dock-text-muted));
+  transition: color 0.1s;
+}
+
+.dock-action-btn:hover {
+  color: hsl(var(--dock-text));
+}
+
+.dock-splitter {
+  flex-shrink: 0;
+  background: hsl(var(--dock-splitter));
+  position: relative;
+  z-index: 1;
+  transition: background-color 0.15s;
+}
+
+.dock-splitter:hover {
+  background: hsl(var(--dock-splitter-hover));
+}
+
+/* Horizontal splitter (between left/right panes) */
+.dock-splitter[data-direction="horizontal"] {
+  width: 1px;
+  cursor: col-resize;
+}
+
+/* Vertical splitter (between top/bottom panes) */
+.dock-splitter[data-direction="vertical"] {
+  height: 1px;
+  cursor: row-resize;
+}
+
+/* Wider invisible hit area for splitters */
+.dock-splitter::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+}
+
+.dock-splitter[data-direction="horizontal"]::before {
+  top: 0; bottom: 0;
+  left: -3px; right: -3px;
+}
+
+.dock-splitter[data-direction="vertical"]::before {
+  left: 0; right: 0;
+  top: -3px; bottom: -3px;
+}
+
+.dock-floating-window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background: hsl(var(--dock-surface));
+  border: 1px solid hsl(var(--dock-border));
+  border-radius: 2px;
+  box-shadow: 0 8px 32px hsl(var(--dock-float-shadow) / 0.18),
+              0 2px 8px hsl(var(--dock-float-shadow) / 0.1);
+  overflow: visible;
+}
+
+.dock-floating-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  background: hsl(var(--dock-panel-header));
+  border-bottom: 2px solid transparent;
+  cursor: move;
+  user-select: none;
+  flex-shrink: 0;
+  min-height: 32px;
+}
+
+/* Inactive floating title — clearly visible */
+.dock-floating-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--dock-text-secondary));
+}
+
+/* Active floating title turns blue */
+.dock-pane-active .dock-floating-title {
+  color: hsl(var(--dock-primary));
+}
+
+/* Floating window titlebar buttons */
+.dock-floating-titlebar-btn {
+  padding: 4px;
+  color: hsl(var(--dock-text-muted));
+  cursor: pointer;
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.dock-floating-titlebar-btn:hover {
+  color: hsl(var(--dock-text));
+}
+
+.dock-empty-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: hsl(var(--dock-text-muted));
+  font-size: 11px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Active pane indicator line
+ *
+ * Only ONE pane is active across the entire dock manager at any time.
+ * The active pane's header shows a blue bottom-border line (2px).
+ * This applies to docked tab groups AND floating pane title bars.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/* Docked tab group header — default: no indicator line */
+.dock-tab-group .dock-panel-header {
+  border-bottom-color: transparent;
+  position: relative;
+}
+
+/* Active docked pane — blue bottom border on header (single-panel only, not when tabs exist) */
+.dock-tab-group.dock-pane-active:not([data-has-tabs]) > .dock-panel-header {
+  border-bottom: 2px solid hsl(var(--dock-primary));
+}
+
+/* Active pane title text turns blue */
+.dock-tab-group.dock-pane-active > .dock-panel-header > .dock-panel-title {
+  color: hsl(var(--dock-primary));
+}
+
+/* Floating pane — default: no indicator line */
+.dock-floating-window .dock-floating-titlebar,
+.dock-floating-window .dock-float-titlebar {
+  border-bottom: 2px solid transparent;
+}
+
+/* Active floating pane — blue bottom border on title bar */
+.dock-floating-window.dock-pane-active .dock-floating-titlebar,
+.dock-floating-window.dock-pane-active .dock-float-titlebar {
+  border-bottom: 2px solid hsl(var(--dock-primary));
+}
+
+/* Active floating pane title text turns blue */
+.dock-floating-window.dock-pane-active .dock-floating-titlebar .dock-floating-title,
+.dock-floating-window.dock-pane-active .dock-float-titlebar .dock-float-title {
+  color: hsl(var(--dock-primary));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Unpinned strip tabs
+ * ══════════════════════════════════════════════════════════════════════ */
+.dock-unpinned-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s, color 0.15s;
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: hsl(var(--dock-text-muted));
+}
+
+.dock-unpinned-tab:hover {
+  background-color: hsl(var(--dock-hover));
+  color: hsl(var(--dock-tab-text-active));
+}
+
+/* Flyout resize handle hover */
+.dock-flyout-resize:hover {
+  background-color: hsl(var(--dock-primary));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Custom scrollbar styling
+ * ══════════════════════════════════════════════════════════════════════ */
+.dock-scrollable::-webkit-scrollbar {
+  width: var(--dock-scrollbar-width, 6px);
+  height: var(--dock-scrollbar-width, 6px);
+}
+
+.dock-scrollable::-webkit-scrollbar-track {
+  background: var(--dock-scrollbar-track, transparent);
+}
+
+.dock-scrollable::-webkit-scrollbar-thumb {
+  background: hsl(var(--dock-scrollbar-thumb, 0 0% 60%));
+  border-radius: 3px;
+}
+
+.dock-scrollable::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--dock-scrollbar-thumb, 0 0% 50%));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Context menu (right-click on tabs)
+ * ══════════════════════════════════════════════════════════════════════ */
+.dock-context-menu {
+  background: hsl(var(--dock-surface));
+  border: 1px solid hsl(var(--dock-border));
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px 0;
+  min-width: 140px;
+  font-size: 12px;
+  color: hsl(var(--dock-text));
+  animation: dock-fade-in 0.1s ease-out;
+}
+
+.dock-context-menu-item {
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: background-color 0.1s;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.dock-context-menu-item:hover {
+  background: hsl(var(--dock-hover));
+}
+
+.dock-context-menu-item.disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+.dock-context-menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: hsl(var(--dock-border));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Disabled tab styling
+ * ══════════════════════════════════════════════════════════════════════ */
+.dock-tab-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Pane Navigator (Ctrl+Tab overlay)
+ * ══════════════════════════════════════════════════════════════════════ */
+.dock-pane-navigator {
+  animation: dock-fade-in 0.1s ease-out;
+}
+
+.dock-pane-navigator-item {
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.dock-pane-navigator-item:hover {
+  background: hsl(var(--dock-hover));
+}
+
+.dock-pane-navigator-item.active {
+  background: hsl(var(--dock-primary) / 0.15);
+  color: hsl(var(--dock-primary));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Animation & Transitions (#9)
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/* Tab reorder: smooth FLIP animation for sibling tabs sliding into place */
+.dock-tab-reordering {
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Tab being dragged during reorder — lifted appearance */
+.dock-tab-drag-source {
+  opacity: 0.85 !important;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+/* Disable entrance animation during reorder to prevent conflicts */
+.dock-tab-reordering.dock-tab {
+  animation: none;
+}
+
+/* Tab insertion/removal fade */
+.dock-tab {
+  animation: dock-tab-in 0.12s ease-out;
+}
+
+@keyframes dock-tab-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Panel content crossfade */
+.dock-tab-group > [role="tabpanel"] > div {
+  animation: dock-content-in 0.12s ease-out;
+}
+
+@keyframes dock-content-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Floating window entrance */
+.dock-floating-window {
+  animation: dock-float-in 0.15s ease-out;
+}
+
+@keyframes dock-float-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Attention animation (#14 PanelApi wiring)
+ * ══════════════════════════════════════════════════════════════════════ */
+.dock-tab-attention,
+.dock-attention {
+  animation: dock-attention-pulse 0.6s ease-in-out 3;
+}
+
+@keyframes dock-attention-pulse {
+  0%, 100% { background-color: transparent; }
+  50%      { background-color: hsl(var(--dock-primary) / 0.2); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Debug overlay (#11)
+ * ══════════════════════════════════════════════════════════════════════ */
+.dock-debug-overlay {
+  pointer-events: none;
+  font-family: monospace;
+  font-size: 9px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Panel finder (#8)
+ * ══════════════════════════════════════════════════════════════════════ */
+.dock-panel-finder-overlay {
+  animation: dock-fade-in 0.1s ease-out;
+}
+
+.dock-panel-finder {
+  animation: dock-panel-finder-in 0.12s ease-out;
+}
+
+@keyframes dock-panel-finder-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dock-panel-finder-item:hover {
+  background: hsl(var(--dock-hover));
+}

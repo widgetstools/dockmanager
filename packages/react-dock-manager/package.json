@@ -1,0 +1,83 @@
+{
+  "name": "@widgetstools/react-dock-manager",
+  "version": "0.1.0",
+  "description": "A powerful, extensible dock manager for React with drag-and-drop, floating panels, split views, tabs, and auto-hide pinnable panels.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "dependencies": {
+    "fix-dts-default-cjs-exports": "^1.0.1",
+    "lucide-react": "^0.462.0"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^2.1.8",
+    "jsdom": "^25.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsup": "^8.5.1",
+    "typescript": "~5.9.3",
+    "vitest": "^2.1.8"
+  },
+  "keywords": [
+    "react",
+    "dock",
+    "dock-manager",
+    "docking",
+    "layout",
+    "split-pane",
+    "tabs",
+    "floating-panels",
+    "drag-and-drop"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nndrao/dockmanager.git",
+    "directory": "packages/react-dock-manager"
+  },
+  "homepage": "https://github.com/nndrao/dockmanager#readme",
+  "bugs": {
+    "url": "https://github.com/nndrao/dockmanager/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

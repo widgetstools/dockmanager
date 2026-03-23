@@ -1,0 +1,50 @@
+{
+  "name": "@widgetstools/angular-dock-manager",
+  "version": "0.1.0",
+  "description": "Angular dock manager — thin wrapper around dock-manager-core",
+  "peerDependencies": {
+    "@angular/common": ">=21.0.0",
+    "@angular/core": ">=21.0.0",
+    "rxjs": "^7.8.0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@angular/compiler": "21.0.2",
+    "@angular/compiler-cli": "21.0.2",
+    "@angular/common": "21.0.2",
+    "@angular/core": "21.0.2",
+    "@angular/platform-browser": "21.0.2",
+    "@angular/platform-browser-dynamic": "21.0.2",
+    "ng-packagr": "21.0.1",
+    "rxjs": "7.8.1",
+    "typescript": "5.9.3",
+    "zone.js": "0.15.0"
+  },
+  "scripts": {
+    "build": "ng-packagr -p ng-package.json",
+    "build:prod": "ng-packagr -p ng-package.json --config tsconfig.lib.prod.json"
+  },
+  "keywords": [
+    "angular",
+    "dock-manager",
+    "layout",
+    "tabs",
+    "split-pane",
+    "floating-panels",
+    "drag-and-drop"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nndrao/dockmanager.git",
+    "directory": "packages/angular-dock-manager"
+  },
+  "homepage": "https://github.com/nndrao/dockmanager#readme",
+  "bugs": {
+    "url": "https://github.com/nndrao/dockmanager/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}
