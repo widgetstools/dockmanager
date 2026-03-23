@@ -51,11 +51,12 @@ The `dock-manager-core` component is the main entry point. It takes an initial l
 
 ```html
 <dock-manager-core
-  [initialState]="currentState"
-  [createContent]="createPanelContent"
+  [initialState]="initialState"
+  [widgets]="widgets"
   [createTab]="createTabContent"
   [createHeaderActions]="createHeaderActionsContent"
   [theme]="selectedTheme"
+  (ready)="onReady($event)"
   (stateChange)="onStateChange($event)"
   (willClose)="onWillClose($event)">
 </dock-manager-core>
@@ -65,14 +66,17 @@ The `dock-manager-core` component is the main entry point. It takes an initial l
 | Input | Type | Description |
 |-------|------|-------------|
 | `initialState` | `DockManagerState` | The layout configuration (panels, splits, tabs) |
-| `createContent` | `(panelId, container, api) => IDisposable` | Called to render each panel's content |
-| `createTab` | `(panelId, container, isActive) => IDisposable` | Called to render each tab label |
-| `createHeaderActions` | `(slot, tabGroupId, container) => IDisposable` | Called to render header buttons |
-| `theme` | `DockTheme` | Theme object (light or dark) |
+| `widgets` | `Record<string, Type<any>>` | Widget registry: maps `widgetType` to Angular component class |
+| `createContent` | `ContentRenderer` | Optional fallback content renderer (used when `widgets` doesn't match) |
+| `createTab` | `TabRenderer` | Optional custom tab renderer |
+| `createHeaderActions` | `HeaderActionsRenderer` | Optional header action buttons |
+| `theme` | `'light' \| 'dark' \| DockTheme` | Theme object (light or dark) |
+| `allowRootDock` | `boolean` | Enable/disable edge docking |
 
 **Outputs:**
 | Output | Type | Description |
 |--------|------|-------------|
+| `ready` | `DockviewApi` | Emitted when the dock manager initializes, with the API for programmatic control |
 | `stateChange` | `DockManagerState` | Emitted whenever the layout changes |
 | `willClose` | `{ event, panelId }` | Emitted before a panel closes (call `event.preventDefault()` to cancel) |
 | `willDrop` | `{ event, sourceId, targetId, position }` | Emitted before a drop (preventable) |
@@ -131,12 +135,12 @@ unpinnedPanels: [
 ],
 ```
 
-### 3. Rendering Panel Content (`createPanelContent`)
+### 3. Rendering Panel Content (via `widgets` input)
 
-When the dock manager needs to display a panel, it calls `createPanelContent`. This demo uses Angular's `createComponent()` API to dynamically instantiate widget components:
+The `widgets` input maps `widgetType` strings to Angular component classes. The dock manager wrapper handles `createComponent()`, `attachView`, and cleanup automatically:
 
 ```ts
-private widgetRegistry: Record<string, Type<any>> = {
+widgets = {
   'clock': ClockWidgetComponent,
   'editor': EditorWidgetComponent,
   'terminal': TerminalWidgetComponent,
@@ -145,31 +149,11 @@ private widgetRegistry: Record<string, Type<any>> = {
   'placeholder': PlaceholderWidgetComponent,
 };
 
-createPanelContent = (panelId: string, container: HTMLElement, api: any): IDisposable => {
-  const panel = this.panelConfigs[panelId] || this.currentState.panels[panelId];
-  const WidgetClass = this.widgetRegistry[panel?.widgetType || ''];
-
-  const hostEl = document.createElement('div');
-  container.appendChild(hostEl);
-
-  const ref = createComponent(WidgetClass, {
-    hostElement: hostEl,
-    environmentInjector: this.envInjector,
-  });
-  ref.setInput('api', api);
-  ref.setInput('panel', panel);
-  this.appRef.attachView(ref.hostView);
-
-  return {
-    dispose: () => {
-      this.appRef.detachView(ref.hostView);
-      ref.destroy();
-    },
-  };
-};
+// Template — no createContent callback needed
+<dock-manager-core [initialState]="state" [widgets]="widgets"></dock-manager-core>
 ```
 
-Each widget receives two `@Input()` properties:
+Each widget component should accept two `@Input()` properties:
 - **`panel`** (`PanelConfig`): the panel's configuration (title, icon, widgetProps, etc.)
 - **`api`** (`PanelApi`): methods to communicate back to the dock manager
 
@@ -395,33 +379,37 @@ The demo starts with this VS Code-like layout:
 
 ---
 
-## Imperative API Access
+## Programmatic API Access
 
-Access the `DockviewApi` via the component's `getInstance()` method:
+Use the `(ready)` output to get the `DockviewApi`:
 
 ```ts
-@ViewChild(DockManagerCoreComponent) dockCore?: DockManagerCoreComponent;
+// In template:
+<dock-manager-core (ready)="onReady($event)" ...></dock-manager-core>
+
+// In component:
+api: DockviewApi | null = null;
+onReady(api: DockviewApi) { this.api = api; }
 
 // Add a panel programmatically
-this.dockCore?.getInstance()?.api?.addPanel({
-  panelId: 'new1',
-  title: 'New Panel',
-  widgetType: 'clock',
-});
+this.api?.addPanel({ panelId: 'new1', title: 'New Panel', widgetType: 'clock' });
 
 // Undo/redo
-this.dockCore?.getInstance()?.api?.undo();
-this.dockCore?.getInstance()?.api?.redo();
+this.api?.undo();
+this.api?.redo();
 
 // Dock all floating panels
-this.dockCore?.getInstance()?.api?.dockAllFloating();
+this.api?.dockAllFloating();
 
 // Save/load presets
-this.dockCore?.getInstance()?.api?.savePreset('My Layout');
-this.dockCore?.getInstance()?.api?.loadPreset(preset);
+this.api?.savePreset('My Layout');
+this.api?.loadPreset(preset);
 
 // Navigate between panels
-this.dockCore?.getInstance()?.api?.navigateNext();
+this.api?.navigateNext();
+
+// Load a new layout (replaces mountKey pattern)
+this.api?.loadState(newState);
 ```
 
 ---

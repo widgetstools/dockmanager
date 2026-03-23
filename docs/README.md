@@ -54,14 +54,21 @@ import '@widgetstools/dock-manager-core/styles.css';
 ### Minimal React Example
 
 ```tsx
+import { useState } from 'react';
 import { DockManagerCore } from '@widgetstools/react-dock-manager';
+import type { WidgetProps } from '@widgetstools/react-dock-manager';
 import '@widgetstools/dock-manager-core/styles.css';
-import type { DockManagerState, PanelConfig, PanelApi } from '@widgetstools/dock-manager-core';
+import type { DockManagerState, DockviewApi } from '@widgetstools/dock-manager-core';
+
+// Widget components receive { panelId, panel, api } props
+function HelloWidget({ panel }: WidgetProps) {
+  return <div>Content for {panel.title}</div>;
+}
 
 const initialState: DockManagerState = {
   panels: {
-    panel1: { id: 'panel1', title: 'Hello', closable: true, floatable: true },
-    panel2: { id: 'panel2', title: 'World', closable: true, floatable: true },
+    panel1: { id: 'panel1', title: 'Hello', closable: true, floatable: true, widgetType: 'hello' },
+    panel2: { id: 'panel2', title: 'World', closable: true, floatable: true, widgetType: 'hello' },
   },
   layout: {
     type: 'tabgroup',
@@ -77,13 +84,14 @@ const initialState: DockManagerState = {
 };
 
 function App() {
+  const [api, setApi] = useState<DockviewApi | null>(null);
+
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
       <DockManagerCore
         initialState={initialState}
-        renderPanel={(panelId, panel, api) => (
-          <div>Content for {panel.title}</div>
-        )}
+        widgets={{ hello: HelloWidget }}
+        onReady={setApi}
       />
     </div>
   );
@@ -96,27 +104,34 @@ function App() {
 // app.component.ts
 import { Component } from '@angular/core';
 import { DockManagerCoreComponent } from '@widgetstools/angular-dock-manager';
-import type { DockManagerState, IDisposable } from '@widgetstools/dock-manager-core';
+import type { DockManagerState, DockviewApi } from '@widgetstools/dock-manager-core';
 // Also add to styles.css or angular.json: @import '@widgetstools/dock-manager-core/styles.css';
 
 @Component({
   selector: 'app-root',
-  standalone: true,  // No NgModule needed — standalone component
+  standalone: true,
   imports: [DockManagerCoreComponent],
   template: `
     <div style="width:100vw;height:100vh">
       <dock-manager-core
         [initialState]="state"
-        [createContent]="createContent">
+        [widgets]="widgets"
+        (ready)="onReady($event)">
       </dock-manager-core>
     </div>
   `,
 })
 export class AppComponent {
+  api: DockviewApi | null = null;
+
+  // Widget registry — maps widgetType to Angular component classes
+  // Each widget component should accept 'api' and 'panel' @Input() properties
+  widgets = { hello: HelloWidgetComponent };
+
   state: DockManagerState = {
     panels: {
-      panel1: { id: 'panel1', title: 'Hello', closable: true, floatable: true },
-      panel2: { id: 'panel2', title: 'World', closable: true, floatable: true },
+      panel1: { id: 'panel1', title: 'Hello', closable: true, floatable: true, widgetType: 'hello' },
+      panel2: { id: 'panel2', title: 'World', closable: true, floatable: true, widgetType: 'hello' },
     },
     layout: {
       type: 'tabgroup',
@@ -131,11 +146,7 @@ export class AppComponent {
     activePaneId: 'panel1',
   };
 
-  createContent = (panelId: string, container: HTMLElement, api: any): IDisposable => {
-    const panel = this.state.panels[panelId];
-    container.textContent = `Content for ${panel?.title}`;
-    return { dispose: () => { container.innerHTML = ''; } };
-  };
+  onReady(api: DockviewApi) { this.api = api; }
 }
 ```
 
@@ -174,14 +185,23 @@ interface DockManagerCoreProps {
   /** Initial layout state */
   initialState: DockManagerState;
 
-  /** Render panel content. Called for each visible panel. */
-  renderPanel: (panelId: string, panel: PanelConfig, api: PanelApi) => React.ReactNode;
+  /** Widget registry — maps panel.widgetType to React components.
+   *  Each component receives { panelId, panel, api } props (WidgetProps). */
+  widgets?: Record<string, React.ComponentType<WidgetProps>>;
+
+  /** Fallback panel renderer. Used when widgets registry doesn't match.
+   *  If both widgets and renderPanel are provided, registry is tried first. */
+  renderPanel?: (panelId: string, panel: PanelConfig, api: PanelApi) => React.ReactNode;
 
   /** Optional custom tab renderer */
-  renderTab?: (panel: PanelConfig, isActive: boolean) => React.ReactNode;
+  renderTab?: (panelId: string, panel: PanelConfig, isActive: boolean) => React.ReactNode;
 
   /** Optional header action slots */
   renderHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string) => React.ReactNode;
+
+  /** Called with the DockviewApi when the component is ready.
+   *  Simplest way to access the API — replaces the ref pattern. */
+  onReady?: (api: DockviewApi) => void;
 
   /** Called when state changes (drag, close, resize, etc.) */
   onStateChange?: (state: DockManagerState) => void;
@@ -195,12 +215,28 @@ interface DockManagerCoreProps {
   /** Theme: 'light', 'dark', or a DockTheme object */
   theme?: 'light' | 'dark' | DockTheme;
 
+  /** Whether to show edge dock indicators. Defaults to true. */
+  allowRootDock?: boolean;
+
   /** Additional className for root container */
   className?: string;
 }
 ```
 
-### Ref Handle (DockManagerCoreHandle)
+### API Access via onReady (recommended)
+
+```tsx
+const [api, setApi] = useState<DockviewApi | null>(null);
+
+<DockManagerCore onReady={setApi} ... />
+
+// Then use api directly:
+api?.addPanel({ panelId: 'new', title: 'New Panel', widgetType: 'chart' });
+api?.undo();
+api?.loadState(newState);
+```
+
+### Ref Handle (DockManagerCoreHandle) — alternative
 
 ```tsx
 const dockRef = useRef<DockManagerCoreHandle>(null);
@@ -210,18 +246,6 @@ dockRef.current.dispatch(action);     // Dispatch a DockAction
 dockRef.current.getState();           // Get current state
 dockRef.current.getInstance();        // Get DockviewComponent instance
 dockRef.current.getApi();             // Get DockviewApi for high-level control
-```
-
-### useTheme Hook
-
-```tsx
-import { useTheme } from '@widgetstools/react-dock-manager';
-
-function App() {
-  const { theme, setTheme } = useTheme('system');
-  // theme: 'light' | 'dark' | 'system'
-  // setTheme: (mode: 'light' | 'dark' | 'system') => void
-}
 ```
 
 ### Preventable Close
@@ -245,70 +269,54 @@ function App() {
 
 ```typescript
 // Inputs
-@Input() initialState: DockManagerState;
-@Input() createContent: (panelId: string, container: HTMLElement, api: PanelApi) => IDisposable;
-@Input() createTab?: (panelId: string, container: HTMLElement, isActive: boolean) => IDisposable;
-@Input() createHeaderActions?: (slot: string, tabGroupId: string, container: HTMLElement) => IDisposable;
+@Input() initialState: DockManagerState;          // Required
+@Input() widgets?: Record<string, Type<any>>;     // Widget registry (maps widgetType → component class)
+@Input() createContent?: ContentRenderer;          // Fallback content renderer (optional if widgets is provided)
+@Input() createTab?: TabRenderer;                  // Custom tab renderer
+@Input() createHeaderActions?: HeaderActionsRenderer;
 @Input() theme?: 'light' | 'dark' | DockTheme;
+@Input() allowRootDock?: boolean;
 
 // Outputs
+@Output() ready = new EventEmitter<DockviewApi>();          // Emits API on init
 @Output() stateChange = new EventEmitter<DockManagerState>();
-@Output() willClose = new EventEmitter<PreventableDockEvent>();
-@Output() willDrop = new EventEmitter<PreventableDockEvent>();
+@Output() willClose = new EventEmitter<{ event: PreventableDockEvent; panelId: string }>();
+@Output() willDrop = new EventEmitter<{ event: PreventableDockEvent; sourceId: string; targetId: string; position: DockPosition }>();
 ```
 
-### Dynamic Angular Components as Panel Content
+### Widget Registry (recommended)
+
+The simplest way to render panels — pass a widget registry and the wrapper handles `createComponent()` automatically:
 
 ```typescript
-import { createComponent, ApplicationRef, EnvironmentInjector, Type } from '@angular/core';
-
-// Widget registry
-const WIDGETS: Record<string, Type<any>> = {
+// Widget components should accept 'api' and 'panel' @Input() properties
+widgets = {
   'chart': ChartWidgetComponent,
   'table': TableWidgetComponent,
 };
 
-createContent = (panelId: string, container: HTMLElement, api: any): IDisposable => {
-  const panel = this.state.panels[panelId];
-  const Widget = WIDGETS[panel?.widgetType || ''];
-
-  if (Widget) {
-    const hostEl = document.createElement('div');
-    hostEl.style.cssText = 'width:100%;height:100%';
-    container.appendChild(hostEl);
-
-    const ref = createComponent(Widget, {
-      hostElement: hostEl,
-      environmentInjector: this.envInjector,
-    });
-    ref.setInput('api', api);
-    ref.setInput('panel', panel);
-    this.appRef.attachView(ref.hostView);
-
-    return {
-      dispose: () => {
-        this.appRef.detachView(ref.hostView);
-        ref.destroy();
-      },
-    };
-  }
-
-  // Fallback: plain HTML
-  container.textContent = panel?.title || panelId;
-  return { dispose: () => { container.innerHTML = ''; } };
-};
+// Template
+<dock-manager-core [initialState]="state" [widgets]="widgets" (ready)="onReady($event)">
+</dock-manager-core>
 ```
 
-### ViewChild for Programmatic Control
+### API Access via (ready) output (recommended)
+
+```typescript
+api: DockviewApi | null = null;
+
+onReady(api: DockviewApi) { this.api = api; }
+
+addPanel() { this.api?.addPanel({ panelId: 'new1', title: 'New Panel', widgetType: 'chart' }); }
+```
+
+### ViewChild — alternative
 
 ```typescript
 @ViewChild(DockManagerCoreComponent) dockCore?: DockManagerCoreComponent;
 
 addPanel(): void {
-  this.dockCore?.dispatch({
-    type: 'ADD_PANEL',
-    payload: { panelId: 'new1', title: 'New Panel' },
-  });
+  this.dockCore?.getApi()?.addPanel({ panelId: 'new1', title: 'New Panel' });
 }
 ```
 
@@ -421,16 +429,16 @@ interface PanelConfig {
 
 ## DockviewApi Reference
 
-Get the API via ref (React) or ViewChild (Angular):
+Get the API via `onReady` (React) or `(ready)` output (Angular):
 
 ```tsx
-// React
-const ref = useRef<DockManagerCoreHandle>(null);
-const api = ref.current?.getApi();
+// React (recommended)
+const [api, setApi] = useState<DockviewApi | null>(null);
+<DockManagerCore onReady={setApi} ... />
 
-// Angular
-@ViewChild(DockManagerCoreComponent) dock: DockManagerCoreComponent;
-const api = this.dock.getInstance()?.api;
+// Angular (recommended)
+api: DockviewApi | null = null;
+<dock-manager-core (ready)="api = $event" ...></dock-manager-core>
 ```
 
 ### Panel Operations
@@ -596,7 +604,28 @@ import { getThemeByName } from '@widgetstools/dock-manager-core';
 const theme = getThemeByName('draculaDark');
 ```
 
-### Custom Theme
+### Custom Theme via createTheme (recommended)
+
+```typescript
+import { createTheme } from '@widgetstools/dock-manager-core';
+
+// createTheme(name, mode, base, accent, overrides?)
+const myTheme = createTheme(
+  'My Custom Theme',
+  'dark',
+  { hue: 220, sat: 15, light: 10 },    // Base: background hue/sat/lightness
+  { hue: 210, sat: 100, light: 65 },    // Accent: primary color hue/sat/lightness
+);
+
+// With overrides for specific colors
+const branded = createTheme('Branded', 'light',
+  { hue: 200, sat: 20 },
+  { hue: 340, sat: 80, light: 50 },
+  { floatShadow: '0 0% 0%' },          // Optional per-color overrides
+);
+```
+
+### Custom Theme (manual)
 
 ```typescript
 import type { DockTheme } from '@widgetstools/dock-manager-core';
@@ -823,15 +852,15 @@ Right-clicking any tab shows a context menu with:
 
 ## Widget Registry Pattern
 
-Map `widgetType` strings to components for dynamic panel content:
+Both React and Angular wrappers have a built-in `widgets` prop/input that maps `widgetType` strings to components. The wrapper handles rendering automatically.
 
 ### React Widget Registry
 
 ```tsx
-import type { PanelApi, PanelConfig } from '@widgetstools/dock-manager-core';
+import type { WidgetProps } from '@widgetstools/react-dock-manager';
 
-// Define widget components
-function ChartWidget({ api, panel }: { api: PanelApi; panel: PanelConfig }) {
+// Widget components receive { panelId, panel, api } via WidgetProps
+function ChartWidget({ api, panel }: WidgetProps) {
   const symbol = panel.widgetProps?.symbol as string;
 
   useEffect(() => {
@@ -844,53 +873,34 @@ function ChartWidget({ api, panel }: { api: PanelApi; panel: PanelConfig }) {
   return <Chart symbol={symbol} />;
 }
 
-// Registry
-const WIDGETS: Record<string, React.FC<{ api: PanelApi; panel: PanelConfig }>> = {
-  'chart': ChartWidget,
-  'table': TableWidget,
-  'editor': EditorWidget,
-};
-
-// Usage
+// Pass the registry via the widgets prop — no renderPanel callback needed
 <DockManagerCore
-  renderPanel={(panelId, panel, api) => {
-    const Widget = WIDGETS[panel.widgetType || ''];
-    return Widget ? <Widget api={api} panel={panel} /> : <Fallback />;
+  initialState={state}
+  widgets={{
+    chart: ChartWidget,
+    table: TableWidget,
+    editor: EditorWidget,
   }}
+/>
+
+// For advanced cases, use renderPanel as a fallback alongside widgets
+<DockManagerCore
+  widgets={{ chart: ChartWidget }}
+  renderPanel={(panelId, panel, api) => <Fallback panel={panel} />}
 />
 ```
 
 ### Angular Widget Registry
 
 ```typescript
-const WIDGETS: Record<string, Type<any>> = {
-  'chart': ChartWidgetComponent,
-  'table': TableWidgetComponent,
+// Each widget component should accept 'api' and 'panel' as @Input() properties
+widgets = {
+  chart: ChartWidgetComponent,
+  table: TableWidgetComponent,
 };
 
-createContent = (panelId: string, container: HTMLElement, api: any): IDisposable => {
-  const panel = this.state.panels[panelId];
-  const Widget = WIDGETS[panel?.widgetType || ''];
-
-  if (Widget) {
-    const hostEl = document.createElement('div');
-    hostEl.style.cssText = 'width:100%;height:100%';
-    container.appendChild(hostEl);
-
-    const ref = createComponent(Widget, {
-      hostElement: hostEl,
-      environmentInjector: this.envInjector,
-    });
-    ref.setInput('api', api);
-    ref.setInput('panel', panel);
-    this.appRef.attachView(ref.hostView);
-
-    return { dispose: () => { this.appRef.detachView(ref.hostView); ref.destroy(); } };
-  }
-
-  container.textContent = panel?.title || panelId;
-  return { dispose: () => { container.innerHTML = ''; } };
-};
+// Template — the wrapper handles createComponent() automatically
+<dock-manager-core [initialState]="state" [widgets]="widgets"></dock-manager-core>
 ```
 
 ### Adding Panels with Widget Type

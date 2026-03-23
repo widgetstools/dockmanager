@@ -50,13 +50,17 @@ The `DockManagerCore` component is the main entry point. It takes an initial lay
 
 ```tsx
 import { DockManagerCore } from '@widgetstools/react-dock-manager';
+import type { DockviewApi } from '@widgetstools/dock-manager-core';
+
+const [api, setApi] = useState<DockviewApi | null>(null);
 
 <DockManagerCore
   initialState={defaultState}       // Layout configuration (panels, splits, tabs)
-  renderPanel={renderPanel}         // Called to render each panel's content
+  widgets={WIDGETS}                 // Widget registry: maps widgetType → React component
+  onReady={setApi}                  // Called with DockviewApi for programmatic control
   renderTab={renderTab}             // Called to render each tab label
   renderHeaderActions={renderHeaderActions}  // Called to render header buttons
-  onStateChange={handleStateChange} // Called whenever the layout changes
+  onStateChange={state => { ... }}  // Called whenever the layout changes
   onWillClose={onWillClose}         // Called before a panel closes (preventable)
   theme={selectedTheme}             // Theme object (light or dark)
   allowRootDock={allowRootDock}     // Enable/disable edge docking
@@ -117,12 +121,12 @@ unpinnedPanels: [
 ],
 ```
 
-### 3. Rendering Panel Content (`renderPanel`)
+### 3. Rendering Panel Content (via `widgets` prop)
 
-When the dock manager needs to display a panel, it calls `renderPanel`. This demo uses a widget registry to map `widgetType` strings to React components:
+The `widgets` prop maps `widgetType` strings to React components. The dock manager automatically resolves and renders the correct widget for each panel:
 
 ```tsx
-const WIDGET_REGISTRY = {
+const WIDGETS = {
   clock: ClockWidget,
   editor: EditorWidget,
   terminal: TerminalWidget,
@@ -131,13 +135,11 @@ const WIDGET_REGISTRY = {
   placeholder: PlaceholderWidget,
 };
 
-const renderPanel = (panelId, panel, api) => {
-  const Widget = WIDGET_REGISTRY[panel.widgetType];
-  return Widget ? <Widget api={api} panel={panel} /> : <PlaceholderWidget api={api} panel={panel} />;
-};
+<DockManagerCore widgets={WIDGETS} ... />
 ```
 
-Each widget receives two props:
+Each widget component receives `WidgetProps`:
+- **`panelId`** (`string`): the panel's unique identifier
 - **`panel`** (`PanelConfig`): the panel's configuration (title, icon, widgetProps, etc.)
 - **`api`** (`PanelApi`): methods to communicate back to the dock manager
 

@@ -11,7 +11,7 @@ export {
   findTabGroupForPanel, findFirstTabGroup, findTabGroupById, findAllTabGroups,
   serialize, deserialize, saveToLocalStorage, loadFromLocalStorage, clearLocalStorage, exportToFile, importFromFile,
   DockviewComponent, DockviewApi, EventEmitter,
-  themes, vsCodeLight, githubLight, warmLight, solarizedLight, sepiaLight, mintLight, lavenderLight,
+  createTheme, themes, vsCodeLight, githubLight, warmLight, solarizedLight, sepiaLight, mintLight, lavenderLight,
   vsCodeDark, draculaDark, nordDark, solarizedDark, midnightDark, forestDark, slateDark,
   getThemeByName, getThemesByMode,
 } from '@widgetstools/dock-manager-core';
@@ -19,7 +19,7 @@ export type { DockAction, DockviewComponentOptions, IDisposable, AddPanelOptions
 
 // React wrapper
 export { DockManagerCore } from './components/dock/DockManagerCore';
-export type { DockManagerCoreProps, DockManagerCoreHandle } from './components/dock/DockManagerCore';
+export type { DockManagerCoreProps, DockManagerCoreHandle, WidgetProps } from './components/dock/DockManagerCore';
 
 // React hooks
 export { useTheme } from './hooks/useTheme';

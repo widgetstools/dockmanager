@@ -9,6 +9,7 @@
  *   1. Use a built-in theme: `theme: themes.vsCodeLight`
  *   2. Create a custom theme: `theme: { name: 'custom', mode: 'light', colors: { ... } }`
  *   3. Extend a built-in theme: `theme: { ...themes.vsCodeLight, colors: { ...themes.vsCodeLight.colors, primary: '#ff0000' } }`
+ *   4. Use createTheme factory: `theme: createTheme('My Theme', 'dark', { hue: 220, sat: 16 }, { hue: 193, sat: 43, light: 60 })`
  */
 
 // ─── Theme interface ──────────────────────────────────────────────────
@@ -103,361 +104,195 @@ export function applyTheme(container: HTMLElement, theme: DockTheme): void {
   container.style.setProperty('--dock-scrollbar-track', 'transparent');
 }
 
+// ─── Theme Factory ───────────────────────────────────────────────────
+
+/** HSL color shorthand: `hue saturation% lightness%` */
+const hsl = (h: number, s: number, l: number) => `${h} ${s}% ${l}%`;
+
+interface ThemeBase {
+  hue: number;
+  sat: number;
+  light?: number;  // base bg lightness (default: 96 for light, 10 for dark)
+}
+
+interface ThemeAccent {
+  hue: number;
+  sat: number;
+  light?: number;  // accent lightness (default: 50 for light, 65 for dark)
+}
+
+/**
+ * Create a theme from a base palette and accent color.
+ *
+ * @param name - Human-readable theme name
+ * @param mode - 'light' or 'dark'
+ * @param base - Background hue/saturation (lightness auto-derived from mode)
+ * @param accent - Primary accent hue/saturation
+ * @param overrides - Optional per-color overrides for special themes
+ */
+export function createTheme(
+  name: string,
+  mode: 'light' | 'dark',
+  base: ThemeBase,
+  accent: ThemeAccent,
+  overrides?: Partial<DockThemeColors>,
+): DockTheme {
+  const { hue: h, sat: s } = base;
+  const { hue: ah, sat: as_ } = accent;
+
+  let colors: DockThemeColors;
+
+  if (mode === 'light') {
+    const bl = base.light ?? 96;       // bg lightness
+    const al = accent.light ?? 50;     // accent lightness
+    const ts = Math.max(s - 6, 0);     // text saturation (lower)
+
+    colors = {
+      bg:             hsl(h, s, bl),
+      surface:        hsl(h, Math.max(s - 5, 0), Math.min(bl + 3, 100)),
+      surfaceAlt:     hsl(h, Math.max(s - 2, 0), bl - 1),
+      panelHeader:    hsl(h, Math.max(s - 2, 0), bl - 4),
+      tabBar:         hsl(h, Math.max(s - 5, 0), bl - 3),
+      tabActive:      hsl(h, Math.max(s - 5, 0), Math.min(bl + 3, 100)),
+      tabText:        hsl(h - 10, Math.max(ts - 8, 0), 35),
+      tabTextActive:  hsl(ah, as_, al),
+      text:           hsl(h - 10, Math.max(ts - 2, 0), 15),
+      textSecondary:  hsl(h - 10, Math.max(ts - 8, 0), 32),
+      textMuted:      hsl(h - 10, Math.max(ts - 12, 0), 48),
+      border:         hsl(h, Math.max(s - 6, 0), 80),
+      splitter:       hsl(h, Math.max(s - 6, 0), 87),
+      splitterHover:  hsl(ah, as_, al + 8),
+      hover:          hsl(h, Math.max(s - 5, 0), bl - 3),
+      primary:        hsl(ah, as_, al),
+      floatShadow:    hsl(h, Math.max(s, 0), 15),
+    };
+  } else {
+    const bl = base.light ?? 10;       // bg lightness
+    const al = accent.light ?? 65;     // accent lightness
+    const ts = Math.round(s * 0.5);    // text saturation (much lower)
+
+    colors = {
+      bg:             hsl(h, s, bl),
+      surface:        hsl(h, s, bl + 3),
+      surfaceAlt:     hsl(h, Math.max(s - 2, 0), bl + 5),
+      panelHeader:    hsl(h, Math.max(s - 2, 0), bl + 8),
+      tabBar:         hsl(h, s, bl + 1),
+      tabActive:      hsl(h, s, bl + 3),
+      tabText:        hsl(h - 5, Math.max(ts, 8), 65),
+      tabTextActive:  hsl(ah, as_, al),
+      text:           hsl(h - 5, Math.round(s * 0.8), 90),
+      textSecondary:  hsl(h - 5, Math.max(ts, 8), 68),
+      textMuted:      hsl(h - 5, Math.max(ts - 3, 6), 50),
+      border:         hsl(h, Math.max(s - 2, 0), bl + 14),
+      splitter:       hsl(h, Math.max(s - 2, 0), bl + 10),
+      splitterHover:  hsl(ah, as_, al - 8),
+      hover:          hsl(h, Math.max(s - 2, 0), bl + 8),
+      primary:        hsl(ah, as_, al),
+      floatShadow:    hsl(h, Math.min(s + 5, 100), Math.max(bl - 7, 0)),
+    };
+  }
+
+  if (overrides) {
+    Object.assign(colors, overrides);
+  }
+
+  return { name, mode, colors };
+}
+
 // ─── Built-in Themes ──────────────────────────────────────────────────
 
 // ── Light Themes ──
 
-/** VS Code-inspired light theme — clean whites and grays */
-export const vsCodeLight: DockTheme = {
-  name: 'VS Code Light',
-  mode: 'light',
-  colors: {
-    bg: '220 20% 96%',
-    surface: '0 0% 100%',
-    surfaceAlt: '220 14% 95%',
-    panelHeader: '220 14% 92%',
-    tabBar: '220 14% 93%',
-    tabActive: '0 0% 100%',
-    tabText: '0 0% 38%',
-    tabTextActive: '217 91% 50%',
-    text: '0 0% 15%',
-    textSecondary: '0 0% 35%',
-    textMuted: '0 0% 50%',
-    border: '220 13% 82%',
-    splitter: '220 13% 87%',
-    splitterHover: '217 91% 60%',
-    hover: '220 14% 93%',
-    primary: '217 91% 50%',
-    floatShadow: '0 0% 0%',
-  },
-};
+export const vsCodeLight = createTheme('VS Code Light', 'light',
+  { hue: 220, sat: 20 },
+  { hue: 217, sat: 91, light: 50 },
+  { floatShadow: '0 0% 0%' },
+);
 
-/** GitHub-inspired light theme — warm grays with subtle blue accent */
-export const githubLight: DockTheme = {
-  name: 'GitHub Light',
-  mode: 'light',
-  colors: {
-    bg: '210 20% 97%',
-    surface: '0 0% 100%',
-    surfaceAlt: '210 18% 96%',
-    panelHeader: '210 18% 92%',
-    tabBar: '210 15% 94%',
-    tabActive: '0 0% 100%',
-    tabText: '210 10% 35%',
-    tabTextActive: '212 92% 45%',
-    text: '210 12% 16%',
-    textSecondary: '210 10% 32%',
-    textMuted: '210 8% 48%',
-    border: '210 14% 80%',
-    splitter: '210 14% 89%',
-    splitterHover: '212 92% 55%',
-    hover: '210 15% 94%',
-    primary: '212 92% 45%',
-    floatShadow: '210 20% 20%',
-  },
-};
+export const githubLight = createTheme('GitHub Light', 'light',
+  { hue: 210, sat: 20, light: 97 },
+  { hue: 212, sat: 92, light: 45 },
+  { floatShadow: '210 20% 20%' },
+);
 
-/** Soft warm light theme — cream tones with amber accent */
-export const warmLight: DockTheme = {
-  name: 'Warm Light',
-  mode: 'light',
-  colors: {
-    bg: '40 30% 96%',
-    surface: '40 20% 99%',
-    surfaceAlt: '40 25% 95%',
-    panelHeader: '40 25% 91%',
-    tabBar: '40 20% 93%',
-    tabActive: '40 20% 99%',
-    tabText: '30 10% 35%',
-    tabTextActive: '25 80% 45%',
-    text: '30 15% 15%',
-    textSecondary: '30 10% 32%',
-    textMuted: '30 8% 48%',
-    border: '35 15% 80%',
-    splitter: '35 15% 87%',
-    splitterHover: '25 80% 55%',
-    hover: '40 20% 93%',
-    primary: '25 80% 45%',
-    floatShadow: '30 20% 15%',
-  },
-};
+export const warmLight = createTheme('Warm Light', 'light',
+  { hue: 40, sat: 30 },
+  { hue: 25, sat: 80, light: 45 },
+);
 
-/** Solarized Light — low-contrast cream with teal accents, designed for all-day use */
-export const solarizedLight: DockTheme = {
-  name: 'Solarized Light',
-  mode: 'light',
-  colors: {
-    bg: '44 87% 94%',
-    surface: '44 87% 97%',
-    surfaceAlt: '44 60% 93%',
-    panelHeader: '44 60% 89%',
-    tabBar: '44 50% 91%',
-    tabActive: '44 87% 97%',
+export const solarizedLight = createTheme('Solarized Light', 'light',
+  { hue: 44, sat: 87, light: 94 },
+  { hue: 175, sat: 59, light: 35 },
+  {
     tabText: '194 14% 35%',
-    tabTextActive: '175 59% 35%',
     text: '192 81% 14%',
     textSecondary: '194 14% 32%',
     textMuted: '180 8% 48%',
-    border: '44 30% 80%',
-    splitter: '44 30% 85%',
-    splitterHover: '175 59% 45%',
-    hover: '44 50% 91%',
-    primary: '175 59% 35%',
     floatShadow: '44 20% 30%',
   },
-};
+);
 
-/** Sepia — book-like warmth with brown tones, very gentle on eyes */
-export const sepiaLight: DockTheme = {
-  name: 'Sepia',
-  mode: 'light',
-  colors: {
-    bg: '35 35% 94%',
-    surface: '35 30% 97%',
-    surfaceAlt: '35 28% 93%',
-    panelHeader: '35 28% 88%',
-    tabBar: '35 25% 90%',
-    tabActive: '35 30% 97%',
-    tabText: '25 12% 35%',
-    tabTextActive: '18 60% 42%',
-    text: '25 20% 18%',
-    textSecondary: '25 12% 32%',
-    textMuted: '25 8% 48%',
-    border: '30 18% 80%',
-    splitter: '30 18% 85%',
-    splitterHover: '18 60% 50%',
-    hover: '35 25% 91%',
-    primary: '18 60% 42%',
-    floatShadow: '25 15% 25%',
-  },
-};
+export const sepiaLight = createTheme('Sepia', 'light',
+  { hue: 35, sat: 35, light: 94 },
+  { hue: 18, sat: 60, light: 42 },
+);
 
-/** Mint — soft green tones, refreshing and calming */
-export const mintLight: DockTheme = {
-  name: 'Mint',
-  mode: 'light',
-  colors: {
-    bg: '150 20% 96%',
-    surface: '150 15% 99%',
-    surfaceAlt: '150 18% 95%',
-    panelHeader: '150 18% 90%',
-    tabBar: '150 15% 92%',
-    tabActive: '150 15% 99%',
-    tabText: '160 10% 35%',
-    tabTextActive: '162 63% 35%',
-    text: '160 18% 14%',
-    textSecondary: '160 10% 32%',
-    textMuted: '155 8% 48%',
-    border: '150 14% 80%',
-    splitter: '150 14% 87%',
-    splitterHover: '162 63% 45%',
-    hover: '150 15% 93%',
-    primary: '162 63% 35%',
-    floatShadow: '155 15% 20%',
-  },
-};
+export const mintLight = createTheme('Mint', 'light',
+  { hue: 150, sat: 20 },
+  { hue: 162, sat: 63, light: 35 },
+);
 
-/** Lavender — soft purple-gray, elegant and easy on eyes */
-export const lavenderLight: DockTheme = {
-  name: 'Lavender',
-  mode: 'light',
-  colors: {
-    bg: '260 20% 96%',
-    surface: '260 15% 99%',
-    surfaceAlt: '260 16% 95%',
-    panelHeader: '260 16% 90%',
-    tabBar: '260 14% 92%',
-    tabActive: '260 15% 99%',
-    tabText: '265 10% 35%',
-    tabTextActive: '262 52% 50%',
-    text: '265 18% 16%',
-    textSecondary: '265 10% 32%',
-    textMuted: '260 8% 48%',
-    border: '260 14% 80%',
-    splitter: '260 14% 87%',
-    splitterHover: '262 52% 58%',
-    hover: '260 14% 93%',
-    primary: '262 52% 50%',
-    floatShadow: '260 15% 22%',
-  },
-};
+export const lavenderLight = createTheme('Lavender', 'light',
+  { hue: 260, sat: 20 },
+  { hue: 262, sat: 52, light: 50 },
+);
 
 // ── Dark Themes ──
 
-/** VS Code-inspired dark theme — deep blues and grays */
-export const vsCodeDark: DockTheme = {
-  name: 'VS Code Dark',
-  mode: 'dark',
-  colors: {
-    bg: '222 47% 7%',
-    surface: '222 47% 10%',
-    surfaceAlt: '222 47% 12%',
-    panelHeader: '222 47% 15%',
-    tabBar: '222 47% 11%',
-    tabActive: '222 47% 10%',
-    tabText: '215 20% 65%',
-    tabTextActive: '217 91% 70%',
-    text: '210 40% 96%',
-    textSecondary: '215 20% 68%',
-    textMuted: '215 15% 50%',
-    border: '217 33% 24%',
-    splitter: '217 33% 20%',
-    splitterHover: '217 91% 60%',
-    hover: '217 33% 16%',
-    primary: '217 91% 70%',
-    floatShadow: '0 0% 0%',
-  },
-};
+export const vsCodeDark = createTheme('VS Code Dark', 'dark',
+  { hue: 222, sat: 47, light: 7 },
+  { hue: 217, sat: 91, light: 70 },
+  { text: '210 40% 96%', floatShadow: '0 0% 0%' },
+);
 
-/** Dracula-inspired dark theme — purple accents on dark gray */
-export const draculaDark: DockTheme = {
-  name: 'Dracula Dark',
-  mode: 'dark',
-  colors: {
-    bg: '231 15% 14%',
-    surface: '231 15% 17%',
-    surfaceAlt: '231 15% 19%',
-    panelHeader: '231 15% 22%',
-    tabBar: '231 15% 16%',
-    tabActive: '231 15% 17%',
-    tabText: '225 15% 65%',
-    tabTextActive: '265 90% 72%',
-    text: '60 30% 92%',
-    textSecondary: '225 15% 68%',
-    textMuted: '225 12% 50%',
-    border: '231 15% 28%',
-    splitter: '231 15% 24%',
-    splitterHover: '265 90% 60%',
-    hover: '231 15% 22%',
-    primary: '265 90% 72%',
-    floatShadow: '231 20% 5%',
-  },
-};
+export const draculaDark = createTheme('Dracula Dark', 'dark',
+  { hue: 231, sat: 15, light: 14 },
+  { hue: 265, sat: 90, light: 72 },
+  { text: '60 30% 92%' },
+);
 
-/** Nord-inspired dark theme — arctic blue-gray palette */
-export const nordDark: DockTheme = {
-  name: 'Nord Dark',
-  mode: 'dark',
-  colors: {
-    bg: '220 16% 16%',
-    surface: '220 16% 20%',
-    surfaceAlt: '220 16% 22%',
-    panelHeader: '220 16% 25%',
-    tabBar: '220 16% 19%',
-    tabActive: '220 16% 20%',
-    tabText: '219 14% 65%',
-    tabTextActive: '193 43% 60%',
-    text: '219 28% 88%',
-    textSecondary: '219 14% 68%',
-    textMuted: '219 12% 50%',
-    border: '220 16% 30%',
-    splitter: '220 16% 26%',
-    splitterHover: '193 43% 50%',
-    hover: '220 16% 24%',
-    primary: '193 43% 60%',
-    floatShadow: '220 20% 8%',
-  },
-};
+export const nordDark = createTheme('Nord Dark', 'dark',
+  { hue: 220, sat: 16, light: 16 },
+  { hue: 193, sat: 43, light: 60 },
+  { text: '219 28% 88%' },
+);
 
-/** Solarized Dark — low-contrast dark with teal accents, designed for all-day use */
-export const solarizedDark: DockTheme = {
-  name: 'Solarized Dark',
-  mode: 'dark',
-  colors: {
-    bg: '192 81% 8%',
-    surface: '192 81% 11%',
-    surfaceAlt: '192 60% 13%',
-    panelHeader: '192 60% 16%',
-    tabBar: '192 70% 10%',
-    tabActive: '192 81% 11%',
+export const solarizedDark = createTheme('Solarized Dark', 'dark',
+  { hue: 192, sat: 81, light: 8 },
+  { hue: 175, sat: 59, light: 55 },
+  {
     tabText: '180 8% 65%',
-    tabTextActive: '175 59% 55%',
     text: '44 87% 94%',
     textSecondary: '180 8% 68%',
     textMuted: '194 14% 50%',
-    border: '192 50% 24%',
-    splitter: '192 50% 16%',
-    splitterHover: '175 59% 50%',
-    hover: '192 60% 15%',
-    primary: '175 59% 55%',
     floatShadow: '192 60% 3%',
   },
-};
+);
 
-/** Midnight Blue — deep navy with soft blue accents, very easy on eyes at night */
-export const midnightDark: DockTheme = {
-  name: 'Midnight Blue',
-  mode: 'dark',
-  colors: {
-    bg: '225 30% 10%',
-    surface: '225 28% 13%',
-    surfaceAlt: '225 26% 15%',
-    panelHeader: '225 26% 18%',
-    tabBar: '225 28% 12%',
-    tabActive: '225 28% 13%',
-    tabText: '220 15% 65%',
-    tabTextActive: '210 60% 65%',
-    text: '220 25% 90%',
-    textSecondary: '220 15% 68%',
-    textMuted: '220 12% 50%',
-    border: '225 25% 24%',
-    splitter: '225 25% 20%',
-    splitterHover: '210 60% 55%',
-    hover: '225 26% 18%',
-    primary: '210 60% 65%',
-    floatShadow: '225 30% 4%',
-  },
-};
+export const midnightDark = createTheme('Midnight Blue', 'dark',
+  { hue: 225, sat: 30 },
+  { hue: 210, sat: 60, light: 65 },
+);
 
-/** Forest — deep green-gray with emerald accents, nature-inspired calm */
-export const forestDark: DockTheme = {
-  name: 'Forest Dark',
-  mode: 'dark',
-  colors: {
-    bg: '160 18% 9%',
-    surface: '160 16% 12%',
-    surfaceAlt: '160 14% 14%',
-    panelHeader: '160 14% 17%',
-    tabBar: '160 16% 11%',
-    tabActive: '160 16% 12%',
-    tabText: '155 10% 65%',
-    tabTextActive: '152 50% 55%',
-    text: '150 15% 90%',
-    textSecondary: '155 10% 68%',
-    textMuted: '155 8% 50%',
-    border: '160 14% 24%',
-    splitter: '160 14% 18%',
-    splitterHover: '152 50% 48%',
-    hover: '160 14% 16%',
-    primary: '152 50% 55%',
-    floatShadow: '160 18% 3%',
-  },
-};
+export const forestDark = createTheme('Forest Dark', 'dark',
+  { hue: 160, sat: 18, light: 9 },
+  { hue: 152, sat: 50, light: 55 },
+);
 
-/** Slate — neutral gray with warm undertones, minimalist and gentle */
-export const slateDark: DockTheme = {
-  name: 'Slate Dark',
-  mode: 'dark',
-  colors: {
-    bg: '215 12% 11%',
-    surface: '215 10% 14%',
-    surfaceAlt: '215 9% 16%',
-    panelHeader: '215 9% 19%',
-    tabBar: '215 10% 13%',
-    tabActive: '215 10% 14%',
-    tabText: '210 8% 65%',
-    tabTextActive: '205 40% 62%',
-    text: '210 15% 90%',
-    textSecondary: '210 8% 68%',
-    textMuted: '210 6% 50%',
-    border: '215 9% 24%',
-    splitter: '215 9% 20%',
-    splitterHover: '205 40% 52%',
-    hover: '215 9% 18%',
-    primary: '205 40% 62%',
-    floatShadow: '215 12% 4%',
-  },
-};
+export const slateDark = createTheme('Slate Dark', 'dark',
+  { hue: 215, sat: 12, light: 11 },
+  { hue: 205, sat: 40, light: 62 },
+);
 
 // ─── Theme collection ─────────────────────────────────────────────────
 

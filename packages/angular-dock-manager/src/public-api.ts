@@ -10,7 +10,7 @@ export {
   dockReducer, createDefaultState, validateState,
   findTabGroupForPanel, findFirstTabGroup, findTabGroupById, findAllTabGroups,
   serialize, deserialize, saveToLocalStorage, loadFromLocalStorage, clearLocalStorage, exportToFile, importFromFile,
-  themes, vsCodeLight, githubLight, warmLight, solarizedLight, sepiaLight, mintLight, lavenderLight,
+  createTheme, themes, vsCodeLight, githubLight, warmLight, solarizedLight, sepiaLight, mintLight, lavenderLight,
   vsCodeDark, draculaDark, nordDark, solarizedDark, midnightDark, forestDark, slateDark,
   getThemeByName, getThemesByMode,
 } from '@widgetstools/dock-manager-core';
