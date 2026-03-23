@@ -46,12 +46,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nndrao/dockmanager.git",
+    "url": "https://github.com/widgetstools/dockmanager.git",
     "directory": "packages/dock-manager-core"
   },
-  "homepage": "https://github.com/nndrao/dockmanager#readme",
+  "homepage": "https://github.com/widgetstools/dockmanager#readme",
   "bugs": {
-    "url": "https://github.com/nndrao/dockmanager/issues"
+    "url": "https://github.com/widgetstools/dockmanager/issues"
   },
   "publishConfig": {
     "access": "public"
