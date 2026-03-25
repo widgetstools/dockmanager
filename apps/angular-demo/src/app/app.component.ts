@@ -12,7 +12,6 @@ import {
 } from '@widgetstools/angular-dock-manager';
 import type {
   DockManagerState,
-  PanelConfig,
   PreventableDockEvent,
   IDisposable,
   DockTheme,
@@ -27,44 +26,30 @@ import { FileTreeWidgetComponent } from './widgets/file-tree-widget.component';
 import { ProblemsWidgetComponent } from './widgets/problems-widget.component';
 import { PlaceholderWidgetComponent } from './widgets/placeholder-widget.component';
 
-// Lucide Angular
-import { LucideAngularModule, LucideIconProvider, LUCIDE_ICONS } from 'lucide-angular';
-import type { LucideIconData } from 'lucide-angular/icons/types';
+// Font Awesome
+import { FaIconComponent } from '@fortawesome/angular-fontawesome';
+import { icon as faIconSvg, type IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import {
-  Undo2, Redo2, Save, FolderOpen, RotateCcw,
-  Download, Upload, Copy, ClipboardPaste,
-  Bookmark, BookmarkCheck, Link, Unlink,
-  Plus, ChevronLeft, ChevronRight,
-  Anchor, Ban, Bug, PanelRight,
-  Keyboard, Sun, Moon, X, Play, FileText,
-  FolderTree, Terminal, AlertTriangle, ScrollText,
-  List, Search, Info,
-} from 'lucide-angular';
+  faRotateLeft, faRotateRight, faFloppyDisk, faFolderOpen, faArrowsRotate,
+  faDownload, faUpload, faCopy, faPaste,
+  faBookmark, faLink, faLinkSlash,
+  faPlus, faChevronLeft, faChevronRight,
+  faAnchor, faBan, faBug, faTableColumns,
+  faKeyboard, faSun, faMoon, faXmark, faPlay, faFile,
+  faFolderTree, faTerminal, faTriangleExclamation, faScroll,
+  faList, faMagnifyingGlass, faCircleInfo,
+} from '@fortawesome/free-solid-svg-icons';
 
-/** All icons used in toolbar — registered via LUCIDE_ICONS provider */
-const ALL_ICONS = {
-  Undo2, Redo2, Save, FolderOpen, RotateCcw,
-  Download, Upload, Copy, ClipboardPaste,
-  Bookmark, BookmarkCheck, Link, Unlink,
-  Plus, ChevronLeft, ChevronRight,
-  Anchor, Ban, Bug, PanelRight,
-  Keyboard, Sun, Moon, X, Play, FileText,
-};
-
-/** Convert LucideIconData to SVG string for DOM manipulation (e.g. createTabContent) */
-function lucideSvg(icon: LucideIconData, size = 12): string {
-  const children = icon.map(([tag, attrs]) => {
-    const a = Object.entries(attrs).filter(([k]) => k !== 'key').map(([k, v]) => `${k}="${v}"`).join(' ');
-    return `<${tag} ${a}/>`;
-  }).join('');
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${children}</svg>`;
+/** Render a Font Awesome icon to an HTML string for DOM manipulation */
+function faSvg(def: IconDefinition): string {
+  return faIconSvg(def).html[0];
 }
 
-/** Icon registry for tab rendering (panel.icon → LucideIconData) */
-const TAB_ICONS: Record<string, LucideIconData> = {
-  file: FileText, folder: FolderTree, terminal: Terminal,
-  alert: AlertTriangle, scroll: ScrollText, list: List,
-  search: Search, clock: Info,
+/** Icon registry for tab rendering (panel.icon key → FA icon definition) */
+const TAB_ICONS: Record<string, IconDefinition> = {
+  file: faFile, folder: faFolderTree, terminal: faTerminal,
+  alert: faTriangleExclamation, scroll: faScroll, list: faList,
+  search: faMagnifyingGlass, clock: faCircleInfo,
 };
 
 /** All available themes */
@@ -90,14 +75,7 @@ const UNSAVED_PANELS = new Set(['doc1', 'doc2']);
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [
-    FormsModule,
-    DockManagerCoreComponent,
-    LucideAngularModule,
-  ],
-  providers: [
-    { provide: LUCIDE_ICONS, multi: true, useValue: new LucideIconProvider(ALL_ICONS) },
-  ],
+  imports: [FormsModule, DockManagerCoreComponent, FaIconComponent],
   template: `
     <div class="demo-root">
       <!-- Toolbar -->
@@ -105,58 +83,52 @@ const UNSAVED_PANELS = new Set(['doc1', 'doc2']);
         <div class="demo-toolbar-left">
           <span class="demo-title">Dock Manager Demo</span>
 
-          <!-- Undo / Redo -->
           <div class="demo-btn-group">
-            <button class="tb" title="Undo (Ctrl+Z)" (click)="api?.undo(); showToast('Undo')"><lucide-icon name="undo-2" [size]="14" /></button>
-            <button class="tb" title="Redo (Ctrl+Shift+Z)" (click)="api?.redo(); showToast('Redo')"><lucide-icon name="redo-2" [size]="14" /></button>
+            <button class="tb" title="Undo (Ctrl+Z)" (click)="api?.undo(); showToast('Undo')"><fa-icon [icon]="icons.rotateLeft" size="sm" /></button>
+            <button class="tb" title="Redo (Ctrl+Shift+Z)" (click)="api?.redo(); showToast('Redo')"><fa-icon [icon]="icons.rotateRight" size="sm" /></button>
           </div>
 
-          <!-- Serialization -->
           <div class="demo-btn-group">
             <div class="sep"></div>
-            <button class="tb" title="Save layout" (click)="handleSave()"><lucide-icon name="save" [size]="14" /></button>
-            <button class="tb" title="Load layout" (click)="handleLoad()"><lucide-icon name="folder-open" [size]="14" /></button>
-            <button class="tb" title="Reset layout" (click)="handleReset()"><lucide-icon name="rotate-ccw" [size]="14" /></button>
+            <button class="tb" title="Save layout" (click)="handleSave()"><fa-icon [icon]="icons.floppyDisk" size="sm" /></button>
+            <button class="tb" title="Load layout" (click)="handleLoad()"><fa-icon [icon]="icons.folderOpen" size="sm" /></button>
+            <button class="tb" title="Reset layout" (click)="handleReset()"><fa-icon [icon]="icons.arrowsRotate" size="sm" /></button>
             <div class="sep"></div>
-            <button class="tb" title="Export to file" (click)="handleExport()"><lucide-icon name="download" [size]="14" /></button>
-            <button class="tb" title="Import from file" (click)="handleImport()"><lucide-icon name="upload" [size]="14" /></button>
+            <button class="tb" title="Export to file" (click)="handleExport()"><fa-icon [icon]="icons.download" size="sm" /></button>
+            <button class="tb" title="Import from file" (click)="handleImport()"><fa-icon [icon]="icons.upload" size="sm" /></button>
             <div class="sep"></div>
-            <button class="tb" title="Copy to clipboard" (click)="handleCopy()"><lucide-icon name="copy" [size]="14" /></button>
-            <button class="tb" title="Paste from clipboard" (click)="handlePaste()"><lucide-icon name="clipboard-paste" [size]="14" /></button>
+            <button class="tb" title="Copy to clipboard" (click)="handleCopy()"><fa-icon [icon]="icons.copy" size="sm" /></button>
+            <button class="tb" title="Paste from clipboard" (click)="handlePaste()"><fa-icon [icon]="icons.paste" size="sm" /></button>
           </div>
 
-          <!-- Presets -->
           <div class="demo-btn-group">
             <div class="sep"></div>
-            <button class="tb" title="Save preset" (click)="savePreset()"><lucide-icon name="bookmark" [size]="14" /></button>
-            <button class="tb" title="Load last preset" (click)="loadPreset()"><lucide-icon name="bookmark-check" [size]="14" /></button>
+            <button class="tb" title="Save preset" (click)="savePreset()"><fa-icon [icon]="icons.bookmark" size="sm" /></button>
+            <button class="tb" title="Load last preset" (click)="loadPreset()"><fa-icon [icon]="icons.bookmark" size="sm" /></button>
           </div>
 
-          <!-- URL export/import -->
           <div class="demo-btn-group">
             <div class="sep"></div>
-            <button class="tb" title="Copy layout URL" (click)="exportAsUrl()"><lucide-icon name="link" [size]="14" /></button>
-            <button class="tb" title="Load from URL" (click)="importFromUrlParam()"><lucide-icon name="unlink" [size]="14" /></button>
+            <button class="tb" title="Copy layout URL" (click)="exportAsUrl()"><fa-icon [icon]="icons.link" size="sm" /></button>
+            <button class="tb" title="Load from URL" (click)="importFromUrlParam()"><fa-icon [icon]="icons.linkSlash" size="sm" /></button>
           </div>
 
-          <!-- DockviewApi controls -->
           <div class="demo-btn-group">
             <div class="sep"></div>
-            <button class="tb" title="Add panel" (click)="addNewPanel()"><lucide-icon name="plus" [size]="14" /></button>
-            <button class="tb" title="Navigate prev" (click)="api?.navigatePrevious()"><lucide-icon name="chevron-left" [size]="14" /></button>
-            <button class="tb" title="Navigate next" (click)="api?.navigateNext()"><lucide-icon name="chevron-right" [size]="14" /></button>
+            <button class="tb" title="Add panel" (click)="addNewPanel()"><fa-icon [icon]="icons.plus" size="sm" /></button>
+            <button class="tb" title="Navigate prev" (click)="api?.navigatePrevious()"><fa-icon [icon]="icons.chevronLeft" size="sm" /></button>
+            <button class="tb" title="Navigate next" (click)="api?.navigateNext()"><fa-icon [icon]="icons.chevronRight" size="sm" /></button>
           </div>
 
-          <!-- Feature toggles -->
           <div class="demo-btn-group">
             <div class="sep"></div>
-            <button class="tb" title="Dock all floating" (click)="api?.dockAllFloating(); showToast('Docked all')"><lucide-icon name="anchor" [size]="14" /></button>
-            <button class="tb" title="Toggle disabled" (click)="toggleDisabled()"><lucide-icon name="ban" [size]="14" /></button>
+            <button class="tb" title="Dock all floating" (click)="api?.dockAllFloating(); showToast('Docked all')"><fa-icon [icon]="icons.anchor" size="sm" /></button>
+            <button class="tb" title="Toggle disabled" (click)="toggleDisabled()"><fa-icon [icon]="icons.ban" size="sm" /></button>
             <button class="tb-labelled" [class.tb-active]="debugMode" title="Debug" (click)="toggleDebug()">
-              <lucide-icon name="bug" [size]="12" /><span>Debug</span>
+              <fa-icon [icon]="icons.bug" size="xs" /><span>Debug</span>
             </button>
             <button class="tb-labelled" [class.tb-active]="allowRootDock" title="Edge Dock" (click)="allowRootDock = !allowRootDock">
-              <lucide-icon name="panel-right" [size]="12" /><span>Edge Dock</span>
+              <fa-icon [icon]="icons.tableColumns" size="xs" /><span>Edge Dock</span>
             </button>
           </div>
         </div>
@@ -164,12 +136,12 @@ const UNSAVED_PANELS = new Set(['doc1', 'doc2']);
         <div class="demo-toolbar-right">
           <span class="demo-shortcut-hint">Ctrl+P: Panel Finder</span>
           <div class="sep"></div>
-          <button class="tb" title="Keyboard shortcuts" (click)="showShortcuts = !showShortcuts"><lucide-icon name="keyboard" [size]="14" /></button>
+          <button class="tb" title="Keyboard shortcuts" (click)="showShortcuts = !showShortcuts"><fa-icon [icon]="icons.keyboard" size="sm" /></button>
           <div class="demo-theme-selector">
             @if (selectedTheme.mode === 'light') {
-              <lucide-icon name="sun" [size]="12" class="demo-theme-icon" />
+              <fa-icon [icon]="icons.sun" size="xs" class="demo-theme-icon" />
             } @else {
-              <lucide-icon name="moon" [size]="12" class="demo-theme-icon" />
+              <fa-icon [icon]="icons.moon" size="xs" class="demo-theme-icon" />
             }
             <select class="demo-theme-select" [value]="selectedThemeKey" (change)="onThemeSelect($event)" title="Theme">
               <optgroup label="Light Themes">
@@ -206,7 +178,7 @@ const UNSAVED_PANELS = new Set(['doc1', 'doc2']);
           <div class="demo-modal" (click)="$event.stopPropagation()">
             <div class="demo-modal-header">
               <h2 class="demo-modal-title">Keyboard Shortcuts</h2>
-              <button class="demo-modal-close" (click)="showShortcuts = false"><lucide-icon name="x" [size]="16" /></button>
+              <button class="demo-modal-close" (click)="showShortcuts = false"><fa-icon [icon]="icons.xmark" /></button>
             </div>
             <div class="demo-shortcuts-list">
               @for (s of shortcuts; track s.key) {
@@ -254,6 +226,17 @@ const UNSAVED_PANELS = new Set(['doc1', 'doc2']);
   `]
 })
 export class AppComponent implements OnDestroy {
+  // Icon references for template binding
+  icons = {
+    rotateLeft: faRotateLeft, rotateRight: faRotateRight,
+    floppyDisk: faFloppyDisk, folderOpen: faFolderOpen, arrowsRotate: faArrowsRotate,
+    download: faDownload, upload: faUpload, copy: faCopy, paste: faPaste,
+    bookmark: faBookmark, link: faLink, linkSlash: faLinkSlash,
+    plus: faPlus, chevronLeft: faChevronLeft, chevronRight: faChevronRight,
+    anchor: faAnchor, ban: faBan, bug: faBug, tableColumns: faTableColumns,
+    keyboard: faKeyboard, sun: faSun, moon: faMoon, xmark: faXmark,
+  };
+
   initialState: DockManagerState = structuredClone(defaultState);
   api: DockviewApi | null = null;
   currentState: DockManagerState = this.initialState;
@@ -288,7 +271,7 @@ export class AppComponent implements OnDestroy {
     'placeholder': PlaceholderWidgetComponent,
   };
 
-  /** Custom tab renderer with Lucide icons and unsaved badges */
+  /** Custom tab renderer with Font Awesome icons and unsaved badges */
   createTabContent = (panelId: string, container: HTMLElement, isActive: boolean): IDisposable => {
     const panel = this.currentState.panels[panelId] || (defaultState.panels as any)[panelId];
     if (!panel) return { dispose: () => {} };
@@ -297,11 +280,11 @@ export class AppComponent implements OnDestroy {
     span.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;user-select:none';
     span.style.color = isActive ? 'hsl(var(--dock-text))' : 'hsl(var(--dock-text-muted))';
 
-    const iconData = panel.icon ? TAB_ICONS[panel.icon] : null;
-    if (iconData) {
+    const iconDef = panel.icon ? TAB_ICONS[panel.icon] : null;
+    if (iconDef) {
       const iconSpan = document.createElement('span');
-      iconSpan.style.cssText = 'flex-shrink:0;opacity:0.7;display:flex;align-items:center';
-      iconSpan.innerHTML = lucideSvg(iconData, 12);
+      iconSpan.style.cssText = 'flex-shrink:0;opacity:0.7;display:flex;align-items:center;font-size:11px';
+      iconSpan.innerHTML = faSvg(iconDef);
       span.appendChild(iconSpan);
     }
 
@@ -334,7 +317,7 @@ export class AppComponent implements OnDestroy {
       const btn = document.createElement('button');
       btn.style.cssText = 'display:flex;align-items:center;padding:4px;border:none;background:transparent;color:hsl(var(--dock-text-muted));border-radius:4px;cursor:pointer;transition:all 0.15s';
       btn.title = 'Run file';
-      btn.innerHTML = lucideSvg(Play, 14);
+      btn.innerHTML = faSvg(faPlay);
       btn.addEventListener('mouseenter', () => { btn.style.color = 'hsl(var(--dock-text))'; btn.style.background = 'hsl(var(--dock-hover))'; });
       btn.addEventListener('mouseleave', () => { btn.style.color = 'hsl(var(--dock-text-muted))'; btn.style.background = 'transparent'; });
       btn.addEventListener('click', () => this.showToast('Running active document...'));
@@ -343,9 +326,9 @@ export class AppComponent implements OnDestroy {
     }
     if (tabGroupId === 'tg_center' && slot === 'prefix') {
       const span = document.createElement('span');
-      span.style.cssText = 'display:flex;align-items:center;padding:0 6px;color:hsl(var(--dock-text-muted));opacity:0.6';
+      span.style.cssText = 'display:flex;align-items:center;padding:0 6px;color:hsl(var(--dock-text-muted));opacity:0.6;font-size:11px';
       span.title = 'Open editors';
-      span.innerHTML = lucideSvg(FileText, 12);
+      span.innerHTML = faSvg(faFile);
       container.appendChild(span);
       return { dispose: () => { container.innerHTML = ''; } };
     }
