@@ -2,7 +2,6 @@ import './App.css';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DockManagerCore,
-  useTheme,
   saveToLocalStorage,
   loadFromLocalStorage,
   clearLocalStorage,
@@ -11,17 +10,11 @@ import {
   serialize,
   deserialize,
 } from '@widgetstools/react-dock-manager';
-import type { DockManagerCoreHandle } from '@widgetstools/react-dock-manager';
-import type {
-  DockManagerState,
-  PanelConfig,
-  PreventableDockEvent,
-} from '@widgetstools/dock-manager-core';
-import { themes, type DockTheme, type PanelApi } from '@widgetstools/dock-manager-core';
+import type { DockManagerState, PanelConfig, PreventableDockEvent, DockviewApi } from '@widgetstools/dock-manager-core';
+import { themes, type DockTheme } from '@widgetstools/dock-manager-core';
 import { defaultState } from './config/defaultLayout';
 import {
-  Sun, Moon,
-  Save, FolderOpen, RotateCcw,
+  Sun, Moon, Save, FolderOpen, RotateCcw,
   Download, Upload, Copy, ClipboardPaste,
   Plus, X, ChevronRight, ChevronLeft,
   Play, FileText, FolderTree, Search,
@@ -70,7 +63,7 @@ const THEME_OPTIONS: { label: string; key: string; theme: DockTheme }[] = [
 ];
 
 /** Widget registry — maps widgetType strings to React components */
-const WIDGET_REGISTRY: Record<string, React.FC<{ api: PanelApi; panel: PanelConfig }>> = {
+const WIDGETS = {
   clock: ClockWidget,
   editor: EditorWidget,
   terminal: TerminalWidget,
@@ -85,24 +78,12 @@ const UNSAVED_PANELS = new Set(['doc1', 'doc2']);
 let addPanelCounter = 0;
 
 function App() {
-  const { setTheme: setThemeMode } = useTheme('light');
   const [selectedThemeKey, setSelectedThemeKey] = useState('vsCodeLight');
   const selectedTheme = THEME_OPTIONS.find(t => t.key === selectedThemeKey)?.theme || themes.vsCodeLight;
-  const dockRef = useRef<DockManagerCoreHandle>(null);
 
-  const handleThemeSelect = useCallback((key: string) => {
-    setSelectedThemeKey(key);
-    const t = THEME_OPTIONS.find(o => o.key === key);
-    if (t) setThemeMode(t.theme.mode);
-  }, [setThemeMode]);
-
-  // Always start with default state — no auto-loading
-  const [initialState] = useState<DockManagerState>(() => defaultState);
-  const latestStateRef = useRef<DockManagerState>(initialState);
-
-  const handleStateChange = useCallback((state: DockManagerState) => {
-    latestStateRef.current = state;
-  }, []);
+  // API via onReady — no ref needed for most operations
+  const [api, setApi] = useState<DockviewApi | null>(null);
+  const latestStateRef = useRef<DockManagerState>(defaultState);
 
   // Toast
   const [toast, setToast] = useState<string | null>(null);
@@ -113,28 +94,12 @@ function App() {
     toastTimerRef.current = setTimeout(() => setToast(null), 2500);
   }, []);
 
-  const [mountKey, setMountKey] = useState(0);
-  const [currentInitialState, setCurrentInitialState] = useState(initialState);
-  const [showShortcuts, setShowShortcuts] = useState(false);
   const [allowRootDock, setAllowRootDock] = useState(true);
   const [debugMode, setDebugMode] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [presetName, setPresetName] = useState('');
 
   useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
-
-  // ── Widget-type panel renderer (uses widget registry) ──────────────
-
-  const renderPanel = useCallback((_panelId: string, panel: PanelConfig, api: PanelApi) => {
-    const widgetType = panel.widgetType || '';
-    const Widget = WIDGET_REGISTRY[widgetType];
-
-    if (Widget) {
-      return <Widget api={api} panel={panel} />;
-    }
-
-    // Fallback for unknown widget types
-    return <PlaceholderWidget api={api} panel={panel} />;
-  }, []);
 
   // ── Custom tab renderer with icons and unsaved badges ──────────────
 
@@ -156,21 +121,13 @@ function App() {
   const renderHeaderActions = useCallback((slot: 'left' | 'right' | 'prefix', tabGroupId: string) => {
     if (tabGroupId === 'tg_center' && slot === 'right') {
       return (
-        <button
-          className="p-1 rounded transition-colors dock-text-muted hover:dock-text dock-hover"
-          title="Run file"
-          onClick={() => showToast('Running active document...')}
-        >
+        <button className="p-1 rounded transition-colors dock-text-muted hover:dock-text dock-hover" title="Run file" onClick={() => showToast('Running active document...')}>
           <Play className="w-3.5 h-3.5" />
         </button>
       );
     }
     if (tabGroupId === 'tg_center' && slot === 'prefix') {
-      return (
-        <span className="px-1.5 flex items-center dock-text-muted opacity-60" title="Open editors">
-          <FileText className="w-3 h-3" />
-        </span>
-      );
+      return <span className="px-1.5 flex items-center dock-text-muted opacity-60" title="Open editors"><FileText className="w-3 h-3" /></span>;
     }
     return null;
   }, [showToast]);
@@ -186,164 +143,41 @@ function App() {
     }
   }, []);
 
-  // ── DockviewApi: Add panel ──────────────────────────────────────────
+  // ── Toolbar actions (using api directly) ───────────────────────────
 
   const handleAddPanel = useCallback(() => {
-    const api = dockRef.current?.getApi();
     if (!api) return;
     addPanelCounter++;
-    const id = `new_panel_${addPanelCounter}`;
     api.addPanel({
-      panelId: id,
+      panelId: `new_panel_${addPanelCounter}`,
       title: `New Panel ${addPanelCounter}`,
       widgetType: addPanelCounter % 2 === 0 ? 'clock' : 'editor',
       widgetProps: addPanelCounter % 2 === 0 ? {} : { language: 'ts' },
       icon: addPanelCounter % 2 === 0 ? 'clock' : 'file',
     });
-    showToast(`Added panel "${id}"`);
-  }, [showToast]);
-
-  // ── DockviewApi: Toggle disabled ─────────────────────────────────────
-
-  const handleToggleDisabled = useCallback(() => {
-    const api = dockRef.current?.getApi();
-    if (!api) return;
-    const state = dockRef.current?.getState();
-    if (!state) return;
-    const current = state.panels['contentPane2'];
-    if (!current) return;
-    api.updatePanel('contentPane2', { disabled: !current.disabled });
-    showToast(`Output panel ${current.disabled ? 'enabled' : 'disabled'}`);
-  }, [showToast]);
-
-  // ── DockviewApi: Navigate ───────────────────────────────────────────
-
-  const handleNavigateNext = useCallback(() => {
-    dockRef.current?.getApi()?.navigateNext();
-  }, []);
-
-  const handleNavigatePrev = useCallback(() => {
-    dockRef.current?.getApi()?.navigatePrevious();
-  }, []);
-
-  // ── Undo / Redo ────────────────────────────────────────────────────
-
-  const handleUndo = useCallback(() => {
-    const api = dockRef.current?.getApi();
-    if (!api) return;
-    api.undo();
-    showToast('Undo');
-  }, [showToast]);
-
-  const handleRedo = useCallback(() => {
-    const api = dockRef.current?.getApi();
-    if (!api) return;
-    api.redo();
-    showToast('Redo');
-  }, [showToast]);
-
-  // ── Layout Presets ─────────────────────────────────────────────────
-
-  const handleSavePreset = useCallback(() => {
-    const api = dockRef.current?.getApi();
-    if (!api) return;
-    const name = presetName.trim() || `Preset ${(api.getPresets().length + 1)}`;
-    api.savePreset(name);
-    showToast(`Saved preset "${name}"`);
-    setPresetName('');
-  }, [showToast, presetName]);
-
-  const handleLoadPreset = useCallback(() => {
-    const api = dockRef.current?.getApi();
-    if (!api) return;
-    const presets = api.getPresets();
-    if (presets.length === 0) {
-      showToast('No presets saved');
-      return;
-    }
-    // Load the most recently saved preset
-    const preset = presets[presets.length - 1];
-    api.loadPreset(preset);
-    showToast(`Loaded preset "${preset.name}"`);
-  }, [showToast]);
-
-  // ── Dock all floating ──────────────────────────────────────────────
-
-  const handleDockAllFloating = useCallback(() => {
-    const api = dockRef.current?.getApi();
-    if (!api) return;
-    const count = api.getFloatingPanels().length;
-    if (count === 0) {
-      showToast('No floating panels');
-      return;
-    }
-    api.dockAllFloating();
-    showToast(`Docked ${count} floating panel${count > 1 ? 's' : ''}`);
-  }, [showToast]);
-
-  // ── Debug mode ─────────────────────────────────────────────────────
-
-  const handleToggleDebug = useCallback(() => {
-    const api = dockRef.current?.getApi();
-    if (!api) return;
-    const newValue = !debugMode;
-    api.setDebugMode(newValue);
-    setDebugMode(newValue);
-    showToast(newValue ? 'Debug mode ON' : 'Debug mode OFF');
-  }, [debugMode, showToast]);
-
-  // ── Export/Import URL ──────────────────────────────────────────────
-
-  const handleExportUrl = useCallback(() => {
-    const api = dockRef.current?.getApi();
-    if (!api) return;
-    const encoded = api.exportAsUrl();
-    const url = `${window.location.origin}${window.location.pathname}?layout=${encoded}`;
-    navigator.clipboard.writeText(url).then(
-      () => showToast('Layout URL copied to clipboard'),
-      () => showToast('Failed to copy URL'),
-    );
-  }, [showToast]);
-
-  const handleImportUrl = useCallback(() => {
-    const params = new URLSearchParams(window.location.search);
-    const encoded = params.get('layout');
-    if (!encoded) {
-      showToast('No layout found in URL');
-      return;
-    }
-    const api = dockRef.current?.getApi();
-    if (!api) return;
-    try {
-      api.importFromUrl(encoded);
-      showToast('Layout loaded from URL');
-    } catch {
-      showToast('Failed to decode layout from URL');
-    }
-  }, [showToast]);
-
-  // ── Serialization handlers ──────────────────────────────────────────
+    showToast(`Added panel`);
+  }, [api, showToast]);
 
   const handleSave = useCallback(() => { saveToLocalStorage(latestStateRef.current); showToast('Layout saved'); }, [showToast]);
   const handleLoad = useCallback(() => {
     const saved = loadFromLocalStorage();
-    if (saved) { setCurrentInitialState(saved.state); setMountKey(k => k + 1); showToast('Layout loaded'); }
+    if (saved && api) { api.loadState(saved.state); showToast('Layout loaded'); }
     else showToast('No saved layout found');
-  }, [showToast]);
-  const handleReset = useCallback(() => { clearLocalStorage(); setCurrentInitialState(defaultState); setMountKey(k => k + 1); showToast('Layout reset'); }, [showToast]);
+  }, [api, showToast]);
+  const handleReset = useCallback(() => { clearLocalStorage(); api?.loadState(defaultState); showToast('Layout reset'); }, [api, showToast]);
   const handleExport = useCallback(() => { exportToFile(latestStateRef.current); showToast('Layout exported'); }, [showToast]);
   const handleImport = useCallback(async () => {
-    try { const r = await importFromFile(); setCurrentInitialState(r.state); setMountKey(k => k + 1); showToast('Layout imported'); }
+    try { const r = await importFromFile(); api?.loadState(r.state); showToast('Layout imported'); }
     catch (e: unknown) { showToast(`Import failed: ${e instanceof Error ? e.message : 'Unknown error'}`); }
-  }, [showToast]);
+  }, [api, showToast]);
   const handleCopy = useCallback(async () => {
     try { await navigator.clipboard.writeText(serialize(latestStateRef.current)); showToast('Copied to clipboard'); }
     catch { showToast('Copy failed'); }
   }, [showToast]);
   const handlePaste = useCallback(async () => {
-    try { const r = deserialize(await navigator.clipboard.readText()); setCurrentInitialState(r.state); setMountKey(k => k + 1); showToast('Pasted from clipboard'); }
+    try { const r = deserialize(await navigator.clipboard.readText()); api?.loadState(r.state); showToast('Pasted from clipboard'); }
     catch (e: unknown) { showToast(`Paste failed: ${e instanceof Error ? e.message : 'Unknown error'}`); }
-  }, [showToast]);
+  }, [api, showToast]);
 
   return (
     <div className="h-screen w-screen dock-bg flex flex-col overflow-hidden">
@@ -352,68 +186,71 @@ function App() {
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold dock-text tracking-wide">Dock Manager Demo</span>
 
-          {/* Undo / Redo */}
           <div className="flex items-center gap-0.5">
-            <Btn icon={<Undo2 className="w-3.5 h-3.5" />} title="Undo (Ctrl+Z)" onClick={handleUndo} />
-            <Btn icon={<Redo2 className="w-3.5 h-3.5" />} title="Redo (Ctrl+Shift+Z)" onClick={handleRedo} />
+            <Btn icon={<Undo2 className="w-3.5 h-3.5" />} title="Undo (Ctrl+Z)" onClick={() => { api?.undo(); showToast('Undo'); }} />
+            <Btn icon={<Redo2 className="w-3.5 h-3.5" />} title="Redo (Ctrl+Shift+Z)" onClick={() => { api?.redo(); showToast('Redo'); }} />
           </div>
 
-          {/* Serialization */}
           <div className="flex items-center gap-0.5">
             <Sep />
-            <Btn icon={<Save className="w-3.5 h-3.5" />} title="Save layout to localStorage" onClick={handleSave} />
-            <Btn icon={<FolderOpen className="w-3.5 h-3.5" />} title="Load layout from localStorage" onClick={handleLoad} />
-            <Btn icon={<RotateCcw className="w-3.5 h-3.5" />} title="Reset layout to default" onClick={handleReset} />
+            <Btn icon={<Save className="w-3.5 h-3.5" />} title="Save layout" onClick={handleSave} />
+            <Btn icon={<FolderOpen className="w-3.5 h-3.5" />} title="Load layout" onClick={handleLoad} />
+            <Btn icon={<RotateCcw className="w-3.5 h-3.5" />} title="Reset layout" onClick={handleReset} />
             <Sep />
-            <Btn icon={<Download className="w-3.5 h-3.5" />} title="Export to JSON file" onClick={handleExport} />
-            <Btn icon={<Upload className="w-3.5 h-3.5" />} title="Import from JSON file" onClick={handleImport} />
+            <Btn icon={<Download className="w-3.5 h-3.5" />} title="Export to file" onClick={handleExport} />
+            <Btn icon={<Upload className="w-3.5 h-3.5" />} title="Import from file" onClick={handleImport} />
             <Sep />
-            <Btn icon={<Copy className="w-3.5 h-3.5" />} title="Copy layout JSON to clipboard" onClick={handleCopy} />
-            <Btn icon={<ClipboardPaste className="w-3.5 h-3.5" />} title="Paste layout JSON from clipboard" onClick={handlePaste} />
+            <Btn icon={<Copy className="w-3.5 h-3.5" />} title="Copy to clipboard" onClick={handleCopy} />
+            <Btn icon={<ClipboardPaste className="w-3.5 h-3.5" />} title="Paste from clipboard" onClick={handlePaste} />
           </div>
 
-          {/* Layout Presets */}
           <div className="flex items-center gap-0.5">
             <Sep />
-            <Btn icon={<Bookmark className="w-3.5 h-3.5" />} title="Save current layout as preset" onClick={handleSavePreset} />
-            <Btn icon={<BookmarkCheck className="w-3.5 h-3.5" />} title="Load last saved preset" onClick={handleLoadPreset} />
+            <Btn icon={<Bookmark className="w-3.5 h-3.5" />} title="Save preset" onClick={() => {
+              const name = presetName.trim() || `Preset ${(api?.getPresets().length ?? 0) + 1}`;
+              api?.savePreset(name); showToast(`Saved preset "${name}"`); setPresetName('');
+            }} />
+            <Btn icon={<BookmarkCheck className="w-3.5 h-3.5" />} title="Load last preset" onClick={() => {
+              const presets = api?.getPresets() ?? [];
+              if (presets.length === 0) { showToast('No presets'); return; }
+              api?.loadPreset(presets[presets.length - 1]); showToast(`Loaded preset`);
+            }} />
           </div>
 
-          {/* URL export/import */}
           <div className="flex items-center gap-0.5">
             <Sep />
-            <Btn icon={<Link className="w-3.5 h-3.5" />} title="Copy layout as shareable URL" onClick={handleExportUrl} />
-            <Btn icon={<Unlink className="w-3.5 h-3.5" />} title="Load layout from URL parameter" onClick={handleImportUrl} />
+            <Btn icon={<Link className="w-3.5 h-3.5" />} title="Copy layout URL" onClick={() => {
+              const encoded = api?.exportAsUrl();
+              if (encoded) navigator.clipboard.writeText(`${location.origin}${location.pathname}?layout=${encoded}`).then(() => showToast('URL copied'));
+            }} />
+            <Btn icon={<Unlink className="w-3.5 h-3.5" />} title="Load from URL" onClick={() => {
+              const encoded = new URLSearchParams(location.search).get('layout');
+              if (encoded) { try { api?.importFromUrl(encoded); showToast('Loaded from URL'); } catch { showToast('Invalid URL'); } }
+              else showToast('No layout in URL');
+            }} />
           </div>
 
-          {/* DockviewApi controls */}
           <div className="flex items-center gap-0.5">
             <Sep />
-            <Btn icon={<Plus className="w-3.5 h-3.5" />} title="Add new panel (DockviewApi.addPanel)" onClick={handleAddPanel} />
-            <Btn icon={<ChevronLeft className="w-3.5 h-3.5" />} title="Navigate previous" onClick={handleNavigatePrev} />
-            <Btn icon={<ChevronRight className="w-3.5 h-3.5" />} title="Navigate next" onClick={handleNavigateNext} />
+            <Btn icon={<Plus className="w-3.5 h-3.5" />} title="Add panel" onClick={handleAddPanel} />
+            <Btn icon={<ChevronLeft className="w-3.5 h-3.5" />} title="Navigate prev" onClick={() => api?.navigatePrevious()} />
+            <Btn icon={<ChevronRight className="w-3.5 h-3.5" />} title="Navigate next" onClick={() => api?.navigateNext()} />
           </div>
 
-          {/* Feature toggles */}
           <div className="flex items-center gap-0.5">
             <Sep />
-            <Btn icon={<Anchor className="w-3.5 h-3.5" />} title="Dock all floating panels" onClick={handleDockAllFloating} />
-            <Btn icon={<Ban className="w-3.5 h-3.5" />} title="Toggle disabled on Content Pane 2" onClick={handleToggleDisabled} />
-            <button
-              onClick={handleToggleDebug}
-              className={`flex items-center gap-1 px-1.5 py-1 rounded text-[10px] transition-colors ${debugMode ? 'dock-text bg-blue-500/20' : 'dock-text-muted dock-hover'}`}
-              title="Toggle debug overlay"
-            >
-              <Bug className="w-3 h-3" />
-              <span>Debug</span>
+            <Btn icon={<Anchor className="w-3.5 h-3.5" />} title="Dock all floating" onClick={() => { api?.dockAllFloating(); showToast('Docked all'); }} />
+            <Btn icon={<Ban className="w-3.5 h-3.5" />} title="Toggle disabled" onClick={() => {
+              const p = latestStateRef.current.panels['contentPane2'];
+              if (p) { api?.updatePanel('contentPane2', { disabled: !p.disabled }); showToast(p.disabled ? 'Enabled' : 'Disabled'); }
+            }} />
+            <button onClick={() => { const v = !debugMode; api?.setDebugMode(v); setDebugMode(v); showToast(v ? 'Debug ON' : 'Debug OFF'); }}
+              className={`flex items-center gap-1 px-1.5 py-1 rounded text-[10px] transition-colors ${debugMode ? 'dock-text bg-blue-500/20' : 'dock-text-muted dock-hover'}`} title="Debug">
+              <Bug className="w-3 h-3" /><span>Debug</span>
             </button>
-            <button
-              onClick={() => setAllowRootDock(v => !v)}
-              className={`flex items-center gap-1 px-1.5 py-1 rounded text-[10px] transition-colors ${allowRootDock ? 'dock-text bg-blue-500/20' : 'dock-text-muted dock-hover'}`}
-              title="Toggle edge docking (allowRootDock)"
-            >
-              <Dock className="w-3 h-3" />
-              <span>Edge Dock</span>
+            <button onClick={() => setAllowRootDock(v => !v)}
+              className={`flex items-center gap-1 px-1.5 py-1 rounded text-[10px] transition-colors ${allowRootDock ? 'dock-text bg-blue-500/20' : 'dock-text-muted dock-hover'}`} title="Edge Dock">
+              <Dock className="w-3 h-3" /><span>Edge Dock</span>
             </button>
           </div>
         </div>
@@ -422,24 +259,15 @@ function App() {
           <span className="text-[10px] dock-text-muted">Ctrl+P: Panel Finder</span>
           <Sep />
           <Btn icon={<Keyboard className="w-3.5 h-3.5" />} title="Keyboard shortcuts" onClick={() => setShowShortcuts(v => !v)} />
-          {/* Theme selector */}
           <div className="flex items-center gap-1">
             {selectedTheme.mode === 'light' ? <Sun className="w-3 h-3 dock-text-muted" /> : <Moon className="w-3 h-3 dock-text-muted" />}
-            <select
-              value={selectedThemeKey}
-              onChange={e => handleThemeSelect(e.target.value)}
-              className="text-[11px] dock-text dock-surface-alt border dock-border rounded px-1.5 py-0.5 cursor-pointer outline-none"
-              title="Select theme"
-            >
+            <select value={selectedThemeKey} onChange={e => setSelectedThemeKey(e.target.value)}
+              className="text-[11px] dock-text dock-surface-alt border dock-border rounded px-1.5 py-0.5 cursor-pointer outline-none" title="Theme">
               <optgroup label="Light Themes">
-                {THEME_OPTIONS.filter(t => t.theme.mode === 'light').map(t => (
-                  <option key={t.key} value={t.key}>{t.label}</option>
-                ))}
+                {THEME_OPTIONS.filter(t => t.theme.mode === 'light').map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
               </optgroup>
               <optgroup label="Dark Themes">
-                {THEME_OPTIONS.filter(t => t.theme.mode === 'dark').map(t => (
-                  <option key={t.key} value={t.key}>{t.label}</option>
-                ))}
+                {THEME_OPTIONS.filter(t => t.theme.mode === 'dark').map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
               </optgroup>
             </select>
           </div>
@@ -449,11 +277,10 @@ function App() {
       {/* Dock Manager */}
       <div className="flex-1 overflow-hidden relative">
         <DockManagerCore
-          key={mountKey}
-          ref={dockRef}
-          initialState={currentInitialState}
-          onStateChange={handleStateChange}
-          renderPanel={renderPanel}
+          initialState={defaultState}
+          widgets={WIDGETS}
+          onReady={setApi}
+          onStateChange={state => { latestStateRef.current = state; }}
           renderTab={renderTab}
           renderHeaderActions={renderHeaderActions}
           onWillClose={onWillClose}
@@ -478,20 +305,11 @@ function App() {
             </div>
             <div className="space-y-1.5 text-xs">
               {([
-                ['Ctrl+Z', 'Undo'],
-                ['Ctrl+Shift+Z', 'Redo'],
-                ['Ctrl+P', 'Panel finder'],
-                ['Ctrl+W', 'Close active panel'],
-                ['Ctrl+Tab', 'Pane navigator (next)'],
-                ['Ctrl+Shift+Tab', 'Pane navigator (prev)'],
-                ['Ctrl+F6', 'Next tab in group'],
-                ['Ctrl+Shift+F6', 'Previous tab in group'],
-                ['Alt+F6', 'Next pane (across groups)'],
-                ['Alt+Shift+F6', 'Previous pane (across groups)'],
-                ['Alt+F7', 'Open pane navigator'],
-                ['F11', 'Maximize / Restore'],
-                ['Ctrl+Shift+Arrow', 'Dock to edge'],
-                ['Escape', 'Restore / Cancel drag'],
+                ['Ctrl+Z', 'Undo'], ['Ctrl+Shift+Z', 'Redo'], ['Ctrl+P', 'Panel finder'],
+                ['Ctrl+W', 'Close active panel'], ['Ctrl+Tab', 'Next pane'], ['Ctrl+Shift+Tab', 'Prev pane'],
+                ['Ctrl+F6', 'Next tab'], ['Ctrl+Shift+F6', 'Prev tab'], ['Alt+F6', 'Next group'],
+                ['Alt+Shift+F6', 'Prev group'], ['Alt+F7', 'Pane navigator'], ['F11', 'Maximize/Restore'],
+                ['Ctrl+Shift+Arrow', 'Dock to edge'], ['Escape', 'Restore/Cancel'],
               ] as const).map(([key, desc]) => (
                 <div key={key} className="flex items-center justify-between py-1 border-b dock-border last:border-0">
                   <span className="dock-text-muted">{desc}</span>

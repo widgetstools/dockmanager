@@ -94,6 +94,7 @@ export { EventEmitter } from './dom/EventEmitter';
 export type { DockTheme, DockThemeColors } from './theme/DockTheme';
 export {
   applyTheme,
+  createTheme,
   themes,
   vsCodeLight, githubLight, warmLight, solarizedLight, sepiaLight, mintLight, lavenderLight,
   vsCodeDark, draculaDark, nordDark, solarizedDark, midnightDark, forestDark, slateDark,

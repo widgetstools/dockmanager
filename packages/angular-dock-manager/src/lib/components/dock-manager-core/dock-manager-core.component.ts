@@ -20,6 +20,10 @@ import {
   SimpleChanges,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
+  ApplicationRef,
+  EnvironmentInjector,
+  Type,
+  createComponent,
 } from '@angular/core';
 import type {
   DockManagerState,
@@ -31,6 +35,7 @@ import type {
 } from '@widgetstools/dock-manager-core';
 import {
   DockviewComponent,
+  DockviewApi,
   PanelApi,
 } from '@widgetstools/dock-manager-core';
 import type { DockAction } from '@widgetstools/dock-manager-core';
@@ -56,8 +61,16 @@ export class DockManagerCoreComponent implements AfterViewInit, OnDestroy, OnCha
   /** Initial state for the dock manager */
   @Input() initialState!: DockManagerState;
 
-  /** Content renderer — called when a panel needs content mounted into a container */
-  @Input() createContent!: ContentRenderer;
+  /**
+   * Widget registry: maps panel.widgetType strings to Angular component classes.
+   * When provided, panels are automatically rendered using createComponent().
+   * Each widget component should accept `api` and `panel` inputs.
+   */
+  @Input() widgets?: Record<string, Type<any>>;
+
+  /** Content renderer — called when a panel needs content mounted into a container.
+   *  Used as fallback when `widgets` registry doesn't match the panel's widgetType. */
+  @Input() createContent?: ContentRenderer;
 
   /** Optional custom tab renderer */
   @Input() createTab?: TabRenderer;
@@ -67,6 +80,12 @@ export class DockManagerCoreComponent implements AfterViewInit, OnDestroy, OnCha
 
   /** Theme: 'light', 'dark', or a DockTheme object */
   @Input() theme: 'light' | 'dark' | DockTheme = 'light';
+
+  /** Whether to show edge dock indicators. Defaults to true. */
+  @Input() allowRootDock?: boolean;
+
+  /** Emits when the dock manager is initialized with the DockviewApi for programmatic control */
+  @Output() ready = new EventEmitter<DockviewApi>();
 
   /** Emits when state changes */
   @Output() stateChange = new EventEmitter<DockManagerState>();
@@ -86,17 +105,39 @@ export class DockManagerCoreComponent implements AfterViewInit, OnDestroy, OnCha
 
   private dock: DockviewComponent | null = null;
 
-  constructor(private cdr: ChangeDetectorRef) {}
+  constructor(
+    private cdr: ChangeDetectorRef,
+    private appRef: ApplicationRef,
+    private envInjector: EnvironmentInjector,
+  ) {}
 
   ngAfterViewInit(): void {
     const options: DockviewComponentOptions = {
       initialState: this.initialState,
       theme: this.theme,
+      allowRootDock: this.allowRootDock,
 
       createContent: (panelId: string, container: HTMLElement, api: PanelApi): IDisposable => {
-        const disposable = this.createContent(panelId, container, api);
-        this.cdr.markForCheck();
-        return disposable;
+        // Try widget registry first
+        // Note: this.dock may be null during initial construction, so fall back to initialState
+        const state = this.dock?.getState() ?? this.initialState;
+        const panel = state?.panels[panelId];
+        const widgetType = panel?.widgetType || '';
+        const WidgetClass = this.widgets?.[widgetType];
+
+        if (WidgetClass) {
+          return this.mountComponent(WidgetClass, container, api, panel);
+        }
+
+        // Fall back to createContent callback
+        if (this.createContent) {
+          const disposable = this.createContent(panelId, container, api);
+          this.cdr.markForCheck();
+          return disposable;
+        }
+
+        // Nothing to render
+        return { dispose: () => {} };
       },
 
       createTab: this.createTab
@@ -132,12 +173,17 @@ export class DockManagerCoreComponent implements AfterViewInit, OnDestroy, OnCha
     };
 
     this.dock = new DockviewComponent(this.containerRef.nativeElement, options);
+
+    // Emit the API for easy programmatic access
+    this.ready.emit(this.dock.api);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['theme'] && !changes['theme'].firstChange && this.dock) {
-      this.dock.updateOptions({ theme: this.theme });
-    }
+    if (!this.dock) return;
+    const updates: Partial<DockviewComponentOptions> = {};
+    if (changes['theme'] && !changes['theme'].firstChange) updates.theme = this.theme;
+    if (changes['allowRootDock'] && !changes['allowRootDock'].firstChange) updates.allowRootDock = this.allowRootDock;
+    if (Object.keys(updates).length > 0) this.dock.updateOptions(updates);
   }
 
   ngOnDestroy(): void {
@@ -158,5 +204,36 @@ export class DockManagerCoreComponent implements AfterViewInit, OnDestroy, OnCha
   /** Get the underlying DockviewComponent instance */
   getInstance(): DockviewComponent | null {
     return this.dock;
+  }
+
+  /** Get the DockviewApi for programmatic control */
+  getApi(): DockviewApi | null {
+    return this.dock?.api ?? null;
+  }
+
+  /** Mount an Angular component into a container element */
+  private mountComponent(componentClass: Type<any>, container: HTMLElement, api: PanelApi, panel: any): IDisposable {
+    const hostEl = document.createElement('div');
+    hostEl.style.cssText = 'width:100%;height:100%;color:inherit';
+    container.appendChild(hostEl);
+
+    const ref = createComponent(componentClass, {
+      hostElement: hostEl,
+      environmentInjector: this.envInjector,
+    });
+
+    ref.setInput('api', api);
+    ref.setInput('panel', panel);
+
+    this.appRef.attachView(ref.hostView);
+    queueMicrotask(() => ref.changeDetectorRef.detectChanges());
+
+    return {
+      dispose: () => {
+        this.appRef.detachView(ref.hostView);
+        ref.destroy();
+        container.innerHTML = '';
+      },
+    };
   }
 }

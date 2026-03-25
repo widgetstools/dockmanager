@@ -25,6 +25,7 @@ import type {
   DockPosition,
   DockTheme,
   DockResourceStrings,
+  DockviewApi,
 } from '@widgetstools/dock-manager-core';
 import {
   DockviewComponent,
@@ -38,15 +39,35 @@ import { PanelApi } from '@widgetstools/dock-manager-core';
 
 // ── Types ────────────────────────────────────────────────────────────
 
+/** Props passed to widget components registered via the `widgets` prop */
+export interface WidgetProps {
+  panelId: string;
+  panel: PanelConfig;
+  api: PanelApi;
+}
+
 export interface DockManagerCoreProps {
   /** Initial state for the dock manager */
   initialState: DockManagerState;
-  /** Render panel content. Called when a panel needs content mounted. */
-  renderPanel: (panelId: string, panel: PanelConfig, api: PanelApi) => React.ReactNode;
+  /**
+   * Widget registry: maps `panel.widgetType` strings to React components.
+   * This is the simplest way to render panel content.
+   *
+   * Example: `widgets={{ clock: ClockWidget, editor: EditorWidget }}`
+   */
+  widgets?: Record<string, React.ComponentType<WidgetProps>>;
+  /**
+   * Render panel content. Called when a panel needs content mounted.
+   * If both `widgets` and `renderPanel` are provided, the registry is tried
+   * first and `renderPanel` is used as a fallback.
+   */
+  renderPanel?: (panelId: string, panel: PanelConfig, api: PanelApi) => React.ReactNode;
   /** Optional custom tab renderer */
   renderTab?: (panelId: string, panel: PanelConfig, isActive: boolean) => React.ReactNode;
   /** Optional header action slots */
   renderHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string) => React.ReactNode;
+  /** Called with the DockviewApi when the component is ready. Simplest way to access the API. */
+  onReady?: (api: DockviewApi) => void;
   /** Called when state changes */
   onStateChange?: (state: DockManagerState) => void;
   /** Called before a panel is closed (preventable) */
@@ -71,7 +92,7 @@ export interface DockManagerCoreHandle {
   /** Get the underlying DockviewComponent instance */
   getInstance: () => DockviewComponent | null;
   /** Get the DockviewApi for high-level programmatic control */
-  getApi: () => import('@widgetstools/dock-manager-core').DockviewApi | null;
+  getApi: () => DockviewApi | null;
 }
 
 // ── Portal tracking ──────────────────────────────────────────────────
@@ -80,11 +101,8 @@ interface PortalEntry {
   container: HTMLElement;
   panelId: string;
   type: 'content' | 'tab' | 'headerAction';
-  // Extra context for content panels
   api?: PanelApi;
-  // Extra context for tabs
   isActive?: boolean;
-  // Extra context for header actions
   slot?: 'left' | 'right' | 'prefix';
   tabGroupId?: string;
 }
@@ -95,9 +113,11 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
   function DockManagerCore(props, ref) {
     const {
       initialState,
+      widgets,
       renderPanel,
       renderTab,
       renderHeaderActions,
+      onReady,
       onStateChange,
       onWillClose,
       onWillDrop,
@@ -113,29 +133,15 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
     const [, forceUpdate] = useState(0);
 
     // Keep refs to latest callbacks so core doesn't need to be re-created
-    const renderPanelRef = useRef(renderPanel);
-    renderPanelRef.current = renderPanel;
-    const renderTabRef = useRef(renderTab);
-    renderTabRef.current = renderTab;
-    const renderHeaderActionsRef = useRef(renderHeaderActions);
-    renderHeaderActionsRef.current = renderHeaderActions;
-    const onStateChangeRef = useRef(onStateChange);
-    onStateChangeRef.current = onStateChange;
-    const onWillCloseRef = useRef(onWillClose);
-    onWillCloseRef.current = onWillClose;
-    const onWillDropRef = useRef(onWillDrop);
-    onWillDropRef.current = onWillDrop;
+    const callbackRefs = useRef({ renderPanel, renderTab, renderHeaderActions, onStateChange, onWillClose, onWillDrop, onReady, widgets });
+    callbackRefs.current = { renderPanel, renderTab, renderHeaderActions, onStateChange, onWillClose, onWillDrop, onReady, widgets };
 
     // Initialize DockviewComponent
     useEffect(() => {
       if (!containerRef.current) return;
 
       const addPortal = (key: string, entry: PortalEntry) => {
-        setPortals((prev) => {
-          const next = new Map(prev);
-          next.set(key, entry);
-          return next;
-        });
+        setPortals((prev) => new Map(prev).set(key, entry));
       };
 
       const removePortal = (key: string) => {
@@ -155,22 +161,16 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
         resourceStrings,
 
         createContent: (panelId: string, container: HTMLElement, api: PanelApi): IDisposable => {
-          // Use a unique key with counter to ensure React treats re-mounting
-          // (e.g. float → dock-back) as a genuinely new portal, not a reuse
           const key = `content:${panelId}:${++portalCounter}`;
           addPortal(key, { container, panelId, type: 'content', api });
-          return {
-            dispose: () => removePortal(key),
-          };
+          return { dispose: () => removePortal(key) };
         },
 
         createTab: renderTab
           ? (panelId: string, container: HTMLElement, isActive: boolean): IDisposable => {
               const key = `tab:${panelId}:${++portalCounter}`;
               addPortal(key, { container, panelId, type: 'tab', isActive });
-              return {
-                dispose: () => removePortal(key),
-              };
+              return { dispose: () => removePortal(key) };
             }
           : undefined,
 
@@ -178,29 +178,29 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
           ? (slot, tabGroupId, container): IDisposable => {
               const key = `header:${slot}:${tabGroupId}:${++portalCounter}`;
               addPortal(key, { container, panelId: '', type: 'headerAction', slot, tabGroupId });
-              return {
-                dispose: () => removePortal(key),
-              };
+              return { dispose: () => removePortal(key) };
             }
           : undefined,
 
         onStateChange: (state: DockManagerState) => {
-          onStateChangeRef.current?.(state);
-          // Force portal re-render to pick up state changes
+          callbackRefs.current.onStateChange?.(state);
           forceUpdate((n) => n + 1);
         },
 
         onWillClose: (event, panelId) => {
-          onWillCloseRef.current?.(event, panelId);
+          callbackRefs.current.onWillClose?.(event, panelId);
         },
 
         onWillDrop: (event, sourceId, targetId, position) => {
-          onWillDropRef.current?.(event, sourceId, targetId, position);
+          callbackRefs.current.onWillDrop?.(event, sourceId, targetId, position);
         },
       };
 
       const dock = new DockviewComponent(containerRef.current, options);
       dockRef.current = dock;
+
+      // Fire onReady with the API
+      callbackRefs.current.onReady?.(dock.api);
 
       return () => {
         dock.dispose();
@@ -209,25 +209,16 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
       };
     }, []); // Only run once on mount
 
-    // Update theme when it changes
+    // Sync options when props change
     const themeKey = typeof theme === 'object' ? theme.name : theme;
     useEffect(() => {
-      dockRef.current?.updateOptions({ theme });
-    }, [themeKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Update allowRootDock when it changes
-    useEffect(() => {
-      if (allowRootDock !== undefined) {
-        dockRef.current?.updateOptions({ allowRootDock });
-      }
-    }, [allowRootDock]);
-
-    // Update resourceStrings when they change
-    useEffect(() => {
-      if (resourceStrings !== undefined) {
-        dockRef.current?.updateOptions({ resourceStrings });
-      }
-    }, [resourceStrings]);
+      if (!dockRef.current) return;
+      dockRef.current.updateOptions({
+        ...(theme !== undefined && { theme }),
+        ...(allowRootDock !== undefined && { allowRootDock }),
+        ...(resourceStrings !== undefined && { resourceStrings }),
+      });
+    }, [themeKey, allowRootDock, resourceStrings]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Imperative handle for parent components
     useImperativeHandle(ref, () => ({
@@ -237,12 +228,10 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
       getApi: () => dockRef.current?.api ?? null,
     }));
 
-    // Render portals into core-created DOM slots.
-    // Computed inline (no useMemo) because forceUpdate triggers re-renders
-    // when state changes even though the portal map itself hasn't changed —
-    // the content rendered INTO the portals needs to update.
+    // Render portals into core-created DOM slots
     const portalElements: React.ReactNode[] = [];
     const state = dockRef.current?.getState();
+    const cbs = callbackRefs.current;
 
     portals.forEach((entry, key) => {
       let content: React.ReactNode = null;
@@ -251,20 +240,27 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
         case 'content': {
           const panel = state?.panels[entry.panelId];
           if (panel && entry.api) {
-            content = renderPanelRef.current(entry.panelId, panel, entry.api);
+            // Try widget registry first, then fall back to renderPanel
+            const widgetType = panel.widgetType || '';
+            const Widget = cbs.widgets?.[widgetType];
+            if (Widget) {
+              content = <Widget panelId={entry.panelId} panel={panel} api={entry.api} />;
+            } else if (cbs.renderPanel) {
+              content = cbs.renderPanel(entry.panelId, panel, entry.api);
+            }
           }
           break;
         }
         case 'tab': {
           const panel = state?.panels[entry.panelId];
-          if (panel && renderTabRef.current) {
-            content = renderTabRef.current(entry.panelId, panel, entry.isActive ?? false);
+          if (panel && cbs.renderTab) {
+            content = cbs.renderTab(entry.panelId, panel, entry.isActive ?? false);
           }
           break;
         }
         case 'headerAction': {
-          if (renderHeaderActionsRef.current && entry.slot && entry.tabGroupId) {
-            content = renderHeaderActionsRef.current(entry.slot, entry.tabGroupId);
+          if (cbs.renderHeaderActions && entry.slot && entry.tabGroupId) {
+            content = cbs.renderHeaderActions(entry.slot, entry.tabGroupId);
           }
           break;
         }

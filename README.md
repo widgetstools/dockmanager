@@ -30,18 +30,29 @@ npm install @widgetstools/react-dock-manager @widgetstools/dock-manager-core
 ```
 
 ```tsx
+import { useState } from 'react';
 import { DockManagerCore } from '@widgetstools/react-dock-manager';
 import { themes, createDefaultState } from '@widgetstools/dock-manager-core';
+import type { DockviewApi } from '@widgetstools/dock-manager-core';
+
+// Define widget components (receive panelId, panel, api as props)
+function MyWidget({ panel }) {
+  return <div>{panel.title}</div>;
+}
 
 function App() {
+  const [api, setApi] = useState<DockviewApi | null>(null);
+
   return (
     <DockManagerCore
       initialState={createDefaultState()}
-      renderPanel={(panelId, panel, api) => <div>{panel.title}</div>}
+      widgets={{ myWidget: MyWidget }}
+      onReady={setApi}
       theme={themes.vsCodeLight}
       onStateChange={(state) => console.log('State changed')}
     />
   );
+  // Use api?.addPanel(), api?.undo(), etc. for programmatic control
 }
 ```
 
@@ -54,7 +65,8 @@ npm install @widgetstools/angular-dock-manager @widgetstools/dock-manager-core
 ```typescript
 import { Component } from '@angular/core';
 import { DockManagerCoreComponent } from '@widgetstools/angular-dock-manager';
-import type { DockManagerState, IDisposable } from '@widgetstools/dock-manager-core';
+import type { DockManagerState, DockviewApi } from '@widgetstools/dock-manager-core';
+import { themes } from '@widgetstools/dock-manager-core';
 
 @Component({
   selector: 'app-root',
@@ -64,8 +76,9 @@ import type { DockManagerState, IDisposable } from '@widgetstools/dock-manager-c
     <div style="width:100vw;height:100vh">
       <dock-manager-core
         [initialState]="state"
-        [createContent]="createContent"
+        [widgets]="widgets"
         [theme]="selectedTheme"
+        (ready)="onReady($event)"
         (stateChange)="onStateChange($event)">
       </dock-manager-core>
     </div>
@@ -74,15 +87,16 @@ import type { DockManagerState, IDisposable } from '@widgetstools/dock-manager-c
 export class AppComponent {
   state: DockManagerState = { /* your layout state */ };
   selectedTheme = themes.vsCodeLight;
+  api: DockviewApi | null = null;
 
-  createContent = (panelId: string, container: HTMLElement, api: any): IDisposable => {
-    container.textContent = `Content for ${panelId}`;
-    return { dispose: () => { container.innerHTML = ''; } };
+  // Widget registry — maps panel.widgetType to Angular component classes
+  widgets = {
+    'myWidget': MyWidgetComponent,
   };
 
-  onStateChange(state: DockManagerState) {
-    this.state = state;
-  }
+  onReady(api: DockviewApi) { this.api = api; }
+  onStateChange(state: DockManagerState) { this.state = state; }
+  // Use this.api?.addPanel(), this.api?.undo(), etc. for programmatic control
 }
 ```
 
@@ -175,10 +189,13 @@ The `StateHistoryManager` maintains a stack of state snapshots. Use `DockviewApi
 Save and restore named layout presets programmatically:
 
 ```ts
-const api = dockRef.current.getApi();
-api.savePreset('my-workspace');
-api.loadPreset(api.getPresets()[0]);
-api.resetLayout(defaultState);
+// React: use onReady callback
+const [api, setApi] = useState<DockviewApi | null>(null);
+<DockManagerCore onReady={setApi} ... />
+
+api?.savePreset('my-workspace');
+api?.loadPreset(api.getPresets()[0]);
+api?.resetLayout(defaultState);
 ```
 
 ### Serialization
