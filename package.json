@@ -7,20 +7,13 @@
     "apps/*"
   ],
   "scripts": {
+    "build:core": "npm run build --workspace=@widgetstools/dock-manager-core",
     "build": "npm run build --workspace=@widgetstools/react-dock-manager",
     "build:angular": "npm run build --workspace=@widgetstools/angular-dock-manager",
     "build:angular-demo": "npm run build --workspace=angular-demo",
-    "build:core": "npm run build --workspace=@widgetstools/dock-manager-core",
-    "build:lit": "npm run build --workspace=@widgetstools/lit-dock-manager",
-    "build:lit-all": "npm run build:core && npm run build:lit",
-    "build:react-lit": "npm run build --workspace=@widgetstools/react-dock-manager-lit",
-    "build:angular-lit": "npm run build --workspace=@widgetstools/angular-dock-manager-lit",
+    "build:all": "npm run build:core && npm run build && npm run build:angular",
     "dev": "npm run dev --workspace=demo",
     "dev:angular": "npm run dev --workspace=angular-demo",
-    "dev:lit": "npm run dev --workspace=demo-lit",
-    "dev:react-lit": "npm run dev --workspace=demo-react-lit",
-    "dev:angular-lit": "npm run dev --workspace=demo-angular-lit",
-    "build:demo-angular-lit": "npm run build --workspace=demo-angular-lit",
     "test": "npm run test --workspace=@widgetstools/react-dock-manager",
     "test:coverage": "npm run test:coverage --workspace=@widgetstools/react-dock-manager",
     "clean": "npm run clean --workspaces --if-present"
