@@ -289,7 +289,7 @@ export class AppComponent implements OnDestroy {
     }
 
     const titleSpan = document.createElement('span');
-    titleSpan.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    titleSpan.style.cssText = 'white-space:nowrap';
     titleSpan.textContent = panel.title;
     span.appendChild(titleSpan);
 
