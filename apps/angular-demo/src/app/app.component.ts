@@ -273,11 +273,13 @@ export class AppComponent implements OnDestroy {
 
   /** Custom tab renderer with Font Awesome icons and unsaved badges */
   createTabContent = (panelId: string, container: HTMLElement, isActive: boolean): IDisposable => {
-    const panel = this.currentState.panels[panelId] || (defaultState.panels as any)[panelId];
+    // Use the api's live state (not this.currentState which may be stale during render)
+    const liveState = this.api?.state ?? this.currentState;
+    const panel = liveState.panels[panelId] || (defaultState.panels as any)[panelId];
     if (!panel) return { dispose: () => {} };
 
     const span = document.createElement('span');
-    span.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;user-select:none';
+    span.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;user-select:none;flex-shrink:0';
     span.style.color = isActive ? 'hsl(var(--dock-text))' : 'hsl(var(--dock-text-muted))';
 
     const iconDef = panel.icon ? TAB_ICONS[panel.icon] : null;
