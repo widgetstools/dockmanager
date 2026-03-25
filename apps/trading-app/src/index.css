@@ -1,7 +1,10 @@
-@import "tailwindcss";
 @import "@widgetstools/dock-manager-core/styles.css";
 
-@theme {
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
   --color-terminal-bg: #0d0f1a;
   --color-terminal-surface: #131626;
   --color-terminal-card: #171b2e;
