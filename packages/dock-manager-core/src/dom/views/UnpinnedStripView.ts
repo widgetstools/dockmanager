@@ -112,9 +112,8 @@ export class UnpinnedStripView {
       this.boundStripClick = null;
     }
 
-    if (this.element.parentNode) {
-      this.element.parentNode.removeChild(this.element);
-    }
+    this.stripEl.remove();
+    this.element.remove();
   }
 
   // ── Private: Event delegation ──────────────────────────────────
