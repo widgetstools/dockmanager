@@ -7,11 +7,12 @@
     "apps/*"
   ],
   "scripts": {
+    "setup": "npm install && npm run build:all",
     "build:core": "npm run build --workspace=@widgetstools/dock-manager-core",
     "build": "npm run build --workspace=@widgetstools/react-dock-manager",
     "build:angular": "npm run build --workspace=@widgetstools/angular-dock-manager",
     "build:angular-demo": "npm run build --workspace=angular-demo",
-    "build:all": "npm run build:core && npm run build && npm run build:angular",
+    "build:all": "npm run build:core && npm run build && npm run build:angular && npm run build --workspace=demo && npm run build:angular-demo && npm run build --workspace=trading-app",
     "dev": "npm run dev --workspace=demo",
     "dev:angular": "npm run dev --workspace=angular-demo",
     "test": "npm run test --workspace=@widgetstools/react-dock-manager",
