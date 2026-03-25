@@ -564,12 +564,53 @@ The **core package** contains:
 
 ---
 
+## Development Setup
+
+```bash
+# Clone and set up everything (install + build all packages and demo apps)
+git clone https://github.com/widgetstools/dockmanager.git
+cd dockmanager
+npm run setup
+
+# Start the React demo
+npm run dev
+
+# Start the Angular demo
+npm run dev:angular
+```
+
+### Available Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run setup` | Install dependencies and build all packages + demo apps |
+| `npm run build:all` | Build everything (core → react → angular → demo → angular-demo → trading-app) |
+| `npm run build:core` | Build the core package only |
+| `npm run build` | Build the React wrapper only |
+| `npm run build:angular` | Build the Angular wrapper only |
+| `npm run dev` | Start the React demo dev server |
+| `npm run dev:angular` | Start the Angular demo dev server |
+| `npm run test` | Run unit tests (Vitest) |
+| `npm run clean` | Clean all build outputs |
+
+### Running E2E Tests
+
+```bash
+npx playwright install chromium   # first time only
+npx playwright test
+```
+
+Build scripts are cross-platform (Windows, macOS, Linux).
+
+---
+
 ## Contributing
 
 1. Clone the repository
-2. `npm install` (or `yarn`)
-3. `npm run build` to build all packages
-4. `npm test` to run the test suite
+2. `npm run setup` to install and build everything
+3. `npm run dev` to start the React demo
+4. `npm run test` to run unit tests
+5. `npx playwright test` to run e2e tests
 
 ---
 

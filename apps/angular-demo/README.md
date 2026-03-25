@@ -20,7 +20,8 @@ Open [http://localhost:4201](http://localhost:4201) in your browser.
 - **TypeScript 5.9**
 - **`@widgetstools/angular-dock-manager`** for the dock manager component
 - **`@widgetstools/dock-manager-core`** for themes and types
-- No zone.js overhead - uses Angular's modern signal-based reactivity
+- **`@fortawesome/angular-fontawesome`** (v4.0.0) for toolbar and tab icons
+- No zone.js overhead — uses Angular's modern signal-based reactivity
 
 ---
 

@@ -37,6 +37,13 @@ npm install @widgetstools/dock-manager-core @widgetstools/react-dock-manager
 
 # Angular
 npm install @widgetstools/dock-manager-core @widgetstools/angular-dock-manager
+
+# Development (clone the monorepo)
+git clone https://github.com/widgetstools/dockmanager.git
+cd dockmanager
+npm run setup    # installs deps + builds all packages and demo apps
+npm run dev      # start React demo
+npm run dev:angular  # start Angular demo
 ```
 
 ### Import CSS
@@ -60,8 +67,9 @@ import type { WidgetProps } from '@widgetstools/react-dock-manager';
 import '@widgetstools/dock-manager-core/styles.css';
 import type { DockManagerState, DockviewApi } from '@widgetstools/dock-manager-core';
 
-// Widget components receive { panelId, panel, api } props
-function HelloWidget({ panel }: WidgetProps) {
+// Widget components receive { panelId, panel, api } via WidgetProps
+function HelloWidget({ panelId, panel, api }: WidgetProps) {
+  // api.setTitle(), api.setBadge(), api.onDidDispose(), etc.
   return <div>Content for {panel.title}</div>;
 }
 
