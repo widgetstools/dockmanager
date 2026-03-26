@@ -1,4 +1,3 @@
-import type { ComponentType } from 'react';
 import { BondWatchlist } from './BondWatchlist';
 import { OrderBlotter } from './OrderBlotter';
 import { PositionMonitor } from './PositionMonitor';
@@ -8,7 +7,8 @@ import { NewsFeed } from './NewsFeed';
 import { RiskMetrics } from './RiskMetrics';
 import { TradeHistory } from './TradeHistory';
 
-export const widgetRegistry: Record<string, ComponentType> = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const widgetRegistry: Record<string, React.ComponentType<any>> = {
   bondWatchlist: BondWatchlist,
   orderBlotter: OrderBlotter,
   positionMonitor: PositionMonitor,
