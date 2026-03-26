@@ -97,7 +97,7 @@ export function YieldCurve() {
 
       // Gradient fill under current curve (teal/blue gradient)
       const gradient = ctx.createLinearGradient(0, pt, 0, pt + ch);
-      gradient.addColorStop(0, 'rgba(0, 188, 212, 0.20)');
+      gradient.addColorStop(0, `${tradingTheme.colors.chart}33`);
       gradient.addColorStop(0.5, tradingTheme.isDark ? 'rgba(41, 121, 255, 0.08)' : 'rgba(41, 121, 255, 0.12)');
       gradient.addColorStop(1, 'rgba(41, 121, 255, 0.01)');
       ctx.beginPath();
@@ -123,7 +123,7 @@ export function YieldCurve() {
         ctx.quadraticCurveTo(toX(i - 1), toY(yields[i - 1]), xc, yc);
       }
       ctx.lineTo(toX(yields.length - 1), toY(yields[yields.length - 1]));
-      ctx.strokeStyle = '#00bcd4';
+      ctx.strokeStyle = tradingTheme.colors.chart;
       ctx.lineWidth = 2;
       ctx.stroke();
 
@@ -134,11 +134,11 @@ export function YieldCurve() {
 
         ctx.beginPath();
         ctx.arc(toX(i), toY(yields[i]), radius, 0, Math.PI * 2);
-        ctx.fillStyle = '#00bcd4';
+        ctx.fillStyle = tradingTheme.colors.chart;
         ctx.fill();
 
         if (isHovered) {
-          ctx.strokeStyle = 'rgba(0, 188, 212, 0.3)';
+          ctx.strokeStyle = `${tradingTheme.colors.chart}4D`;
           ctx.lineWidth = 6;
           ctx.stroke();
         }
@@ -160,7 +160,7 @@ export function YieldCurve() {
         const ty = toY(yields[idx]);
 
         // Crosshair
-        ctx.strokeStyle = 'rgba(0, 188, 212, 0.2)';
+        ctx.strokeStyle = `${tradingTheme.colors.chart}33`;
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
@@ -182,7 +182,7 @@ export function YieldCurve() {
         if (tooltipY < pt) tooltipY = ty + 10;
 
         ctx.fillStyle = tradingTheme.isDark ? 'rgba(23, 27, 46, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-        ctx.strokeStyle = 'rgba(0, 188, 212, 0.3)';
+        ctx.strokeStyle = `${tradingTheme.colors.chart}4D`;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.roundRect(tooltipX, tooltipY, tooltipW, tooltipH, 4);
@@ -195,7 +195,7 @@ export function YieldCurve() {
         ctx.textBaseline = 'top';
         ctx.fillText(maturities[idx], tooltipX + 8, tooltipY + 6);
 
-        ctx.fillStyle = '#00bcd4';
+        ctx.fillStyle = tradingTheme.colors.chart;
         ctx.font = 'bold 13px "SF Mono", ui-monospace, monospace';
         ctx.fillText(`${yields[idx].toFixed(2)}%`, tooltipX + 8, tooltipY + 20);
 

@@ -47,12 +47,14 @@ const sectorAlloc = ['Treasury', 'Corporate', 'Municipal', 'Agency'].map(sector 
   return { sector, notional, pct: (notional / totalNotional) * 100 };
 });
 
-const sectorColors: Record<string, string> = {
-  Treasury: '#2979ff',
-  Corporate: '#00c853',
-  Municipal: '#ffc107',
-  Agency: '#00bcd4',
-};
+function getSectorColors(theme: ReturnType<typeof useTradingTheme>): Record<string, string> {
+  return {
+    Treasury: theme.colors.blue,
+    Corporate: theme.colors.green,
+    Municipal: theme.colors.amber,
+    Agency: theme.colors.cyan,
+  };
+}
 
 interface SummaryCardProps {
   label: string;
@@ -96,6 +98,7 @@ function PnlRenderer(params: ICellRendererParams<PositionData>) {
 export function PositionMonitor() {
   const tradingTheme = useTradingTheme();
   const gridTheme = useMemo(() => createGridTheme(tradingTheme.dockTheme), [tradingTheme.dockTheme]);
+  const sectorColors = useMemo(() => getSectorColors(tradingTheme), [tradingTheme]);
 
   const columnDefs = useMemo<ColDef<PositionData>[]>(() => [
     { field: 'assetClass', headerName: 'Class', rowGroup: true, hide: true },

@@ -18,9 +18,17 @@ export interface TradingTheme {
     negative: string;
     warning: string;
     accent: string;
+    accentDim: string;
     cardBg: string;
     inputBg: string;
     hoverBg: string;
+    /** Semantic palette for charts, categories, sectors */
+    chart: string;
+    blue: string;
+    green: string;
+    amber: string;
+    cyan: string;
+    purple: string;
   };
 }
 
@@ -49,6 +57,7 @@ export function buildTradingTheme(dockTheme: DockTheme): TradingTheme {
       negative: isDark ? '#ef5350' : '#c62828',
       warning: isDark ? '#ffc107' : '#f57f17',
       accent: hslToColor(c.primary),
+      accentDim: isDark ? 'rgba(41, 121, 255, 0.12)' : 'rgba(41, 121, 255, 0.08)',
       cardBg: isDark
         ? `hsla(${c.surface}, 0.6)`
         : `hsla(${c.surface}, 0.8)`,
@@ -56,6 +65,13 @@ export function buildTradingTheme(dockTheme: DockTheme): TradingTheme {
         ? `hsla(${c.bg}, 0.8)`
         : hslToColor(c.surfaceAlt || c.bg),
       hoverBg: hslToColor(c.hover),
+      // Semantic chart/category palette — adapted for light/dark
+      chart: isDark ? '#00bcd4' : '#0097a7',
+      blue: isDark ? '#2979ff' : '#1565c0',
+      green: isDark ? '#00c853' : '#2e7d32',
+      amber: isDark ? '#ffc107' : '#f57f17',
+      cyan: isDark ? '#00bcd4' : '#00838f',
+      purple: isDark ? '#ab47bc' : '#7b1fa2',
     },
   };
 }

@@ -54,8 +54,9 @@ function CounterpartyRenderer(params: ICellRendererParams<TradeData>) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   const hue = Math.abs(hash) % 360;
-  const bgColor = `hsl(${hue}, 50%, 25%)`;
-  const textColor = `hsl(${hue}, 60%, 70%)`;
+  const isDark = colors?.bg ? true : false; // fallback: assume dark if context missing
+  const bgColor = isDark ? `hsl(${hue}, 50%, 25%)` : `hsl(${hue}, 40%, 88%)`;
+  const textColor = isDark ? `hsl(${hue}, 60%, 70%)` : `hsl(${hue}, 50%, 35%)`;
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: '100%' }}>

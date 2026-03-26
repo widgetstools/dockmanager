@@ -27,13 +27,6 @@ export const defaultLayout: DockManagerState = {
         id: 'top',
         direction: 'horizontal',
         children: [
-          // Left — Trade Ticket (16%)
-          {
-            type: 'tabgroup',
-            id: 'tg_left',
-            panels: ['tradeTicket'],
-            activePanel: 'tradeTicket',
-          },
           // Center — watchlist on top, yield curve + news on bottom
           {
             type: 'split',
@@ -77,7 +70,7 @@ export const defaultLayout: DockManagerState = {
             activePanel: 'riskMetrics',
           },
         ],
-        sizes: [16, 62, 22],
+        sizes: [75, 25],
       },
       // Bottom section — Order Blotter, Positions, Trade History (26%)
       {
@@ -160,7 +153,9 @@ export const defaultLayout: DockManagerState = {
       closable: true,
     },
   },
-  floatingPanels: [],
+  floatingPanels: [
+    { panelId: 'tradeTicket', x: 50, y: 50, width: 340, height: 500, zIndex: 1 },
+  ],
   popoutPanels: [],
   unpinnedPanels: [],
   nextZIndex: 1,

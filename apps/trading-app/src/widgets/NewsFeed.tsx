@@ -2,13 +2,16 @@ import { useEffect, useRef } from 'react';
 import { newsData } from '../data/news';
 import { useTradingTheme } from '../context/ThemeContext';
 
-const categoryConfig: Record<string, { color: string; label: string }> = {
-  rates: { color: '#2979ff', label: 'RATES' },
-  credit: { color: '#00c853', label: 'CREDIT' },
-  macro: { color: '#ffc107', label: 'MACRO' },
-  muni: { color: '#ab47bc', label: 'MUNI' },
-  agency: { color: '#00bcd4', label: 'AGENCY' },
+const categoryLabels: Record<string, string> = {
+  rates: 'RATES', credit: 'CREDIT', macro: 'MACRO', muni: 'MUNI', agency: 'AGENCY',
 };
+function getCategoryColor(cat: string, theme: ReturnType<typeof useTradingTheme>): string {
+  const map: Record<string, string> = {
+    rates: theme.colors.blue, credit: theme.colors.green, macro: theme.colors.amber,
+    muni: theme.colors.purple, agency: theme.colors.cyan,
+  };
+  return map[cat] || theme.colors.textMuted;
+}
 
 // Assign impact levels based on id for variety
 const impactMap: Record<number, 'high' | 'medium' | 'low'> = {
@@ -78,7 +81,8 @@ export function NewsFeed() {
     <div ref={scrollRef} className="h-full overflow-y-auto" style={{ background: tradingTheme.colors.bg }}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {newsData.map(item => {
-          const cat = categoryConfig[item.category];
+          const catColor = getCategoryColor(item.category, tradingTheme);
+          const catLabel = categoryLabels[item.category] || item.category.toUpperCase();
           const impact = impactMap[item.id] ?? 'low';
           const impactColor = impactColors[impact];
           return (
@@ -110,13 +114,13 @@ export function NewsFeed() {
                     fontSize: 9,
                     fontWeight: 700,
                     letterSpacing: '0.06em',
-                    color: cat.color,
+                    color: catColor,
                     padding: '0 4px',
                     borderRadius: 2,
-                    background: `${cat.color}15`,
+                    background: `${catColor}15`,
                   }}
                 >
-                  {cat.label}
+                  {catLabel}
                 </span>
                 {/* Relative time */}
                 <span className="font-mono-num" style={{ fontSize: 9, color: tradingTheme.colors.textSecondary, marginLeft: 'auto' }}>
