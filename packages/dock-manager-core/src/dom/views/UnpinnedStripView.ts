@@ -251,7 +251,7 @@ export class UnpinnedStripView {
 
     // Flyout content
     const contentContainer = document.createElement('div');
-    contentContainer.style.cssText = 'flex:1;overflow:hidden;';
+    contentContainer.style.cssText = 'flex:1;overflow:hidden;min-height:0;position:relative;';
     this.flyoutEl.appendChild(contentContainer);
 
     this.flyoutContentDisposable = this.callbacks.createContent(panelId, contentContainer);
