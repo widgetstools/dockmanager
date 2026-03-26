@@ -89,35 +89,34 @@ export function RiskMetrics() {
 
   return (
     <div className="h-full overflow-y-auto" style={{ background: tradingTheme.colors.bg, padding: 6 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 5 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 5 }}>
         {metrics.map((m, i) => {
           const colors = levelColors[m.level];
-          // Assign donut pct based on index for variety
           const donutPct = [65, 72, 45, 88, 52, 60][i];
+          const cardBg = tradingTheme.isDark
+            ? 'linear-gradient(135deg, rgba(23, 27, 46, 0.8), rgba(19, 22, 38, 0.9))'
+            : `linear-gradient(135deg, ${tradingTheme.colors.surface}, ${tradingTheme.colors.cardBg})`;
+          const cardBorder = tradingTheme.isDark ? colors.border : `${tradingTheme.colors.border}`;
           return (
             <div
               key={m.label}
-              className="glass-card"
               style={{
+                background: cardBg,
+                border: `1px solid ${cardBorder}`,
+                borderRadius: 6,
                 padding: '8px 10px',
-                borderColor: colors.border,
+                minWidth: 0,
+                overflow: 'hidden',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
                   <MiniDonut pct={donutPct} color={colors.dot} isDark={tradingTheme.isDark} />
-                  <div>
-                    <div style={{ fontSize: 9, color: tradingTheme.colors.textMuted, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 9, color: tradingTheme.colors.textMuted, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {m.label}
                     </div>
-                    <span
-                      style={{
-                        fontSize: 8,
-                        fontWeight: 700,
-                        color: colors.dot,
-                        letterSpacing: '0.05em',
-                      }}
-                    >
+                    <span style={{ fontSize: 8, fontWeight: 700, color: colors.dot, letterSpacing: '0.05em' }}>
                       {colors.label}
                     </span>
                   </div>
@@ -126,21 +125,14 @@ export function RiskMetrics() {
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
                 <div>
-                  <span className="card-value" style={{ fontSize: 16, color: tradingTheme.colors.text }}>
-                    {m.value}
-                  </span>
+                  <span className="card-value" style={{ fontSize: 16, color: tradingTheme.colors.text }}>{m.value}</span>
                   {m.unit && <span style={{ fontSize: 10, color: tradingTheme.colors.textSecondary, marginLeft: 3 }}>{m.unit}</span>}
                 </div>
                 {m.change && (
-                  <span
-                    className="font-mono-num"
-                    style={{
-                      fontSize: 10,
-                      color: m.changeDir === 'up' ? (m.level === 'high' ? tradingTheme.colors.negative : tradingTheme.colors.positive) : m.changeDir === 'down' ? tradingTheme.colors.positive : tradingTheme.colors.textMuted,
-                    }}
-                  >
-                    {m.change}
-                  </span>
+                  <span className="font-mono-num" style={{
+                    fontSize: 10,
+                    color: m.changeDir === 'up' ? (m.level === 'high' ? tradingTheme.colors.negative : tradingTheme.colors.positive) : m.changeDir === 'down' ? tradingTheme.colors.positive : tradingTheme.colors.textMuted,
+                  }}>{m.change}</span>
                 )}
               </div>
             </div>
