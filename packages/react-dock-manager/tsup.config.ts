@@ -1,5 +1,6 @@
 import { defineConfig } from 'tsup';
-import { copyFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
+import { resolve } from 'path';
 
 export default defineConfig({
   entry: ['src/index.ts'],
@@ -11,7 +12,22 @@ export default defineConfig({
   external: ['react', 'react-dom'],
   treeshake: true,
   onSuccess: async () => {
-    copyFileSync('src/styles.css', 'dist/styles.css');
-    console.log('Copied styles.css to dist/');
+    // Read the react-dock-manager styles
+    const reactStyles = readFileSync('src/styles.css', 'utf-8');
+
+    // Resolve core CSS via the sibling package in the monorepo
+    const coreStylesPath = resolve(
+      __dirname, '..', 'dock-manager-core', 'dist', 'styles', 'dock-manager.css'
+    );
+    const coreStyles = readFileSync(coreStylesPath, 'utf-8');
+
+    // Inline: replace the @import with the actual core CSS content
+    const inlined = reactStyles.replace(
+      /@import\s+['"]@widgetstools\/dock-manager-core\/styles\.css['"];?\s*/,
+      coreStyles + '\n'
+    );
+
+    writeFileSync('dist/styles.css', inlined);
+    console.log('Built styles.css with inlined core CSS');
   },
 });

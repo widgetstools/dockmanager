@@ -2,7 +2,7 @@
  * React Dock Manager Styles
  *
  * Imports the shared CSS variables from dock-manager-core, then adds
- * Tailwind CSS utility classes that map to those variables.
+ * utility classes that map to those variables.
  *
  * Usage: import '@widgetstools/react-dock-manager/styles.css'
  */
@@ -10,22 +10,20 @@
 /* Import shared CSS variables and base styles from core */
 @import '@widgetstools/dock-manager-core/styles.css';
 
-/* Tailwind CSS utility classes mapped to the shared CSS variables */
-@layer utilities {
-  .dock-bg { background-color: hsl(var(--dock-bg)); }
-  .dock-surface { background-color: hsl(var(--dock-surface)); }
-  .dock-surface-alt { background-color: hsl(var(--dock-surface-alt)); }
-  .dock-panel-header { background-color: hsl(var(--dock-panel-header)); }
-  .dock-tab-bar { background-color: hsl(var(--dock-tab-bar)); }
-  .dock-tab-active { background-color: hsl(var(--dock-tab-active)); }
-  .dock-tab-text { color: hsl(var(--dock-tab-text)); }
-  .dock-tab-text-active { color: hsl(var(--dock-tab-text-active)); }
-  .dock-text { color: hsl(var(--dock-text)); }
-  .dock-text-secondary { color: hsl(var(--dock-text-secondary)); }
-  .dock-text-muted { color: hsl(var(--dock-text-muted)); }
-  .dock-border { border-color: hsl(var(--dock-border)); }
-  .dock-splitter { background-color: hsl(var(--dock-splitter)); }
-  .dock-hover:hover { background-color: hsl(var(--dock-hover)); }
-  .dock-unpinned-bg { background-color: hsl(var(--dock-unpinned-bg)); }
-  .dock-maximize-overlay { background-color: hsl(var(--dock-surface)); }
-}
+/* Utility classes mapped to the shared CSS variables */
+.dock-bg { background-color: hsl(var(--dock-bg)); }
+.dock-surface { background-color: hsl(var(--dock-surface)); }
+.dock-surface-alt { background-color: hsl(var(--dock-surface-alt)); }
+.dock-panel-header { background-color: hsl(var(--dock-panel-header)); }
+.dock-tab-bar { background-color: hsl(var(--dock-tab-bar)); }
+.dock-tab-active { background-color: hsl(var(--dock-tab-active)); }
+.dock-tab-text { color: hsl(var(--dock-tab-text)); }
+.dock-tab-text-active { color: hsl(var(--dock-tab-text-active)); }
+.dock-text { color: hsl(var(--dock-text)); }
+.dock-text-secondary { color: hsl(var(--dock-text-secondary)); }
+.dock-text-muted { color: hsl(var(--dock-text-muted)); }
+.dock-border { border-color: hsl(var(--dock-border)); }
+.dock-splitter { background-color: hsl(var(--dock-splitter)); }
+.dock-hover:hover { background-color: hsl(var(--dock-hover)); }
+.dock-unpinned-bg { background-color: hsl(var(--dock-unpinned-bg)); }
+.dock-maximize-overlay { background-color: hsl(var(--dock-surface)); }
