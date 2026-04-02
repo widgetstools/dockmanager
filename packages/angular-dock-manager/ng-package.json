@@ -5,5 +5,7 @@
     "entryFile": "src/public-api.ts",
     "cssUrl": "inline"
   },
-  "assets": []
+  "assets": [
+    "src/lib/styles/**/*.css"
+  ]
 }

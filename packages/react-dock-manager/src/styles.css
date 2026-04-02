@@ -8,7 +8,7 @@
  */
 
 /* Import shared CSS variables and base styles from core */
-@import '../../dock-manager-core/src/styles/dock-manager.css';
+@import '@widgetstools/dock-manager-core/styles.css';
 
 /* Tailwind CSS utility classes mapped to the shared CSS variables */
 @layer utilities {
