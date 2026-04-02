@@ -1,5 +1,5 @@
 /* Dock Manager theme styles - import from core (single source of truth) */
-@import '../../../packages/dock-manager-core/src/styles/dock-manager.css';
+@import '@widgetstools/dock-manager-core/styles.css';
 
 *, *::before, *::after {
   box-sizing: border-box;
