@@ -158,6 +158,21 @@ function App() {
     showToast(`Added panel`);
   }, [api, showToast]);
 
+  const handleShowDialog = useCallback(() => {
+    if (!api) return;
+    addPanelCounter++;
+    const id = `dialog_${addPanelCounter}`;
+    api.addPanel({
+      id,
+      title: 'Info Dialog',
+      widgetType: 'placeholder',
+      closable: true,
+      dockable: false,
+    });
+    api.floatPanel({ panelId: id, x: 200, y: 150, width: 360, height: 240 });
+    showToast('Opened dialog');
+  }, [api, showToast]);
+
   const handleSave = useCallback(() => { saveToLocalStorage(latestStateRef.current); showToast('Layout saved'); }, [showToast]);
   const handleLoad = useCallback(() => {
     const saved = loadFromLocalStorage();
@@ -233,6 +248,7 @@ function App() {
           <div className="flex items-center gap-0.5">
             <Sep />
             <Btn icon={<Plus className="w-3.5 h-3.5" />} title="Add panel" onClick={handleAddPanel} />
+            <Btn icon={<Info className="w-3.5 h-3.5" />} title="Show dialog (non-dockable)" onClick={handleShowDialog} />
             <Btn icon={<ChevronLeft className="w-3.5 h-3.5" />} title="Navigate prev" onClick={() => api?.navigatePrevious()} />
             <Btn icon={<ChevronRight className="w-3.5 h-3.5" />} title="Navigate next" onClick={() => api?.navigateNext()} />
           </div>
