@@ -240,6 +240,27 @@ export class TabGroupView {
     }
   }
 
+  /** Returns true if this tab group contains the given panel. */
+  containsPanel(panelId: string): boolean {
+    return this.node.panels.includes(panelId);
+  }
+
+  /**
+   * Invalidate a content slot without disposing it, so the next buildContent()
+   * call will re-request the content via createContent / getOrCreateContent.
+   * Used after maximize-restore to reparent cached content back into the tab group.
+   */
+  invalidateContentSlot(panelId: string): void {
+    const slot = this.contentSlots.get(panelId);
+    if (slot) {
+      slot.container.remove();
+      this.contentSlots.delete(panelId);
+    }
+    // Reset previousActiveId so buildContent doesn't skip the active panel
+    this.previousActiveId = null;
+    this.buildContent();
+  }
+
   dispose(): void {
     this.hideTabContextMenu();
     this.tabOverflowObserver.dispose();
@@ -304,7 +325,6 @@ export class TabGroupView {
     }
     this.tabContainerEl = null;
     this.titleEl = null;
-    this.overflowBtnContainer = null;
     this.prefixSlotEl = null;
     this.leftSlotEl = null;
     this.rightSlotEl = null;
@@ -702,7 +722,7 @@ export class TabGroupView {
     // Close button
     if (activePanel?.closable !== false) {
       const closeBtn = this.createActionButton('close', this.node.activePanel, this.resourceStrings.close, iconClose(14));
-      closeBtn.style.color = 'hsl(var(--dock-text-secondary))';
+      closeBtn.style.color = 'hsl(var(--dock-text))';
       this.actionButtonsEl.appendChild(closeBtn);
     }
   }

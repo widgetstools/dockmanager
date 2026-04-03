@@ -423,7 +423,18 @@ Theme color values use HSL components (`hue saturation% lightness%`) without the
 
 ---
 
-## CSS Custom Properties
+## CSS
+
+Styles are **automatically injected** into `<head>` when the dock manager component mounts — no CSS import needed. Just use the component and it works.
+
+If you prefer manual control (e.g., for SSR or to avoid FOUC), you can still import the CSS explicitly and the auto-injector will detect it and skip:
+
+```tsx
+// Optional — only if you want explicit control
+import '@widgetstools/dock-manager-core/styles.css';
+```
+
+### Custom Properties
 
 All visual properties are controlled via CSS custom properties scoped to the dock container. Override these for fine-grained control.
 

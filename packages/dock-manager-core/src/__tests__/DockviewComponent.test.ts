@@ -1036,5 +1036,75 @@ describe('DockviewComponent', () => {
       const state = component.getState();
       expect(state.maximizedPanelId).toBeUndefined();
     });
+
+    it('RESTORE_PANEL preserves content visibility after maximize', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createSinglePanelState(),
+        createContent: factory,
+      });
+
+      // Verify content is visible initially inside the tab group
+      const root = container.querySelector('.dock-manager-root')!;
+      const initialContent = root.querySelector('.test-content[data-content-panel="panel1"]');
+      expect(initialContent).not.toBeNull();
+      expect(initialContent?.textContent).toBe('Content for panel1');
+
+      // Maximize the panel — overlay should exist
+      component.dispatch({ type: 'MAXIMIZE_PANEL', payload: { panelId: 'panel1' } });
+      expect(component.getState().maximizedPanelId).toBe('panel1');
+
+      // Restore the panel — overlay should be gone
+      component.dispatch({ type: 'RESTORE_PANEL', payload: { panelId: 'panel1' } });
+      expect(component.getState().maximizedPanelId).toBeUndefined();
+
+      // Key assertion: content element is still present and visible
+      // inside the dock-manager-root (back in the tab group content area)
+      const restoredContent = root.querySelector('.test-content[data-content-panel="panel1"]');
+      expect(restoredContent).not.toBeNull();
+      expect(restoredContent?.textContent).toBe('Content for panel1');
+
+      // Verify it lives inside a tab group, not a stale overlay
+      const tabGroup = root.querySelector('.dock-tab-group');
+      expect(tabGroup).not.toBeNull();
+      const contentInTabGroup = tabGroup!.querySelector('.test-content[data-content-panel="panel1"]');
+      expect(contentInTabGroup).not.toBeNull();
+    });
+
+    it('DOCK_FLOATING preserves content visibility after float from multi-tab group', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createSimpleState(), // panel1 + panel2 in one tab group
+        createContent: factory,
+      });
+
+      const root = container.querySelector('.dock-manager-root')!;
+
+      // Verify panel1 content exists initially
+      const initialContent = root.querySelector('.test-content[data-content-panel="panel1"]');
+      expect(initialContent).not.toBeNull();
+
+      // Float panel1 out of the multi-tab group
+      component.dispatch({
+        type: 'FLOAT_PANEL',
+        payload: { panelId: 'panel1', x: 100, y: 100, width: 400, height: 300 },
+      });
+      expect(component.getState().floatingPanels.length).toBe(1);
+
+      // Dock panel1 back
+      const targetId = component.getState().layout.type === 'tabgroup'
+        ? component.getState().layout.id
+        : (component.getState().layout as any).children[0].id;
+      component.dispatch({
+        type: 'DOCK_FLOATING',
+        payload: { panelId: 'panel1', targetTabGroupId: targetId, position: 'center' },
+      });
+      expect(component.getState().floatingPanels.length).toBe(0);
+
+      // Key assertion: content is back in a tab group, not lost
+      const restoredContent = root.querySelector('.test-content[data-content-panel="panel1"]');
+      expect(restoredContent).not.toBeNull();
+      expect(restoredContent?.textContent).toBe('Content for panel1');
+    });
   });
 });

@@ -224,7 +224,7 @@ export class UnpinnedStripView {
     const pinBtn = document.createElement('button');
     // Note: no data-action attribute — the direct click handler below handles pinning.
     // Adding data-action would cause double dispatch via DockviewComponent's onActionClick.
-    pinBtn.style.cssText = 'padding:4px;color:hsl(var(--dock-text-secondary));cursor:pointer;background:none;border:none;display:flex;align-items:center;';
+    pinBtn.style.cssText = 'padding:4px;color:hsl(var(--dock-text));cursor:pointer;background:none;border:none;display:flex;align-items:center;';
     pinBtn.title = 'Pin panel (dock back)';
     pinBtn.innerHTML = iconPin();
     pinBtn.addEventListener('click', () => {
@@ -237,7 +237,7 @@ export class UnpinnedStripView {
     const closeBtn = document.createElement('button');
     closeBtn.setAttribute('data-action', 'close');
     closeBtn.setAttribute('data-panel-id', panelId);
-    closeBtn.style.cssText = 'padding:4px;color:hsl(var(--dock-text-secondary));cursor:pointer;background:none;border:none;display:flex;align-items:center;';
+    closeBtn.style.cssText = 'padding:4px;color:hsl(var(--dock-text));cursor:pointer;background:none;border:none;display:flex;align-items:center;';
     closeBtn.title = 'Close panel';
     closeBtn.innerHTML = iconClose(14);
     closeBtn.addEventListener('click', () => {

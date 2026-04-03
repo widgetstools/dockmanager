@@ -78,8 +78,8 @@ const UNSAVED_PANELS = new Set(['doc1', 'doc2']);
 let addPanelCounter = 0;
 
 function App() {
-  const [selectedThemeKey, setSelectedThemeKey] = useState('vsCodeLight');
-  const selectedTheme = THEME_OPTIONS.find(t => t.key === selectedThemeKey)?.theme || themes.vsCodeLight;
+  const [selectedThemeKey, setSelectedThemeKey] = useState('slateDark');
+  const selectedTheme = THEME_OPTIONS.find(t => t.key === selectedThemeKey)?.theme || themes.slateDark;
 
   // API via onReady — no ref needed for most operations
   const [api, setApi] = useState<DockviewApi | null>(null);

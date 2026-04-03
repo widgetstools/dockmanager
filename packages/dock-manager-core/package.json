@@ -25,7 +25,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "npx tsup src/index.ts --format esm,cjs --dts --clean && node -e \"const fs=require('fs');fs.cpSync('src/styles','dist/styles',{recursive:true})\"",
+    "build": "npx tsup src/index.ts --format esm,cjs --dts --clean && node -e \"const fs=require('fs');fs.cpSync('src/styles','dist/styles',{recursive:true})\" && node scripts/inline-css.cjs",
     "dev": "npx tsup src/index.ts --format esm,cjs --dts --watch"
   },
   "devDependencies": {

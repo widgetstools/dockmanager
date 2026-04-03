@@ -46,16 +46,13 @@ npm run dev      # start React demo
 npm run dev:angular  # start Angular demo
 ```
 
-### Import CSS
+### CSS (Auto-Injected)
 
-The dock manager requires its CSS for layout and theming. Import it once in your app entry point:
+Styles are **automatically injected** when the dock manager component mounts — no CSS import required. If you prefer to import the CSS yourself (e.g., for SSR or to avoid FOUC), you can still do so and the auto-injector will detect it and skip injection:
 
 ```tsx
-// React (in App.tsx or index.tsx)
+// Optional manual import — only needed if you want explicit control
 import '@widgetstools/dock-manager-core/styles.css';
-
-// Angular (in styles.css or angular.json)
-@import '@widgetstools/dock-manager-core/styles.css';
 ```
 
 ### Minimal React Example
@@ -64,7 +61,6 @@ import '@widgetstools/dock-manager-core/styles.css';
 import { useState } from 'react';
 import { DockManagerCore } from '@widgetstools/react-dock-manager';
 import type { WidgetProps } from '@widgetstools/react-dock-manager';
-import '@widgetstools/dock-manager-core/styles.css';
 import type { DockManagerState, DockviewApi } from '@widgetstools/dock-manager-core';
 
 // Widget components receive { panelId, panel, api } via WidgetProps
@@ -113,7 +109,7 @@ function App() {
 import { Component } from '@angular/core';
 import { DockManagerCoreComponent } from '@widgetstools/angular-dock-manager';
 import type { DockManagerState, DockviewApi } from '@widgetstools/dock-manager-core';
-// Also add to styles.css or angular.json: @import '@widgetstools/dock-manager-core/styles.css';
+// CSS is auto-injected — no manual import needed
 
 @Component({
   selector: 'app-root',

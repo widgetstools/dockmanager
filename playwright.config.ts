@@ -11,7 +11,7 @@ export default defineConfig({
   reporter: 'html',
 
   use: {
-    baseURL: 'http://localhost:5174',
+    baseURL: 'http://localhost:5179',
     viewport: { width: 1280, height: 720 },
     trace: 'on-first-retry',
   },
@@ -24,8 +24,8 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npm run dev --prefix apps/demo -- --port 5174',
-    port: 5174,
+    command: 'npm run dev --prefix apps/demo -- --port 5179',
+    port: 5179,
     reuseExistingServer: !process.env.CI,
   },
 });

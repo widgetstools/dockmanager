@@ -26,6 +26,7 @@ import { UnpinnedStripView } from './views/UnpinnedStripView';
 import { MaximizeOverlayView } from './views/MaximizeOverlayView';
 import type { DockTheme } from '../theme/DockTheme';
 import { applyTheme, vsCodeLight, vsCodeDark } from '../theme/DockTheme';
+import { ensureStyles, releaseStyles } from './styleInjector';
 
 // ─── Options ─────────────────────────────────────────────────────────
 
@@ -159,6 +160,7 @@ export class DockviewComponent {
    * @param options - Configuration including initial state and renderer callbacks.
    */
   constructor(element: HTMLElement, options: DockviewComponentOptions) {
+    ensureStyles();
     this.container = element;
     this.options = options;
     this.state = options.initialState;
@@ -608,6 +610,8 @@ export class DockviewComponent {
     if (this.rootEl.parentNode) {
       this.rootEl.parentNode.removeChild(this.rootEl);
     }
+
+    releaseStyles();
   }
 
   // ── Event delegation: action buttons ────────────────────────────
@@ -896,11 +900,29 @@ export class DockviewComponent {
   private renderFloatingPanels(): void {
     const currentIds = new Set(this.state.floatingPanels.map((fp) => fp.panelId));
 
-    // Remove stale floating views
+    // Remove stale floating views (panel was docked back or closed)
     for (const [id, view] of this.floatingViews) {
       if (!currentIds.has(id)) {
+        // If the panel still exists in state (docked back, not closed),
+        // bump generation so the floating view's dispose doesn't remove
+        // the cached content, then invalidate the TabGroupView's stale slot.
+        if (this.state.panels[id]) {
+          const cached = this.contentCache.get(id);
+          if (cached) cached.generation++;
+        }
+
         view.dispose();
         this.floatingViews.delete(id);
+
+        // Reparent content back into the TabGroupView
+        if (this.state.panels[id]) {
+          for (const [, tgView] of this.tabGroupViews) {
+            if (tgView.containsPanel(id)) {
+              tgView.invalidateContentSlot(id);
+              break;
+            }
+          }
+        }
       }
     }
 
@@ -1040,9 +1062,30 @@ export class DockviewComponent {
         }
       }
     } else if (this.maximizeOverlay) {
+      const restoredPanelId = this.maximizeOverlayPanelId;
+
+      // Bump the content cache generation so the overlay's dispose does NOT
+      // remove the cached content container from the DOM — we need it alive
+      // so the TabGroupView can reparent it back.
+      if (restoredPanelId) {
+        const cached = this.contentCache.get(restoredPanelId);
+        if (cached) cached.generation++;
+      }
+
       this.maximizeOverlay.dispose();
       this.maximizeOverlay = null;
       this.maximizeOverlayPanelId = undefined;
+
+      // Invalidate the TabGroupView's stale content slot so it re-requests
+      // the content via getOrCreateContent, which reparents the cached DOM.
+      if (restoredPanelId) {
+        for (const [, view] of this.tabGroupViews) {
+          if (view.containsPanel(restoredPanelId)) {
+            view.invalidateContentSlot(restoredPanelId);
+            break;
+          }
+        }
+      }
     }
   }
 

@@ -247,8 +247,8 @@ export class AppComponent implements OnDestroy {
   private toastTimer: any = null;
   private addPanelCounter = 0;
 
-  selectedThemeKey = 'vsCodeLight';
-  selectedTheme: DockTheme = themes.vsCodeLight;
+  selectedThemeKey = 'slateDark';
+  selectedTheme: DockTheme = themes.slateDark;
   lightThemes = THEME_OPTIONS.filter(t => t.theme.mode === 'light');
   darkThemes = THEME_OPTIONS.filter(t => t.theme.mode === 'dark');
 
