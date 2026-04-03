@@ -80,6 +80,8 @@ export interface PanelConfig {
   tabComponent?: string;
   /** Whether this floating panel can be resized. Defaults to true. */
   floatingResizable?: boolean;
+  /** Whether this floating panel can be docked back into the layout. Defaults to `true`. */
+  dockable?: boolean;
 
   // ── Widget dashboard fields ──────────────────────────────────────
 
