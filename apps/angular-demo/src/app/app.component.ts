@@ -116,6 +116,7 @@ const UNSAVED_PANELS = new Set(['doc1', 'doc2']);
           <div class="demo-btn-group">
             <div class="sep"></div>
             <button class="tb" title="Add panel" (click)="addNewPanel()"><fa-icon [icon]="icons.plus" size="sm" /></button>
+            <button class="tb" title="Show dialog (non-dockable)" (click)="showDialog()"><fa-icon [icon]="icons.circleInfo" size="sm" /></button>
             <button class="tb" title="Navigate prev" (click)="api?.navigatePrevious()"><fa-icon [icon]="icons.chevronLeft" size="sm" /></button>
             <button class="tb" title="Navigate next" (click)="api?.navigateNext()"><fa-icon [icon]="icons.chevronRight" size="sm" /></button>
           </div>
@@ -235,6 +236,7 @@ export class AppComponent implements OnDestroy {
     plus: faPlus, chevronLeft: faChevronLeft, chevronRight: faChevronRight,
     anchor: faAnchor, ban: faBan, bug: faBug, tableColumns: faTableColumns,
     keyboard: faKeyboard, sun: faSun, moon: faMoon, xmark: faXmark,
+    circleInfo: faCircleInfo,
   };
 
   initialState: DockManagerState = structuredClone(defaultState);
@@ -368,6 +370,21 @@ export class AppComponent implements OnDestroy {
       icon: this.addPanelCounter % 2 === 0 ? 'clock' : 'file',
     });
     this.showToast('Added panel');
+  }
+
+  showDialog(): void {
+    if (!this.api) return;
+    this.addPanelCounter++;
+    const id = `dialog_${this.addPanelCounter}`;
+    this.api.addPanel({
+      id,
+      title: 'Info Dialog',
+      widgetType: 'placeholder',
+      closable: true,
+      dockable: false,
+    });
+    this.api.floatPanel({ panelId: id, x: 200, y: 150, width: 360, height: 240 });
+    this.showToast('Opened dialog');
   }
 
   toggleDisabled(): void {
