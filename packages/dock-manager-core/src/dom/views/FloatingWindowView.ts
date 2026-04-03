@@ -128,14 +128,16 @@ export class FloatingWindowView {
     btnContainer.style.cssText = 'display:flex;align-items:center;gap:0;';
 
     // Dock back button — hover handled by CSS: .dock-floating-titlebar-btn:hover
-    const dockBackBtn = document.createElement('button');
-    dockBackBtn.className = 'dock-floating-titlebar-btn';
-    dockBackBtn.setAttribute('data-action', 'dock-back');
-    dockBackBtn.setAttribute('data-panel-id', floating.panelId);
-    dockBackBtn.title = this.resourceStrings.dock;
-    dockBackBtn.setAttribute('aria-label', this.resourceStrings.dock);
-    dockBackBtn.innerHTML = iconDockBack();
-    btnContainer.appendChild(dockBackBtn);
+    if (panel.dockable !== false) {
+      const dockBackBtn = document.createElement('button');
+      dockBackBtn.className = 'dock-floating-titlebar-btn';
+      dockBackBtn.setAttribute('data-action', 'dock-back');
+      dockBackBtn.setAttribute('data-panel-id', floating.panelId);
+      dockBackBtn.title = this.resourceStrings.dock;
+      dockBackBtn.setAttribute('aria-label', this.resourceStrings.dock);
+      dockBackBtn.innerHTML = iconDockBack();
+      btnContainer.appendChild(dockBackBtn);
+    }
 
     // Close button — hover handled by CSS: .dock-floating-titlebar-btn:hover
     const closeBtn = document.createElement('button');
@@ -158,11 +160,13 @@ export class FloatingWindowView {
     });
 
     // Double-click titlebar → dock back
-    this.titleBarEl.addEventListener('dblclick', (e) => {
-      if ((e.target as HTMLElement).closest('button')) return;
-      e.preventDefault();
-      this.callbacks.onDockBack(this.floating.panelId);
-    });
+    if (panel.dockable !== false) {
+      this.titleBarEl.addEventListener('dblclick', (e) => {
+        if ((e.target as HTMLElement).closest('button')) return;
+        e.preventDefault();
+        this.callbacks.onDockBack(this.floating.panelId);
+      });
+    }
 
     // Touch support for title bar drag
     this.titleBarEl.addEventListener('touchstart', (e) => {
@@ -292,7 +296,7 @@ export class FloatingWindowView {
       latestY = newY;
 
       // Show dock indicators after 5px of movement (use DockDragManager for this)
-      if (!indicatorsShown && dragManager) {
+      if (!indicatorsShown && dragManager && this.panel.dockable !== false) {
         const dx = ev.clientX - this.dragStart.x;
         const dy = ev.clientY - this.dragStart.y;
         if (Math.sqrt(dx * dx + dy * dy) >= 5) {
