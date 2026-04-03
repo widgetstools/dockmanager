@@ -38,6 +38,8 @@ export interface AddPanelOptions {
   closable?: boolean;
   /** Whether the panel can be floated by the user. Defaults to `true`. */
   floatable?: boolean;
+  /** Whether this floating panel can be docked back into the layout. Defaults to `true`. */
+  dockable?: boolean;
   /** Component key for a custom tab renderer. */
   tabComponent?: string;
   /** Widget type identifier for the widget registry. */
@@ -257,12 +259,12 @@ export class DockviewApi {
       return;
     }
 
-    const { title, icon, closable, floatable, tabComponent, widgetType, widgetProps, targetGroupId, position } = options;
+    const { title, icon, closable, floatable, dockable, tabComponent, widgetType, widgetProps, targetGroupId, position } = options;
 
     // Add the panel config first
     this.dispatch({
       type: 'ADD_PANEL',
-      payload: { panelId, title, icon, closable, floatable, tabComponent, widgetType, widgetProps },
+      payload: { panelId, title, icon, closable, floatable, dockable, tabComponent, widgetType, widgetProps },
     });
 
     // If a specific target/position was requested and it's not the default
@@ -362,6 +364,8 @@ export class DockviewApi {
    * @param position - Where to place it relative to the target. Defaults to `'center'`.
    */
   dockFloatingPanel(panelId: string, targetGroupId?: string, position: DockPosition = 'center'): void {
+    const panel = this.getState().panels[panelId];
+    if (panel?.dockable === false) return;
     this.dispatch({
       type: 'DOCK_FLOATING',
       payload: {

@@ -1675,3 +1675,50 @@ describe('Edge cases', () => {
     expect(findTabGroupById(result.layout, 'tg_left')).toBeNull();
   });
 });
+
+describe('dockable property', () => {
+  it('ADD_PANEL preserves dockable: false in panel config', () => {
+    const state = createDefaultState();
+    const result = dockReducer(state, {
+      type: 'ADD_PANEL',
+      payload: { panelId: 'dialog1', title: 'Dialog', dockable: false },
+    });
+    expect(result.panels['dialog1'].dockable).toBe(false);
+  });
+
+  it('DOCK_FLOATING is a no-op when panel has dockable: false', () => {
+    let state = createDefaultState();
+    state = dockReducer(state, {
+      type: 'ADD_PANEL',
+      payload: { panelId: 'dialog1', title: 'Dialog', dockable: false },
+    });
+    state = dockReducer(state, {
+      type: 'FLOAT_PANEL',
+      payload: { panelId: 'dialog1', x: 100, y: 100, width: 400, height: 300 },
+    });
+    const before = state;
+    const after = dockReducer(state, {
+      type: 'DOCK_FLOATING',
+      payload: { panelId: 'dialog1', targetTabGroupId: 'default', position: 'center' },
+    });
+    expect(after.floatingPanels).toEqual(before.floatingPanels);
+  });
+
+  it('DOCK_FLOATING works normally when dockable is true (default)', () => {
+    let state = createDefaultState();
+    state = dockReducer(state, {
+      type: 'ADD_PANEL',
+      payload: { panelId: 'normal1', title: 'Normal' },
+    });
+    state = dockReducer(state, {
+      type: 'FLOAT_PANEL',
+      payload: { panelId: 'normal1', x: 100, y: 100, width: 400, height: 300 },
+    });
+    expect(state.floatingPanels.some(fp => fp.panelId === 'normal1')).toBe(true);
+    const after = dockReducer(state, {
+      type: 'DOCK_FLOATING',
+      payload: { panelId: 'normal1', targetTabGroupId: 'default', position: 'center' },
+    });
+    expect(after.floatingPanels.some(fp => fp.panelId === 'normal1')).toBe(false);
+  });
+});

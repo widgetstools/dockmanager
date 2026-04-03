@@ -36,7 +36,7 @@ import {
 // ─── Action types ────────────────────────────────────────────────────
 
 export type DockAction =
-  | { type: 'ADD_PANEL'; payload: { panelId: string; title: string; icon?: string; closable?: boolean; floatable?: boolean; tabComponent?: string; widgetType?: string; widgetProps?: Record<string, unknown> } }
+  | { type: 'ADD_PANEL'; payload: { panelId: string; title: string; icon?: string; closable?: boolean; floatable?: boolean; dockable?: boolean; tabComponent?: string; widgetType?: string; widgetProps?: Record<string, unknown> } }
   | { type: 'MOVE_PANEL'; payload: { panelId: string; targetTabGroupId: string; position: DockPosition } }
   | { type: 'CLOSE_PANEL'; payload: { panelId: string } }
   | { type: 'FLOAT_PANEL'; payload: { panelId: string; x: number; y: number; width: number; height: number } }
@@ -108,6 +108,7 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
         icon: action.payload.icon,
         closable: action.payload.closable !== false,
         floatable: action.payload.floatable !== false,
+        dockable: action.payload.dockable,
         tabComponent: action.payload.tabComponent,
         widgetType: action.payload.widgetType,
         widgetProps: action.payload.widgetProps,
@@ -203,6 +204,7 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
 
     case 'DOCK_FLOATING': {
       const { panelId, targetTabGroupId, position } = action.payload;
+      if (state.panels[panelId]?.dockable === false) return state;
       const floatingEntry = state.floatingPanels.find(p => p.panelId === panelId);
       const floatingPanels = state.floatingPanels.filter(p => p.panelId !== panelId);
 
