@@ -671,6 +671,8 @@ export class DockviewComponent {
         break;
       }
       case 'dock-back': {
+        const panelConfig = this.state.panels[panelId];
+        if (panelConfig?.dockable === false) break;
         // Pass 'default' as targetTabGroupId so the reducer uses the saved
         // sourceTabGroupId from when the panel was originally floated
         this.dispatch({
