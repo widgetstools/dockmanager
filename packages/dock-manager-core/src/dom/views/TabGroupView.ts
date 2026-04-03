@@ -163,6 +163,7 @@ export class TabGroupView {
   ): void {
     const prevNode = this.node;
     const prevActivePaneId = this.activePaneId;
+    const prevMaximizedPanelId = this.maximizedPanelId;
 
     this.node = node;
     this.panels = panels;
@@ -182,6 +183,7 @@ export class TabGroupView {
       prevNode.panels.some((p, i) => p !== node.panels[i]);
     const activePanelChanged = prevNode.activePanel !== node.activePanel;
     const activePaneChanged = prevActivePaneId !== activePaneId;
+    const maximizedStateChanged = prevMaximizedPanelId !== maximizedPanelId;
 
     // Detect panel config changes (title, icon, badge changed via PanelApi)
     const prevPanels = this.previousPanels;
@@ -217,7 +219,7 @@ export class TabGroupView {
         this.tabOverflowObserver.observe(this.tabContainerEl);
         requestAnimationFrame(() => this.updateScrollArrows());
       }
-    } else if (activePanelChanged || activePaneChanged) {
+    } else if (activePanelChanged || activePaneChanged || maximizedStateChanged) {
       // Just update tab styling
       this.updateTabStyles();
       this.updateActionButtons();
