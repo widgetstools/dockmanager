@@ -702,7 +702,7 @@ export class TabGroupView {
     // Close button
     if (activePanel?.closable !== false) {
       const closeBtn = this.createActionButton('close', this.node.activePanel, this.resourceStrings.close, iconClose(14));
-      closeBtn.style.color = 'hsl(var(--dock-text-muted))';
+      closeBtn.style.color = 'hsl(var(--dock-text-secondary))';
       this.actionButtonsEl.appendChild(closeBtn);
     }
   }
