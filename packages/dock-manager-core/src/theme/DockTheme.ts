@@ -175,7 +175,7 @@ export function createTheme(
       bg:             hsl(h, s, bl),
       surface:        hsl(h, s, bl + 3),
       surfaceAlt:     hsl(h, Math.max(s - 2, 0), bl + 5),
-      panelHeader:    hsl(h, Math.max(s - 2, 0), bl + 8),
+      panelHeader:    hsl(h, Math.max(s - 2, 0), bl + 5),
       tabBar:         hsl(h, s, bl + 1),
       tabActive:      hsl(h, s, bl + 3),
       tabText:        hsl(h - 5, Math.max(ts, 8), 65),

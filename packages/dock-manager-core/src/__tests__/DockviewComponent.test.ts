@@ -203,16 +203,17 @@ describe('DockviewComponent', () => {
       expect(labelTexts).toContain('Panel 2');
     });
 
-    it('renders a single title (not tabs) when only one panel', () => {
+    it('renders a tab even when only one panel', () => {
       const { factory } = createContentFactory();
       component = new DockviewComponent(container, {
         initialState: createSinglePanelState(),
         createContent: factory,
       });
 
-      const title = container.querySelector('.dock-panel-title');
-      expect(title).not.toBeNull();
-      expect(title?.textContent).toBe('Panel 1');
+      const tabs = container.querySelectorAll('.dock-tab');
+      expect(tabs.length).toBe(1);
+      const label = tabs[0].querySelector('.dock-tab-label');
+      expect(label?.textContent).toBe('Panel 1');
     });
 
     it('renders content slot for the active panel', () => {
@@ -385,11 +386,10 @@ describe('DockviewComponent', () => {
       component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'panel2' } });
 
       const tabs = container.querySelectorAll('.dock-tab');
-      expect(tabs.length).toBe(0); // Only 1 panel left, shown as title not tabs
+      expect(tabs.length).toBe(1); // Single panel still rendered as a tab
 
-      const title = container.querySelector('.dock-panel-title');
-      expect(title).not.toBeNull();
-      expect(title?.textContent).toBe('Panel 1');
+      const label = tabs[0].querySelector('.dock-tab-label');
+      expect(label?.textContent).toBe('Panel 1');
     });
 
     it('CLOSE_PANEL removes panel from state', () => {

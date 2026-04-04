@@ -154,8 +154,9 @@ dock-manager *,
   user-select: none;
   font-size: 12px;
   white-space: nowrap;
-  color: hsl(var(--dock-tab-text));
-  border-bottom: 2px solid transparent;
+  color: hsl(var(--dock-text));
+  opacity: 0.7;
+  border-top: 2px solid transparent;
   margin-bottom: -1px;
   transition: color 0.15s, background-color 0.15s;
   position: relative;
@@ -174,7 +175,7 @@ dock-manager *,
 }
 
 .dock-tab:hover {
-  color: hsl(var(--dock-tab-text-active));
+  opacity: 1;
   background: hsl(var(--dock-hover));
 }
 
@@ -184,12 +185,11 @@ dock-manager *,
   opacity: 0;
 }
 
-/* Selected tab in inactive group: bolder text + raised appearance */
+/* Selected tab in inactive group: raised appearance, same opacity as other tabs */
 .dock-tab.dock-tab-selected {
   font-weight: 500;
-  color: hsl(var(--dock-text));
   background: hsl(var(--dock-surface));
-  border-bottom-color: hsl(var(--dock-surface));
+  border-top-color: hsl(var(--dock-surface));
   box-shadow: -1px 0 0 hsl(var(--dock-border)), 1px 0 0 hsl(var(--dock-border)), 0 -1px 0 hsl(var(--dock-border));
   z-index: 1;
 }
@@ -200,11 +200,11 @@ dock-manager *,
   opacity: 0;
 }
 
-/* Selected tab in ACTIVE group: blue text + blue underline + raised appearance */
+/* Selected tab in ACTIVE group: full opacity + top border highlight */
 .dock-pane-active .dock-tab.dock-tab-selected {
-  color: hsl(var(--dock-tab-text-active));
+  opacity: 1;
   background: hsl(var(--dock-surface));
-  border-bottom-color: hsl(var(--dock-primary));
+  border-top-color: hsl(var(--dock-primary));
 }
 
 .dock-tab-label {
@@ -237,7 +237,7 @@ dock-manager *,
   background: hsl(var(--dock-hover));
 }
 
-/* Inactive pane title — uses secondary text for clear visibility */
+/* Inactive pane title — same color, reduced opacity */
 .dock-panel-title {
   font-size: 12px;
   font-weight: 600;
@@ -245,12 +245,13 @@ dock-manager *,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: hsl(var(--dock-text-secondary));
+  color: hsl(var(--dock-text));
+  opacity: 0.7;
 }
 
-/* Active pane title turns blue */
+/* Active pane title — full opacity */
 .dock-pane-active > .dock-panel-header > .dock-panel-title {
-  color: hsl(var(--dock-primary));
+  opacity: 1;
 }
 
 .dock-content-slot {
@@ -341,16 +342,17 @@ dock-manager *,
   min-height: 32px;
 }
 
-/* Inactive floating title — clearly visible */
+/* Inactive floating title — same color, reduced opacity */
 .dock-floating-title {
   font-size: 12px;
   font-weight: 600;
-  color: hsl(var(--dock-text-secondary));
+  color: hsl(var(--dock-text));
+  opacity: 0.7;
 }
 
-/* Active floating title turns blue */
+/* Active floating title — full opacity */
 .dock-pane-active .dock-floating-title {
-  color: hsl(var(--dock-primary));
+  opacity: 1;
 }
 
 /* Floating window titlebar buttons */
@@ -382,7 +384,7 @@ dock-manager *,
  * Active pane indicator line
  *
  * Only ONE pane is active across the entire dock manager at any time.
- * The active pane's header shows a blue bottom-border line (2px).
+ * The active pane's header shows a blue top-border line (2px).
  * This applies to docked tab groups AND floating pane title bars.
  * ══════════════════════════════════════════════════════════════════════ */
 
@@ -392,32 +394,28 @@ dock-manager *,
   position: relative;
 }
 
-/* Active docked pane — blue bottom border on header (single-panel only, not when tabs exist) */
-.dock-tab-group.dock-pane-active:not([data-has-tabs]) > .dock-panel-header {
-  border-bottom: 2px solid hsl(var(--dock-primary));
-}
 
-/* Active pane title text turns blue */
+/* Active pane title — full opacity */
 .dock-tab-group.dock-pane-active > .dock-panel-header > .dock-panel-title {
-  color: hsl(var(--dock-primary));
+  opacity: 1;
 }
 
 /* Floating pane — default: no indicator line */
 .dock-floating-window .dock-floating-titlebar,
 .dock-floating-window .dock-float-titlebar {
-  border-bottom: 2px solid transparent;
+  border-top: 2px solid transparent;
 }
 
-/* Active floating pane — blue bottom border on title bar */
+/* Active floating pane — blue top border on title bar */
 .dock-floating-window.dock-pane-active .dock-floating-titlebar,
 .dock-floating-window.dock-pane-active .dock-float-titlebar {
-  border-bottom: 2px solid hsl(var(--dock-primary));
+  border-top: 2px solid hsl(var(--dock-primary));
 }
 
-/* Active floating pane title text turns blue */
+/* Active floating pane title — full opacity */
 .dock-floating-window.dock-pane-active .dock-floating-titlebar .dock-floating-title,
 .dock-floating-window.dock-pane-active .dock-float-titlebar .dock-float-title {
-  color: hsl(var(--dock-primary));
+  opacity: 1;
 }
 
 /* ══════════════════════════════════════════════════════════════════════

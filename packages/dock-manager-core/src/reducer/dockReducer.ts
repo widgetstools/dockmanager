@@ -47,6 +47,7 @@ export type DockAction =
   | { type: 'BRING_TO_FRONT'; payload: { panelId: string } }
   | { type: 'UNPIN_PANEL'; payload: { panelId: string } }
   | { type: 'PIN_PANEL'; payload: { panelId: string } }
+  | { type: 'RESIZE_UNPINNED'; payload: { panelId: string; size: number } }
   | { type: 'LOAD_STATE'; payload: DockManagerState }
   | { type: 'MAXIMIZE_PANEL'; payload: { panelId: string } }
   | { type: 'RESTORE_PANEL'; payload: { panelId: string } }
@@ -293,6 +294,14 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       }
 
       return { ...state, unpinnedPanels, layout, activePaneId: panelId };
+    }
+
+    case 'RESIZE_UNPINNED': {
+      const { panelId, size } = action.payload;
+      const unpinnedPanels = state.unpinnedPanels.map(p =>
+        p.panelId === panelId ? { ...p, size } : p,
+      );
+      return { ...state, unpinnedPanels };
     }
 
     // ── Popout windows ───────────────────────────────────────────────

@@ -103,15 +103,20 @@ function App() {
 
   // ── Custom tab renderer with icons and unsaved badges ──────────────
 
-  const renderTab = useCallback((_panelId: string, panel: PanelConfig, isActive: boolean) => {
+  const renderTab = useCallback((_panelId: string, panel: PanelConfig, _isActive: boolean) => {
     const icon = panel.icon ? ICON_MAP[panel.icon] : null;
     const isUnsaved = UNSAVED_PANELS.has(panel.id);
     return (
-      <span className={`flex items-center gap-1.5 text-xs select-none ${isActive ? 'dock-text' : 'dock-text-muted'}`}>
-        {icon && <span className="flex-shrink-0 opacity-70">{icon}</span>}
+      <span className="flex items-center gap-1.5 text-xs select-none">
+        {icon && <span className="flex-shrink-0">{icon}</span>}
         <span className="truncate">{panel.title}</span>
         {isUnsaved && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" title="Unsaved changes" />}
-        {panel.badge && <span className="text-[9px] opacity-60 ml-0.5">{panel.badge}</span>}
+        {panel.badge && <span className="text-[9px] opacity-80 ml-0.5">{panel.badge}</span>}
+        {panel.closable !== false && (
+          <button className="dock-tab-close" data-action="close" data-panel-id={panel.id} aria-label={`Close ${panel.title}`}>
+            <X className="w-3 h-3" />
+          </button>
+        )}
       </span>
     );
   }, []);

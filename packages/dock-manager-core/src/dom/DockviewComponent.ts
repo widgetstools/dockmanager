@@ -1029,6 +1029,9 @@ export class DockviewComponent {
             }
             this.dispatch({ type: 'CLOSE_PANEL', payload: { panelId } });
           },
+          onResizeUnpinned: (panelId, size) => {
+            this.dispatch({ type: 'RESIZE_UNPINNED', payload: { panelId, size } });
+          },
           createContent: (panelId, cont) => this.getOrCreateContent(panelId, cont),
         });
         this.unpinnedStripViews.set(edge, view);

@@ -359,12 +359,9 @@ export class TabGroupView {
       if (this.bottomTabStripEl) {
         this.buildTabStrip(this.bottomTabStripEl);
       }
-    } else if (hasTabs) {
-      // Default: tabs in the header
-      this.buildTabStrip(this.headerEl);
     } else {
-      // Single panel: just title
-      this.buildSingleTitle();
+      // Default: tabs in the header (even for single panel, so the tab gets the top border highlight)
+      this.buildTabStrip(this.headerEl);
     }
 
     // Right header actions slot
@@ -394,8 +391,6 @@ export class TabGroupView {
       if (!panel) continue;
 
       const isSelected = panelId === this.node.activePanel;
-      const isActivePane = this.node.panels.includes(this.activePaneId);
-      const isSelectedAndActive = isSelected && isActivePane;
 
       const tabEl = document.createElement('div');
       tabEl.setAttribute('data-tab-id', panelId);
@@ -411,15 +406,6 @@ export class TabGroupView {
       if (isDisabled) {
         tabEl.setAttribute('data-disabled', 'true');
       }
-      // Apply color directly to ensure correct state
-      if (isSelectedAndActive) {
-        tabEl.style.color = 'hsl(var(--dock-tab-text-active))';
-        tabEl.style.borderBottomColor = 'hsl(var(--dock-primary))';
-      } else if (isSelected) {
-        tabEl.style.color = 'hsl(var(--dock-tab-text))';
-        tabEl.style.borderBottomColor = 'transparent';
-      }
-
       if (this.callbacks.createTab) {
         const d = this.callbacks.createTab(panelId, tabEl, isSelected);
         this.tabDisposables.set(panelId, d);
@@ -721,12 +707,7 @@ export class TabGroupView {
       this.actionButtonsEl.appendChild(floatBtn);
     }
 
-    // Close button
-    if (activePanel?.closable !== false) {
-      const closeBtn = this.createActionButton('close', this.node.activePanel, this.resourceStrings.close, iconClose(14));
-      closeBtn.style.color = 'hsl(var(--dock-text))';
-      this.actionButtonsEl.appendChild(closeBtn);
-    }
+    // Close button is on each tab header — no need for a separate one in the action buttons area
   }
 
   private updateActionButtons(): void {
@@ -814,17 +795,10 @@ export class TabGroupView {
       tabEl.className = isSelected ? 'dock-tab dock-tab-selected' : 'dock-tab';
       tabEl.setAttribute('aria-selected', String(isSelected));
       tabEl.tabIndex = isSelected ? 0 : -1;
-      // Apply color directly to avoid CSS specificity/recalculation issues
-      if (isSelectedAndActive) {
-        tabEl.style.color = 'hsl(var(--dock-tab-text-active))';
-        tabEl.style.borderBottomColor = 'hsl(var(--dock-primary))';
-      } else if (isSelected) {
-        tabEl.style.color = 'hsl(var(--dock-tab-text))';
-        tabEl.style.borderBottomColor = 'transparent';
-      } else {
-        tabEl.style.color = '';
-        tabEl.style.borderBottomColor = '';
-      }
+      // Clear any inline styles — let CSS handle color/opacity/border via classes
+      tabEl.style.color = '';
+      tabEl.style.borderTopColor = '';
+      tabEl.style.borderBottomColor = '';
     });
   }
 

@@ -275,21 +275,24 @@ export class FloatingWindowView {
       let newX = this.dragStart.panelX + ev.clientX - this.dragStart.x;
       let newY = this.dragStart.panelY + ev.clientY - this.dragStart.y;
 
-      // Snap to viewport edges within 10px
-      const containerRect = this.element.parentElement?.getBoundingClientRect();
-      if (containerRect) {
-        const snapDist = 10;
-        const relX = newX;
-        const relY = newY;
-        const relRight = relX + this.floating.width;
-        const relBottom = relY + this.floating.height;
-        const containerW = containerRect.width;
-        const containerH = containerRect.height;
+      // Snap to viewport edges within 10px (skip while dock indicators are active
+      // so large panels can still be dragged to edge dock targets)
+      if (!indicatorsShown) {
+        const containerRect = this.element.parentElement?.getBoundingClientRect();
+        if (containerRect) {
+          const snapDist = 10;
+          const relX = newX;
+          const relY = newY;
+          const relRight = relX + this.floating.width;
+          const relBottom = relY + this.floating.height;
+          const containerW = containerRect.width;
+          const containerH = containerRect.height;
 
-        if (relX < snapDist) newX = 0;
-        if (relY < snapDist) newY = 0;
-        if (containerW - relRight < snapDist) newX = containerW - this.floating.width;
-        if (containerH - relBottom < snapDist) newY = containerH - this.floating.height;
+          if (relX < snapDist) newX = 0;
+          if (relY < snapDist) newY = 0;
+          if (containerW - relRight < snapDist) newX = containerW - this.floating.width;
+          if (containerH - relBottom < snapDist) newY = containerH - this.floating.height;
+        }
       }
 
       latestX = newX;

@@ -10,6 +10,7 @@ export interface IDisposable {
 export interface UnpinnedStripViewCallbacks {
   onPinPanel: (panelId: string) => void;
   onClosePanel: (panelId: string) => void;
+  onResizeUnpinned: (panelId: string, size: number) => void;
   createContent: (panelId: string, container: HTMLElement) => IDisposable;
 }
 
@@ -40,6 +41,10 @@ export class UnpinnedStripView {
   private boundStripMouseOver: ((e: MouseEvent) => void) | null = null;
   private boundStripMouseOut: ((e: MouseEvent) => void) | null = null;
   private boundStripClick: ((e: MouseEvent) => void) | null = null;
+
+  // Resize state
+  private resizeMove: ((e: MouseEvent) => void) | null = null;
+  private resizeUp: ((e: MouseEvent) => void) | null = null;
 
   constructor(
     edge: DockEdge,
@@ -266,6 +271,54 @@ export class UnpinnedStripView {
         ? 'left:0;top:0;bottom:0;width:4px;cursor:col-resize;'
         : 'top:0;left:0;right:0;height:4px;cursor:row-resize;'
     }`;
+
+    resizeHandle.addEventListener('mousedown', (startEv) => {
+      startEv.preventDefault();
+      startEv.stopPropagation();
+
+      const startPos = isVertical ? startEv.clientX : startEv.clientY;
+      const startSize = unpinned.size;
+      const minSize = 100;
+      const maxSize = 800;
+
+      // Prevent flyout from auto-closing during resize
+      this.cancelClose();
+
+      this.resizeMove = (ev: MouseEvent) => {
+        const delta = (isVertical ? ev.clientX : ev.clientY) - startPos;
+        // For left/top edges, dragging right/down increases size; for right/bottom, it's inverted
+        const sign = this.edge === 'left' || this.edge === 'top' ? 1 : -1;
+        const newSize = Math.min(maxSize, Math.max(minSize, startSize + delta * sign));
+
+        if (this.flyoutEl) {
+          if (isVertical) {
+            this.flyoutEl.style.width = `${newSize}px`;
+          } else {
+            this.flyoutEl.style.height = `${newSize}px`;
+          }
+        }
+      };
+
+      this.resizeUp = () => {
+        if (this.resizeMove) document.removeEventListener('mousemove', this.resizeMove);
+        if (this.resizeUp) document.removeEventListener('mouseup', this.resizeUp);
+
+        // Read final size from the flyout element and persist
+        if (this.flyoutEl) {
+          const finalSize = isVertical
+            ? this.flyoutEl.getBoundingClientRect().width
+            : this.flyoutEl.getBoundingClientRect().height;
+          this.callbacks.onResizeUnpinned(panelId, Math.round(finalSize));
+        }
+
+        this.resizeMove = null;
+        this.resizeUp = null;
+      };
+
+      document.addEventListener('mousemove', this.resizeMove);
+      document.addEventListener('mouseup', this.resizeUp);
+    });
+
     this.flyoutEl.appendChild(resizeHandle);
 
     // Append flyout to the strip's parent (which should be position:relative)
@@ -273,6 +326,12 @@ export class UnpinnedStripView {
   }
 
   private closeFlyout(): void {
+    // Clean up any in-progress resize
+    if (this.resizeMove) document.removeEventListener('mousemove', this.resizeMove);
+    if (this.resizeUp) document.removeEventListener('mouseup', this.resizeUp);
+    this.resizeMove = null;
+    this.resizeUp = null;
+
     if (this.flyoutContentDisposable) {
       this.flyoutContentDisposable.dispose();
       this.flyoutContentDisposable = null;

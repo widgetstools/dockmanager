@@ -274,7 +274,7 @@ export class AppComponent implements OnDestroy {
   };
 
   /** Custom tab renderer with Font Awesome icons and unsaved badges */
-  createTabContent = (panelId: string, container: HTMLElement, isActive: boolean): IDisposable => {
+  createTabContent = (panelId: string, container: HTMLElement, _isActive: boolean): IDisposable => {
     // Use the api's live state (not this.currentState which may be stale during render)
     const liveState = this.api?.state ?? this.currentState;
     const panel = liveState.panels[panelId] || (defaultState.panels as any)[panelId];
@@ -282,12 +282,10 @@ export class AppComponent implements OnDestroy {
 
     const span = document.createElement('span');
     span.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;user-select:none;flex-shrink:0';
-    span.style.color = isActive ? 'hsl(var(--dock-text))' : 'hsl(var(--dock-text-muted))';
-
     const iconDef = panel.icon ? TAB_ICONS[panel.icon] : null;
     if (iconDef) {
       const iconSpan = document.createElement('span');
-      iconSpan.style.cssText = 'flex-shrink:0;opacity:0.7;display:flex;align-items:center;font-size:11px';
+      iconSpan.style.cssText = 'flex-shrink:0;display:flex;align-items:center;font-size:11px';
       iconSpan.innerHTML = faSvg(iconDef);
       span.appendChild(iconSpan);
     }
@@ -306,9 +304,19 @@ export class AppComponent implements OnDestroy {
 
     if (panel.badge) {
       const badge = document.createElement('span');
-      badge.style.cssText = 'font-size:9px;opacity:0.6;margin-left:2px';
+      badge.style.cssText = 'font-size:9px;opacity:0.8;margin-left:2px';
       badge.textContent = panel.badge;
       span.appendChild(badge);
+    }
+
+    if (panel.closable !== false) {
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'dock-tab-close';
+      closeBtn.setAttribute('data-action', 'close');
+      closeBtn.setAttribute('data-panel-id', panelId);
+      closeBtn.setAttribute('aria-label', `Close ${panel.title}`);
+      closeBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+      span.appendChild(closeBtn);
     }
 
     container.appendChild(span);
