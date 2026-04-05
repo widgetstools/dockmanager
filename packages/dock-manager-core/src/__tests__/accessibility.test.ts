@@ -27,6 +27,7 @@ function makeTabGroupViewCallbacks() {
     onUnpinPanel: () => {},
     onSetActivePanel: () => {},
     onSetActivePane: () => {},
+    onSetHeaderCollapsed: () => {},
     createContent: () => noopDisposable,
   };
 }

@@ -11,7 +11,7 @@ import {
   deserialize,
 } from '@widgetstools/react-dock-manager';
 import type { DockManagerState, PanelConfig, PreventableDockEvent, DockviewApi } from '@widgetstools/dock-manager-core';
-import { themes, type DockTheme } from '@widgetstools/dock-manager-core';
+import { themes, applyTheme, type DockTheme } from '@widgetstools/dock-manager-core';
 import { defaultState } from './config/defaultLayout';
 import {
   Sun, Moon, Save, FolderOpen, RotateCcw,
@@ -80,6 +80,19 @@ let addPanelCounter = 0;
 function App() {
   const [selectedThemeKey, setSelectedThemeKey] = useState('slateDark');
   const selectedTheme = THEME_OPTIONS.find(t => t.key === selectedThemeKey)?.theme || themes.slateDark;
+  const appContainerRef = useRef<HTMLDivElement>(null);
+
+  // Apply theme to the app container so toolbar inherits dock CSS variables
+  useEffect(() => {
+    if (!appContainerRef.current) return;
+    const el = appContainerRef.current;
+    applyTheme(el, selectedTheme);
+    if (selectedTheme.mode === 'dark') {
+      el.classList.add('dark');
+    } else {
+      el.classList.remove('dark');
+    }
+  }, [selectedTheme]);
 
   // API via onReady — no ref needed for most operations
   const [api, setApi] = useState<DockviewApi | null>(null);
@@ -200,9 +213,9 @@ function App() {
   }, [api, showToast]);
 
   return (
-    <div className="h-screen w-screen dock-bg flex flex-col overflow-hidden">
+    <div ref={appContainerRef} className="h-screen w-screen flex flex-col overflow-hidden" style={{ background: 'hsl(var(--dock-bg))', color: 'hsl(var(--dock-text))' }}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-3 py-1.5 dock-panel-header border-b dock-border flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b dock-border flex-shrink-0" style={{ background: 'hsl(var(--dock-panel-header))' }}>
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold dock-text tracking-wide">Dock Manager Demo</span>
 
@@ -351,6 +364,6 @@ const Btn = React.memo(({ icon, title, onClick }: { icon: React.ReactNode; title
   </button>
 ));
 
-const Sep = () => <div className="w-px h-4 bg-border mx-1" />;
+const Sep = () => <div className="w-px h-4 mx-1" style={{ background: 'hsl(var(--dock-border))' }} />;
 
 export default App;

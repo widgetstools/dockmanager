@@ -57,6 +57,7 @@ export type DockAction =
   | { type: 'DOCK_POPOUT'; payload: { panelId: string; targetTabGroupId: string; position: DockPosition } }
   | { type: 'UPDATE_POPOUT'; payload: { panelId: string; x?: number; y?: number; width?: number; height?: number } }
   | { type: 'SET_HEADER_POSITION'; payload: { tabGroupId: string; headerPosition: HeaderPosition | undefined } }
+  | { type: 'SET_HEADER_COLLAPSED'; payload: { tabGroupId: string; collapsed: boolean } }
   | { type: 'NAVIGATE'; payload: { direction: 'next' | 'previous' } }
   | { type: 'ACTIVATE_OVERFLOW_TAB'; payload: { tabGroupId: string; panelId: string } }
   | { type: 'DOCK_TO_EDGE'; payload: { panelId: string; edge: DockPosition } }
@@ -115,10 +116,21 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
         widgetProps: action.payload.widgetProps,
       };
 
-      const targetGroup = findFirstTabGroup(state.layout);
-      const layout = targetGroup
-        ? insertInGroup(state.layout, targetGroup, panelId)
+      const targetGroupId = findFirstTabGroup(state.layout);
+      let layout = targetGroupId
+        ? insertInGroup(state.layout, targetGroupId, panelId)
         : { type: 'tabgroup' as const, id: genId('tg'), panels: [panelId], activePanel: panelId };
+
+      // Clear headerCollapsed on target group when adding a panel to it
+      if (targetGroupId) {
+        const targetGroup = findTabGroupById(state.layout, targetGroupId);
+        if (targetGroup?.headerCollapsed) {
+          layout = updateTabGroup(layout, targetGroupId, tg => ({
+            ...tg,
+            headerCollapsed: undefined,
+          }));
+        }
+      }
 
       return {
         ...state,
@@ -169,7 +181,14 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
         }
       }
 
-      const layout = movePanel(state.layout, panelId, targetTabGroupId, position);
+      let layout = movePanel(state.layout, panelId, targetTabGroupId, position);
+      // Clear headerCollapsed on target group when a panel is docked into it (center)
+      if (position === 'center' && targetGroup?.headerCollapsed) {
+        layout = updateTabGroup(layout, targetTabGroupId, tg => ({
+          ...tg,
+          headerCollapsed: undefined,
+        }));
+      }
       const placements = removeFromPlacements(state, panelId);
       return { ...state, layout, ...placements, activePaneId: panelId };
     }
@@ -220,7 +239,14 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
         const sourceExists = findTabGroupById(state.layout, floatingEntry.sourceTabGroupId);
         if (sourceExists) {
           // Insert back into the original group as a tab (center position)
-          const layout = insertInGroup(state.layout, floatingEntry.sourceTabGroupId, panelId);
+          let layout = insertInGroup(state.layout, floatingEntry.sourceTabGroupId, panelId);
+          // Clear headerCollapsed since group now has multiple panels
+          if (sourceExists.headerCollapsed) {
+            layout = updateTabGroup(layout, floatingEntry.sourceTabGroupId, tg => ({
+              ...tg,
+              headerCollapsed: undefined,
+            }));
+          }
           return { ...state, floatingPanels, layout, activePaneId: panelId };
         }
       }
@@ -230,11 +256,22 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
         target = findFirstTabGroup(state.layout);
       }
 
-      const layout = target
+      let layout = target
         ? (position === 'center'
           ? insertInGroup(state.layout, target, panelId)
           : insertBySplit(state.layout, target, panelId, position))
         : { type: 'tabgroup' as const, id: genId('tg'), panels: [panelId], activePanel: panelId };
+
+      // Clear headerCollapsed when docking into a collapsed group (center)
+      if (target && position === 'center') {
+        const targetGroup = findTabGroupById(state.layout, target);
+        if (targetGroup?.headerCollapsed) {
+          layout = updateTabGroup(layout, target, tg => ({
+            ...tg,
+            headerCollapsed: undefined,
+          }));
+        }
+      }
 
       return { ...state, floatingPanels, layout, activePaneId: panelId };
     }
@@ -287,6 +324,14 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       // Strategy 1: Restore to original tab group if it still exists
       if (sourceId && findTabGroupById(layout, sourceId)) {
         layout = insertInGroup(layout, sourceId, panelId);
+        // Clear headerCollapsed since group now has multiple panels
+        const sourceGroup = findTabGroupById(layout, sourceId);
+        if (sourceGroup?.headerCollapsed) {
+          layout = updateTabGroup(layout, sourceId, tg => ({
+            ...tg,
+            headerCollapsed: undefined,
+          }));
+        }
       }
       // Strategy 2: Insert at the stored root-level edge
       else {
@@ -401,6 +446,17 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       return {
         ...state,
         layout: updateTabGroup(state.layout, tabGroupId, tg => ({ ...tg, headerPosition })),
+      };
+    }
+
+    case 'SET_HEADER_COLLAPSED': {
+      const { tabGroupId, collapsed } = action.payload;
+      return {
+        ...state,
+        layout: updateTabGroup(state.layout, tabGroupId, tg => ({
+          ...tg,
+          headerCollapsed: collapsed || undefined,
+        })),
       };
     }
 
