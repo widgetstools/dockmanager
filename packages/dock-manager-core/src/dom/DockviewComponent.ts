@@ -832,6 +832,9 @@ export class DockviewComponent {
       onSetActivePane: (panelId) => {
         this.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId } });
       },
+      onSetHeaderCollapsed: (tabGroupId, collapsed) => {
+        this.dispatch({ type: 'SET_HEADER_COLLAPSED', payload: { tabGroupId, collapsed } });
+      },
       onToggleMaximize: (panelId) => {
         if (this.state.maximizedPanelId === panelId) {
           this.dispatch({ type: 'RESTORE_PANEL', payload: { panelId } });

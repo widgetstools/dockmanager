@@ -1,6 +1,6 @@
 {
   "name": "@widgetstools/dock-manager-core",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Zero-dependency layout manager supporting tabs, splits, floating windows, and auto-hide panels. Framework-agnostic core.",
   "type": "module",
   "main": "./dist/index.cjs",

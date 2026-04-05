@@ -109,6 +109,18 @@ dock-manager *,
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+ * Utility classes for using dock theme variables outside the dock manager
+ * ══════════════════════════════════════════════════════════════════════ */
+.dock-bg { background: hsl(var(--dock-bg)); }
+.dock-surface { background: hsl(var(--dock-surface)); }
+.dock-surface-alt { background: hsl(var(--dock-surface-alt)); }
+.dock-text { color: hsl(var(--dock-text)); }
+.dock-text-secondary { color: hsl(var(--dock-text-secondary)); }
+.dock-text-muted { color: hsl(var(--dock-text-muted)); }
+.dock-border { border-color: hsl(var(--dock-border)); }
+.dock-hover:hover { background: hsl(var(--dock-hover)); }
+
+/* ══════════════════════════════════════════════════════════════════════
  * Core layout structure (used by DockviewComponent DOM renderer)
  * ══════════════════════════════════════════════════════════════════════ */
 .dock-manager-root {
@@ -253,6 +265,71 @@ dock-manager *,
 
 .dock-action-btn:hover {
   opacity: 0.9;
+}
+
+/* ── Header collapse pill (single-tab panes) ── */
+
+.dock-header-collapse-pill {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  border: none;
+  background: hsl(var(--dock-text) / 0.15);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background-color 0.15s;
+  padding: 0;
+  z-index: 2;
+}
+
+.dock-panel-header:hover .dock-header-collapse-pill {
+  opacity: 1;
+}
+
+.dock-header-collapse-pill:hover {
+  background: hsl(var(--dock-text) / 0.3);
+}
+
+/* Hover zone at top edge when header is collapsed */
+.dock-header-hover-zone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 15px;
+  z-index: 3;
+  cursor: pointer;
+  display: none;
+}
+
+.dock-tab-group[data-header-collapsed] > .dock-header-hover-zone {
+  display: block;
+}
+
+.dock-header-hover-zone::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background: hsl(var(--dock-text) / 0.15);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.dock-header-hover-zone:hover::after {
+  opacity: 1;
+}
+
+.dock-header-hover-zone:hover::after {
+  background: hsl(var(--dock-text) / 0.3);
 }
 
 .dock-splitter {
@@ -426,22 +503,38 @@ dock-manager *,
 /* ══════════════════════════════════════════════════════════════════════
  * Custom scrollbar styling
  * ══════════════════════════════════════════════════════════════════════ */
-.dock-scrollable::-webkit-scrollbar {
+.dock-scrollable::-webkit-scrollbar,
+.dock-manager-root ::-webkit-scrollbar,
+.dock-manager-root::-webkit-scrollbar {
   width: var(--dock-scrollbar-width, 6px);
   height: var(--dock-scrollbar-width, 6px);
 }
 
-.dock-scrollable::-webkit-scrollbar-track {
+.dock-scrollable::-webkit-scrollbar-track,
+.dock-manager-root ::-webkit-scrollbar-track,
+.dock-manager-root::-webkit-scrollbar-track {
   background: var(--dock-scrollbar-track, transparent);
 }
 
-.dock-scrollable::-webkit-scrollbar-thumb {
+.dock-scrollable::-webkit-scrollbar-thumb,
+.dock-manager-root ::-webkit-scrollbar-thumb,
+.dock-manager-root::-webkit-scrollbar-thumb {
   background: hsl(var(--dock-scrollbar-thumb, 0 0% 60%));
   border-radius: 3px;
 }
 
-.dock-scrollable::-webkit-scrollbar-thumb:hover {
+.dock-scrollable::-webkit-scrollbar-thumb:hover,
+.dock-manager-root ::-webkit-scrollbar-thumb:hover,
+.dock-manager-root::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--dock-scrollbar-thumb, 0 0% 50%));
+}
+
+/* Firefox scrollbar styling */
+.dock-scrollable,
+.dock-manager-root,
+.dock-manager-root * {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--dock-scrollbar-thumb, 0 0% 60%)) var(--dock-scrollbar-track, transparent);
 }
 
 /* ══════════════════════════════════════════════════════════════════════

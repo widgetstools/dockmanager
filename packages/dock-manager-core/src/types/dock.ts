@@ -129,6 +129,8 @@ export interface TabGroupNode {
   activePanel: string;
   /** Where to render the tab header bar. Defaults to `'top'` if omitted. */
   headerPosition?: HeaderPosition;
+  /** Whether the header is collapsed (hidden). Only applies to single-tab panes. */
+  headerCollapsed?: boolean;
 }
 
 /**

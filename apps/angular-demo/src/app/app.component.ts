@@ -1,4 +1,4 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component, OnDestroy, ElementRef, AfterViewInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   DockManagerCoreComponent,
@@ -17,7 +17,7 @@ import type {
   DockTheme,
   DockviewApi,
 } from '@widgetstools/dock-manager-core';
-import { themes } from '@widgetstools/dock-manager-core';
+import { themes, applyTheme } from '@widgetstools/dock-manager-core';
 import { defaultState } from './config/default-layout';
 import { ClockWidgetComponent } from './widgets/clock-widget.component';
 import { EditorWidgetComponent } from './widgets/editor-widget.component';
@@ -226,7 +226,25 @@ const UNSAVED_PANELS = new Set(['doc1', 'doc2']);
     .demo-shortcut-key { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-family: monospace; background: hsl(var(--dock-surface-alt)); border: 1px solid hsl(var(--dock-border)); color: hsl(var(--dock-text)); }
   `]
 })
-export class AppComponent implements OnDestroy {
+export class AppComponent implements OnDestroy, AfterViewInit {
+  private demoRootEl: HTMLElement | null = null;
+
+  constructor(private elRef: ElementRef<HTMLElement>) {}
+
+  ngAfterViewInit(): void {
+    this.demoRootEl = this.elRef.nativeElement.querySelector('.demo-root');
+    this.applyThemeToRoot();
+  }
+
+  private applyThemeToRoot(): void {
+    if (!this.demoRootEl) return;
+    applyTheme(this.demoRootEl, this.selectedTheme);
+    if (this.selectedTheme.mode === 'dark') {
+      this.demoRootEl.classList.add('dark');
+    } else {
+      this.demoRootEl.classList.remove('dark');
+    }
+  }
   // Icon references for template binding
   icons = {
     rotateLeft: faRotateLeft, rotateRight: faRotateRight,
@@ -364,7 +382,10 @@ export class AppComponent implements OnDestroy {
     const key = (event.target as HTMLSelectElement).value;
     this.selectedThemeKey = key;
     const opt = THEME_OPTIONS.find(o => o.key === key);
-    if (opt) this.selectedTheme = opt.theme;
+    if (opt) {
+      this.selectedTheme = opt.theme;
+      this.applyThemeToRoot();
+    }
   }
 
   addNewPanel(): void {

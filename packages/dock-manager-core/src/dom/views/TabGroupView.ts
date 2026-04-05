@@ -27,6 +27,7 @@ export interface TabGroupViewCallbacks {
   onToggleMaximize?: (panelId: string) => void;
   createContent: (panelId: string, container: HTMLElement) => IDisposable;
   createTab?: (panelId: string, container: HTMLElement, isActive: boolean) => IDisposable;
+  onSetHeaderCollapsed: (tabGroupId: string, collapsed: boolean) => void;
   createHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string, container: HTMLElement) => IDisposable;
 }
 
@@ -71,6 +72,11 @@ export class TabGroupView {
 
   // rAF throttle for scroll events
   private scrollRafPending = false;
+
+  // Header collapse for single-tab panes
+  private headerCollapsed = false;
+  private headerCollapsePill: HTMLButtonElement | null = null;
+  private headerHoverZone: HTMLDivElement | null = null;
 
   // Resource strings for localization
   private resourceStrings: DockResourceStrings;
@@ -140,6 +146,15 @@ export class TabGroupView {
     // Build header contents
     this.buildHeader();
 
+    // Add collapse pill for single-tab panes
+    this.updateHeaderCollapse();
+
+    // Restore collapsed state from serialized layout
+    if (node.headerCollapsed && this.node.panels.length === 1) {
+      this.headerCollapsed = true;
+      this.applyHeaderCollapsed();
+    }
+
     // Build content for active panel
     this.buildContent();
 
@@ -195,6 +210,13 @@ export class TabGroupView {
       return prev.title !== curr.title || prev.icon !== curr.icon || prev.badge !== curr.badge;
     });
 
+    // Sync header collapsed state from serialized layout
+    const nodeCollapsed = !!node.headerCollapsed;
+    if (nodeCollapsed !== this.headerCollapsed && node.panels.length === 1) {
+      this.headerCollapsed = nodeCollapsed;
+      this.applyHeaderCollapsed();
+    }
+
     if (panelsChanged) {
       const needsBottomTabs = node.headerPosition === 'bottom' && node.panels.length > 1;
 
@@ -214,6 +236,7 @@ export class TabGroupView {
 
       this.clearHeader();
       this.buildHeader();
+      this.updateHeaderCollapse();
       // Reattach overflow observer and update scroll arrows after layout
       if (this.tabContainerEl) {
         this.tabOverflowObserver.observe(this.tabContainerEl);
@@ -301,6 +324,62 @@ export class TabGroupView {
       this.element.setAttribute('data-has-tabs', '');
     } else {
       this.element.removeAttribute('data-has-tabs');
+    }
+  }
+
+  // ── Private: Header collapse (single-tab panes) ─────────────────
+
+  private updateHeaderCollapse(): void {
+    const isSingleTab = this.node.panels.length === 1;
+
+    if (isSingleTab && !this.headerCollapsePill) {
+      // Create the pill toggle button
+      this.headerCollapsePill = document.createElement('button');
+      this.headerCollapsePill.className = 'dock-header-collapse-pill';
+      this.headerCollapsePill.setAttribute('aria-label', 'Toggle header');
+      this.headerCollapsePill.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleHeaderCollapsed();
+      });
+      this.headerEl.appendChild(this.headerCollapsePill);
+
+      // Create the hover zone (overlays top of content area when header is collapsed)
+      this.headerHoverZone = document.createElement('div');
+      this.headerHoverZone.className = 'dock-header-hover-zone';
+      this.headerHoverZone.addEventListener('click', () => {
+        this.toggleHeaderCollapsed();
+      });
+      this.element.appendChild(this.headerHoverZone);
+    } else if (!isSingleTab) {
+      // Remove pill and hover zone when multiple tabs
+      this.headerCollapsePill?.remove();
+      this.headerCollapsePill = null;
+      this.headerHoverZone?.remove();
+      this.headerHoverZone = null;
+      if (this.headerCollapsed) {
+        this.headerCollapsed = false;
+        this.applyHeaderCollapsed();
+        // Notify reducer to clear persisted collapsed state
+        this.callbacks.onSetHeaderCollapsed(this.node.id, false);
+      }
+    }
+  }
+
+  private toggleHeaderCollapsed(): void {
+    this.headerCollapsed = !this.headerCollapsed;
+    this.applyHeaderCollapsed();
+    this.callbacks.onSetHeaderCollapsed(this.node.id, this.headerCollapsed);
+  }
+
+  private applyHeaderCollapsed(): void {
+    if (this.headerCollapsed) {
+      this.headerEl.style.display = 'none';
+      this.element.setAttribute('data-header-collapsed', '');
+      this.element.removeAttribute('data-dock-target');
+    } else {
+      this.headerEl.style.display = '';
+      this.element.removeAttribute('data-header-collapsed');
+      this.element.setAttribute('data-dock-target', this.node.id);
     }
   }
 
