@@ -46,7 +46,7 @@ export class MaximizeOverlayView {
     const headerEl = document.createElement('div');
     headerEl.className = 'dock-panel-header';
     headerEl.style.cssText =
-      'display:flex;align-items:center;justify-content:space-between;min-height:32px;padding:0 12px;flex-shrink:0;border-bottom:1px solid hsl(var(--dock-border));background:hsl(var(--dock-panel-header));';
+      'display:flex;align-items:center;justify-content:space-between;min-height:36px;padding:0 12px;flex-shrink:0;border-bottom:1px solid hsl(var(--dock-border));background:hsl(var(--dock-panel-header));';
 
     const titleSpan = document.createElement('span');
     titleSpan.style.cssText = 'font-size:12px;font-weight:500;color:hsl(var(--dock-text));user-select:none;';

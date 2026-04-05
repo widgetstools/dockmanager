@@ -215,7 +215,7 @@ export class UnpinnedStripView {
     // Flyout header
     const header = document.createElement('div');
     header.style.cssText =
-      'display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:32px;flex-shrink:0;border-bottom:1px solid hsl(var(--dock-border));background:hsl(var(--dock-panel-header));';
+      'display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:36px;flex-shrink:0;border-bottom:1px solid hsl(var(--dock-border));background:hsl(var(--dock-panel-header));';
 
     const titleSpan = document.createElement('span');
     titleSpan.style.cssText = 'font-size:12px;font-weight:500;color:hsl(var(--dock-text));';

@@ -134,8 +134,8 @@ dock-manager *,
 
 .dock-panel-header {
   display: flex;
-  align-items: center;
-  min-height: 32px;
+  align-items: flex-end;
+  min-height: 36px;
   padding: 0 8px;
   background: hsl(var(--dock-panel-header));
   border-bottom: 1px solid hsl(var(--dock-border));
@@ -149,7 +149,8 @@ dock-manager *,
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 0 12px;
+  height: 31px;
   cursor: pointer;
   user-select: none;
   font-size: 12px;
@@ -160,29 +161,12 @@ dock-manager *,
   margin-bottom: -1px;
   transition: color 0.15s, background-color 0.15s;
   position: relative;
-}
-
-/* Vertical separator between tabs */
-.dock-tab + .dock-tab::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 15%;
-  height: 70%;
-  width: 1px;
-  background: hsl(var(--dock-border));
-  opacity: 1;
+  box-shadow: -1px 0 0 hsl(var(--dock-border) / 0.6), 1px 0 0 hsl(var(--dock-border) / 0.6), 0 -1px 0 hsl(var(--dock-border) / 0.6);
 }
 
 .dock-tab:hover {
   opacity: 1;
   background: hsl(var(--dock-hover));
-}
-
-/* Remove separator when hovering adjacent tabs */
-.dock-tab:hover + .dock-tab::before,
-.dock-tab:hover::before {
-  opacity: 0;
 }
 
 /* Selected tab in inactive group: raised appearance, same opacity as other tabs */
@@ -192,12 +176,6 @@ dock-manager *,
   border-top-color: hsl(var(--dock-surface));
   box-shadow: -1px 0 0 hsl(var(--dock-border)), 1px 0 0 hsl(var(--dock-border)), 0 -1px 0 hsl(var(--dock-border));
   z-index: 1;
-}
-
-/* Remove separator next to selected tab */
-.dock-tab.dock-tab-selected + .dock-tab::before,
-.dock-tab.dock-tab-selected::before {
-  opacity: 0;
 }
 
 /* Selected tab in ACTIVE group: full opacity + top border highlight */
@@ -229,11 +207,11 @@ dock-manager *,
 
 .dock-tab:hover .dock-tab-close,
 .dock-tab.dock-tab-selected .dock-tab-close {
-  opacity: 0.9;
+  opacity: 0.6;
 }
 
 .dock-tab-close:hover {
-  opacity: 1 !important;
+  opacity: 0.9 !important;
   background: hsl(var(--dock-hover));
 }
 
@@ -269,11 +247,12 @@ dock-manager *,
   background: none;
   cursor: pointer;
   color: hsl(var(--dock-text));
-  transition: color 0.1s;
+  opacity: 0.6;
+  transition: opacity 0.1s;
 }
 
 .dock-action-btn:hover {
-  color: hsl(var(--dock-text));
+  opacity: 0.9;
 }
 
 .dock-splitter {
@@ -339,7 +318,7 @@ dock-manager *,
   cursor: move;
   user-select: none;
   flex-shrink: 0;
-  min-height: 32px;
+  min-height: 36px;
 }
 
 /* Inactive floating title — same color, reduced opacity */
@@ -364,11 +343,12 @@ dock-manager *,
   border: none;
   display: flex;
   align-items: center;
-  transition: color 0.15s;
+  opacity: 0.6;
+  transition: opacity 0.15s;
 }
 
 .dock-floating-titlebar-btn:hover {
-  color: hsl(var(--dock-text));
+  opacity: 0.9;
 }
 
 .dock-empty-placeholder {

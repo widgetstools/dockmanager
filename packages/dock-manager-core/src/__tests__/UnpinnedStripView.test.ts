@@ -16,6 +16,7 @@ function makeCallbacks(): UnpinnedStripViewCallbacks {
   return {
     onPinPanel: vi.fn(),
     onClosePanel: vi.fn(),
+    onResizeUnpinned: vi.fn(),
     createContent: vi.fn(() => ({ dispose: vi.fn() })),
   };
 }
