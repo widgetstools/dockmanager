@@ -304,10 +304,12 @@ dock-manager *,
   z-index: 3;
   cursor: pointer;
   display: none;
+  pointer-events: none;
 }
 
 .dock-tab-group[data-header-collapsed] > .dock-header-hover-zone {
   display: block;
+  pointer-events: auto;
 }
 
 .dock-header-hover-zone::after {

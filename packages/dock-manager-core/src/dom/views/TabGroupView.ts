@@ -210,11 +210,19 @@ export class TabGroupView {
       return prev.title !== curr.title || prev.icon !== curr.icon || prev.badge !== curr.badge;
     });
 
-    // Sync header collapsed state from serialized layout
-    const nodeCollapsed = !!node.headerCollapsed;
-    if (nodeCollapsed !== this.headerCollapsed && node.panels.length === 1) {
+    // Sync header collapsed state from serialized layout.
+    // Force-clear when multi-tab — collapsed state is only valid for single-tab groups.
+    const isSingleTab = node.panels.length === 1;
+    const nodeCollapsed = !!node.headerCollapsed && isSingleTab;
+    const wasCollapsed = this.headerCollapsed;
+    if (nodeCollapsed !== wasCollapsed) {
       this.headerCollapsed = nodeCollapsed;
       this.applyHeaderCollapsed();
+    }
+    // If we forced an uncollapse because the group is no longer single-tab,
+    // notify the reducer so any persisted collapsed state gets cleared.
+    if (!isSingleTab && (wasCollapsed || node.headerCollapsed)) {
+      this.callbacks.onSetHeaderCollapsed(node.id, false);
     }
 
     if (panelsChanged) {
@@ -307,6 +315,12 @@ export class TabGroupView {
     this.leftSlotDisposable?.dispose();
     this.rightSlotDisposable?.dispose();
 
+    // Cleanup header collapse pill and hover zone
+    this.headerCollapsePill?.remove();
+    this.headerCollapsePill = null;
+    this.headerHoverZone?.remove();
+    this.headerHoverZone = null;
+
     if (this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
@@ -372,14 +386,14 @@ export class TabGroupView {
   }
 
   private applyHeaderCollapsed(): void {
+    // Note: data-dock-target is always kept so drag/drop, indicator detection,
+    // and tab lookup queries continue to work when the header is collapsed.
     if (this.headerCollapsed) {
       this.headerEl.style.display = 'none';
       this.element.setAttribute('data-header-collapsed', '');
-      this.element.removeAttribute('data-dock-target');
     } else {
       this.headerEl.style.display = '';
       this.element.removeAttribute('data-header-collapsed');
-      this.element.setAttribute('data-dock-target', this.node.id);
     }
   }
 

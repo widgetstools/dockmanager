@@ -20,7 +20,8 @@ function isValidLayoutNode(node: any): node is LayoutNode {
       typeof node.id === 'string' &&
       Array.isArray(node.panels) &&
       node.panels.every((p: any) => typeof p === 'string') &&
-      typeof node.activePanel === 'string'
+      typeof node.activePanel === 'string' &&
+      (node.headerCollapsed === undefined || typeof node.headerCollapsed === 'boolean')
       // headerPosition is optional — no validation needed
     );
   }

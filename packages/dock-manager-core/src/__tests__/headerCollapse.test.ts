@@ -153,15 +153,15 @@ describe('MOVE_PANEL with collapsed target', () => {
     expect(tg?.panels).toContain('panelB');
   });
 
-  it('does not clear headerCollapsed on edge-docking (creates new split)', () => {
+  it('clears headerCollapsed on edge-docking against a collapsed target', () => {
     const state = createTwoGroupState({ leftCollapsed: true });
     const next = dockReducer(state, {
       type: 'MOVE_PANEL',
       payload: { panelId: 'panelB', targetTabGroupId: 'tg_left', position: 'right' },
     });
-    // Edge dock creates a new split — original tg_left should keep its single panel and collapsed state
+    // Edge dock creates a new split — original tg_left should be expanded for usability
     const tg = findTabGroupById(next.layout, 'tg_left');
-    expect(tg?.headerCollapsed).toBe(true);
+    expect(tg?.headerCollapsed).toBeUndefined();
     expect(tg?.panels).toEqual(['panelA']);
   });
 });
@@ -403,18 +403,18 @@ describe('TabGroupView header collapse — data-dock-target', () => {
     view.dispose();
   });
 
-  it('removes data-dock-target when header is collapsed on construction', () => {
+  it('keeps data-dock-target present when header is collapsed on construction', () => {
     const node: TabGroupNode = {
       type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1', headerCollapsed: true,
     };
     const panels = { p1: { id: 'p1', title: 'Panel 1' } };
     const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
-    expect(view.element.getAttribute('data-dock-target')).toBeNull();
+    expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
     expect(view.element.hasAttribute('data-header-collapsed')).toBe(true);
     view.dispose();
   });
 
-  it('removes data-dock-target when pill is clicked to collapse', () => {
+  it('keeps data-dock-target when pill is clicked to collapse', () => {
     const callbacks = makeCallbacks();
     const node: TabGroupNode = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
     const panels = { p1: { id: 'p1', title: 'Panel 1' } };
@@ -426,7 +426,7 @@ describe('TabGroupView header collapse — data-dock-target', () => {
     expect(pill).not.toBeNull();
     pill.click();
 
-    expect(view.element.getAttribute('data-dock-target')).toBeNull();
+    expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
     expect(view.element.hasAttribute('data-header-collapsed')).toBe(true);
     expect(callbacks.onSetHeaderCollapsed).toHaveBeenCalledWith('tg1', true);
 
@@ -444,7 +444,7 @@ describe('TabGroupView header collapse — data-dock-target', () => {
     view.dispose();
   });
 
-  it('restores data-dock-target when multi-panel update forces uncollapse', () => {
+  it('keeps data-dock-target when multi-panel update forces uncollapse', () => {
     const callbacks = makeCallbacks();
     const node: TabGroupNode = {
       type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1', headerCollapsed: true,
@@ -452,8 +452,8 @@ describe('TabGroupView header collapse — data-dock-target', () => {
     const panels = { p1: { id: 'p1', title: 'Panel 1' }, p2: { id: 'p2', title: 'Panel 2' } };
     const view = new TabGroupView(node, panels, 'p1', undefined, callbacks);
 
-    // data-dock-target should be removed (collapsed)
-    expect(view.element.getAttribute('data-dock-target')).toBeNull();
+    // data-dock-target stays present even while collapsed
+    expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
 
     // Now update with two panels — should auto-uncollapse
     const updatedNode: TabGroupNode = {
@@ -542,7 +542,7 @@ describe('TabGroupView update() — headerCollapsed sync', () => {
     };
     view.update(collapsedNode, panels, 'p1', undefined);
 
-    expect(view.element.getAttribute('data-dock-target')).toBeNull();
+    expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
     expect(view.element.hasAttribute('data-header-collapsed')).toBe(true);
 
     view.dispose();
@@ -555,7 +555,7 @@ describe('TabGroupView update() — headerCollapsed sync', () => {
     const panels = { p1: { id: 'p1', title: 'Panel 1' } };
     const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
 
-    expect(view.element.getAttribute('data-dock-target')).toBeNull();
+    expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
 
     // Update without headerCollapsed
     const openNode: TabGroupNode = {
@@ -601,8 +601,9 @@ describe('TabGroupView — single/multi panel transitions', () => {
     };
     const view = new TabGroupView(node, panels, 'p1', undefined, callbacks);
 
-    // Collapsed
-    expect(view.element.getAttribute('data-dock-target')).toBeNull();
+    // Collapsed (data-dock-target stays present)
+    expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
+    expect(view.element.hasAttribute('data-header-collapsed')).toBe(true);
 
     // Panel added
     const updated: TabGroupNode = {
