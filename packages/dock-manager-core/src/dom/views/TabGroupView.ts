@@ -353,7 +353,7 @@ export class TabGroupView {
       this.headerCollapsePill.setAttribute('aria-label', 'Hide header');
       this.headerCollapsePill.title = 'Hide header';
       this.headerCollapsePill.innerHTML =
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>';
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>';
       this.headerCollapsePill.addEventListener('click', (e) => {
         e.stopPropagation();
         this.toggleHeaderCollapsed();
@@ -368,7 +368,7 @@ export class TabGroupView {
       this.headerHoverZone.setAttribute('aria-label', 'Show header');
       this.headerHoverZone.title = 'Show header';
       this.headerHoverZone.innerHTML =
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
       this.headerHoverZone.addEventListener('click', () => {
         this.toggleHeaderCollapsed();
       });
@@ -548,7 +548,7 @@ export class TabGroupView {
     this.scrollLeftBtn = document.createElement('button');
     this.scrollLeftBtn.style.cssText = scrollBtnStyle;
     this.scrollLeftBtn.setAttribute('aria-label', 'Scroll tabs left');
-    this.scrollLeftBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>';
+    this.scrollLeftBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>';
     this.scrollLeftBtn.addEventListener('mousedown', (e) => {
       e.stopPropagation();
       e.preventDefault();
@@ -561,7 +561,7 @@ export class TabGroupView {
     this.scrollRightBtn = document.createElement('button');
     this.scrollRightBtn.style.cssText = scrollBtnStyle;
     this.scrollRightBtn.setAttribute('aria-label', 'Scroll tabs right');
-    this.scrollRightBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>';
+    this.scrollRightBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>';
     this.scrollRightBtn.addEventListener('mousedown', (e) => {
       e.stopPropagation();
       e.preventDefault();

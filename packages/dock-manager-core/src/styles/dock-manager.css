@@ -275,15 +275,15 @@ dock-manager *,
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 18px;
-  height: 18px;
-  border-radius: 3px;
-  border: none;
-  background: transparent;
-  color: hsl(var(--dock-text) / 0.6);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid hsl(var(--dock-text) / 0.25);
+  background: hsl(var(--dock-surface) / 0.85);
+  color: hsl(var(--dock-text) / 0.9);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s, background-color 0.15s, color 0.15s;
+  opacity: 0.85;
+  transition: opacity 0.15s, background-color 0.15s, color 0.15s, border-color 0.15s;
   padding: 0;
   z-index: 2;
   display: inline-flex;
@@ -291,13 +291,15 @@ dock-manager *,
   justify-content: center;
 }
 
-.dock-panel-header:hover .dock-header-collapse-pill {
+.dock-panel-header:hover .dock-header-collapse-pill,
+.dock-header-collapse-pill:focus-visible {
   opacity: 1;
 }
 
 .dock-header-collapse-pill:hover {
-  background: hsl(var(--dock-text) / 0.1);
+  background: hsl(var(--dock-text) / 0.15);
   color: hsl(var(--dock-text));
+  border-color: hsl(var(--dock-text) / 0.5);
 }
 
 /* Down-arrow hover zone at top edge — shows the header when clicked */
@@ -306,14 +308,16 @@ dock-manager *,
   top: 0;
   left: 0;
   right: 0;
-  height: 15px;
+  height: 18px;
   z-index: 3;
   cursor: pointer;
   display: none;
   pointer-events: none;
   align-items: center;
   justify-content: center;
-  color: hsl(var(--dock-text) / 0.4);
+  color: hsl(var(--dock-text) / 0.85);
+  background: hsl(var(--dock-surface) / 0.6);
+  border-bottom: 1px solid hsl(var(--dock-text) / 0.2);
   transition: color 0.15s, background-color 0.15s;
 }
 
@@ -323,7 +327,7 @@ dock-manager *,
 }
 
 .dock-header-hover-zone:hover {
-  background: hsl(var(--dock-text) / 0.06);
+  background: hsl(var(--dock-text) / 0.12);
   color: hsl(var(--dock-text));
 }
 
