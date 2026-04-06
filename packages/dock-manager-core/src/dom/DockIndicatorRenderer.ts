@@ -288,6 +288,8 @@ export class DockIndicatorRenderer {
     for (const target of targets) {
       const targetId = target.getAttribute('data-dock-target');
       if (!targetId || targetId === sourceId) continue;
+      // Header-collapsed panes are not valid drop targets
+      if (target.hasAttribute('data-header-collapsed')) continue;
 
       const rect = target.getBoundingClientRect();
       if (rect.width < 80 || rect.height < 80) continue;

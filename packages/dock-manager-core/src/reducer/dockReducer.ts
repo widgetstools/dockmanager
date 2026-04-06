@@ -170,6 +170,8 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       if (sourceGroup === targetTabGroupId && position === 'center') return state;
       const targetGroup = findTabGroupById(state.layout, targetTabGroupId);
       if (sourceGroup === targetTabGroupId && targetGroup && targetGroup.panels.length === 1) return state;
+      // Reject drops onto a header-collapsed group
+      if (targetGroup?.headerCollapsed && sourceGroup !== targetTabGroupId) return state;
 
       // Document host enforcement: documentOnly panels can only move to document host groups
       const sourcePanel = state.panels[panelId];
@@ -232,6 +234,12 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       let target = (targetTabGroupId && targetTabGroupId !== 'default')
         ? targetTabGroupId
         : null;
+
+      // Reject explicit drops onto a header-collapsed group
+      if (target) {
+        const explicitTarget = findTabGroupById(state.layout, target);
+        if (explicitTarget?.headerCollapsed) return state;
+      }
 
       // If no explicit target, try to dock back to the original tab group
       if (!target && floatingEntry?.sourceTabGroupId) {

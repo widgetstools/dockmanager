@@ -139,30 +139,23 @@ describe('SET_HEADER_COLLAPSED reducer', () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('MOVE_PANEL with collapsed target', () => {
-  it('clears headerCollapsed when center-docking into a collapsed group', () => {
+  it('rejects center-docking into a header-collapsed group', () => {
     const state = createTwoGroupState({ leftCollapsed: true });
-    const tgBefore = findTabGroupById(state.layout, 'tg_left');
-    expect(tgBefore?.headerCollapsed).toBe(true);
-
     const next = dockReducer(state, {
       type: 'MOVE_PANEL',
       payload: { panelId: 'panelB', targetTabGroupId: 'tg_left', position: 'center' },
     });
-    const tg = findTabGroupById(next.layout, 'tg_left');
-    expect(tg?.headerCollapsed).toBeUndefined();
-    expect(tg?.panels).toContain('panelB');
+    // Drop refused — state unchanged
+    expect(next).toBe(state);
   });
 
-  it('clears headerCollapsed on edge-docking against a collapsed target', () => {
+  it('rejects edge-docking against a header-collapsed target', () => {
     const state = createTwoGroupState({ leftCollapsed: true });
     const next = dockReducer(state, {
       type: 'MOVE_PANEL',
       payload: { panelId: 'panelB', targetTabGroupId: 'tg_left', position: 'right' },
     });
-    // Edge dock creates a new split — original tg_left should be expanded for usability
-    const tg = findTabGroupById(next.layout, 'tg_left');
-    expect(tg?.headerCollapsed).toBeUndefined();
-    expect(tg?.panels).toEqual(['panelA']);
+    expect(next).toBe(state);
   });
 });
 
@@ -171,33 +164,21 @@ describe('MOVE_PANEL with collapsed target', () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('DOCK_FLOATING with collapsed target', () => {
-  it('clears headerCollapsed when docking floating panel back to collapsed source group', () => {
-    // Start with collapsed single-panel, float it, then dock back
-    let state = createCollapsedSinglePanelState();
-    // Add a second panel so layout isn't empty after floating
-    state = dockReducer(state, {
-      type: 'ADD_PANEL',
-      payload: { panelId: 'panelB', title: 'Panel B' },
-    });
-    // The ADD_PANEL should have already cleared collapse, but let's set it up differently
-    // Use a two-group state where left is collapsed, float panelB, then dock it to tg_left
-    state = createTwoGroupState({ leftCollapsed: true });
-    // Float panelB
+  it('rejects docking a floating panel onto a header-collapsed group', () => {
+    let state = createTwoGroupState({ leftCollapsed: true });
     state = dockReducer(state, {
       type: 'FLOAT_PANEL',
       payload: { panelId: 'panelB', x: 100, y: 100, width: 300, height: 200 },
     });
     expect(state.floatingPanels).toHaveLength(1);
 
-    // Dock panelB to collapsed tg_left
     const next = dockReducer(state, {
       type: 'DOCK_FLOATING',
       payload: { panelId: 'panelB', targetTabGroupId: 'tg_left', position: 'center' },
     });
-    const tg = findTabGroupById(next.layout, 'tg_left');
-    expect(tg?.headerCollapsed).toBeUndefined();
-    expect(tg?.panels).toContain('panelB');
-    expect(next.floatingPanels).toHaveLength(0);
+    // Drop refused — state unchanged, panel still floating
+    expect(next).toBe(state);
+    expect(next.floatingPanels).toHaveLength(1);
   });
 
   it('clears headerCollapsed when docking back to saved sourceTabGroupId', () => {
@@ -651,45 +632,43 @@ describe('TabGroupView — single/multi panel transitions', () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('Compound edge cases', () => {
-  it('SET_HEADER_COLLAPSED → MOVE_PANEL center → headerCollapsed cleared', () => {
+  it('SET_HEADER_COLLAPSED → MOVE_PANEL center is rejected', () => {
     let state = createTwoGroupState();
     state = dockReducer(state, {
       type: 'SET_HEADER_COLLAPSED',
       payload: { tabGroupId: 'tg_left', collapsed: true },
     });
-    const tg1 = findTabGroupById(state.layout, 'tg_left');
-    expect(tg1?.headerCollapsed).toBe(true);
-
+    const before = state;
     state = dockReducer(state, {
       type: 'MOVE_PANEL',
       payload: { panelId: 'panelC', targetTabGroupId: 'tg_left', position: 'center' },
     });
-    const tg2 = findTabGroupById(state.layout, 'tg_left');
-    expect(tg2?.headerCollapsed).toBeUndefined();
-    expect(tg2?.panels).toContain('panelC');
-    expect(tg2?.panels).toContain('panelA');
+    // Drop refused — collapsed pane stays untouched
+    expect(state).toBe(before);
+    const tg = findTabGroupById(state.layout, 'tg_left');
+    expect(tg?.headerCollapsed).toBe(true);
+    expect(tg?.panels).toEqual(['panelA']);
   });
 
-  it('collapse → float → dock back clears collapsed state', () => {
+  it('collapse → float → dock back to collapsed source is rejected', () => {
     let state = createTwoGroupState();
-    // Collapse tg_left
     state = dockReducer(state, {
       type: 'SET_HEADER_COLLAPSED',
       payload: { tabGroupId: 'tg_left', collapsed: true },
     });
-    // Float panelB
     state = dockReducer(state, {
       type: 'FLOAT_PANEL',
       payload: { panelId: 'panelB', x: 100, y: 100, width: 300, height: 200 },
     });
-    // Dock panelB to collapsed tg_left
+    const before = state;
     state = dockReducer(state, {
       type: 'DOCK_FLOATING',
       payload: { panelId: 'panelB', targetTabGroupId: 'tg_left', position: 'center' },
     });
+    expect(state).toBe(before);
     const tg = findTabGroupById(state.layout, 'tg_left');
-    expect(tg?.headerCollapsed).toBeUndefined();
-    expect(tg?.panels).toHaveLength(2);
+    expect(tg?.headerCollapsed).toBe(true);
+    expect(tg?.panels).toEqual(['panelA']);
   });
 
   it('collapse → unpin → pin back clears collapsed on source group', () => {
