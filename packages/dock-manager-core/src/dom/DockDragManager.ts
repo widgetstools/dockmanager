@@ -521,6 +521,8 @@ export class DockDragManager {
       const htmlEl = el as HTMLElement;
       const attr = htmlEl.getAttribute?.('data-dock-target');
       if (!attr) continue;
+      // Header-collapsed panes refuse drops
+      if (htmlEl.hasAttribute('data-header-collapsed')) continue;
 
       // Document host enforcement: if source panel is documentOnly,
       // only allow drops on document host tab groups

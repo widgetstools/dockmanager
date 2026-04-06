@@ -210,11 +210,19 @@ export class TabGroupView {
       return prev.title !== curr.title || prev.icon !== curr.icon || prev.badge !== curr.badge;
     });
 
-    // Sync header collapsed state from serialized layout
-    const nodeCollapsed = !!node.headerCollapsed;
-    if (nodeCollapsed !== this.headerCollapsed && node.panels.length === 1) {
+    // Sync header collapsed state from serialized layout.
+    // Force-clear when multi-tab — collapsed state is only valid for single-tab groups.
+    const isSingleTab = node.panels.length === 1;
+    const nodeCollapsed = !!node.headerCollapsed && isSingleTab;
+    const wasCollapsed = this.headerCollapsed;
+    if (nodeCollapsed !== wasCollapsed) {
       this.headerCollapsed = nodeCollapsed;
       this.applyHeaderCollapsed();
+    }
+    // If we forced an uncollapse because the group is no longer single-tab,
+    // notify the reducer so any persisted collapsed state gets cleared.
+    if (!isSingleTab && (wasCollapsed || node.headerCollapsed)) {
+      this.callbacks.onSetHeaderCollapsed(node.id, false);
     }
 
     if (panelsChanged) {
@@ -307,6 +315,12 @@ export class TabGroupView {
     this.leftSlotDisposable?.dispose();
     this.rightSlotDisposable?.dispose();
 
+    // Cleanup header collapse pill and hover zone
+    this.headerCollapsePill?.remove();
+    this.headerCollapsePill = null;
+    this.headerHoverZone?.remove();
+    this.headerHoverZone = null;
+
     if (this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
@@ -333,19 +347,28 @@ export class TabGroupView {
     const isSingleTab = this.node.panels.length === 1;
 
     if (isSingleTab && !this.headerCollapsePill) {
-      // Create the pill toggle button
+      // Create the up-arrow button (hides the header)
       this.headerCollapsePill = document.createElement('button');
       this.headerCollapsePill.className = 'dock-header-collapse-pill';
-      this.headerCollapsePill.setAttribute('aria-label', 'Toggle header');
+      this.headerCollapsePill.setAttribute('aria-label', 'Hide header');
+      this.headerCollapsePill.title = 'Hide header';
+      this.headerCollapsePill.innerHTML =
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>';
       this.headerCollapsePill.addEventListener('click', (e) => {
         e.stopPropagation();
         this.toggleHeaderCollapsed();
       });
       this.headerEl.appendChild(this.headerCollapsePill);
 
-      // Create the hover zone (overlays top of content area when header is collapsed)
+      // Create the hover zone (overlays top of content area when header is collapsed).
+      // It hosts a down-arrow affordance that reveals the header on click.
       this.headerHoverZone = document.createElement('div');
       this.headerHoverZone.className = 'dock-header-hover-zone';
+      this.headerHoverZone.setAttribute('role', 'button');
+      this.headerHoverZone.setAttribute('aria-label', 'Show header');
+      this.headerHoverZone.title = 'Show header';
+      this.headerHoverZone.innerHTML =
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
       this.headerHoverZone.addEventListener('click', () => {
         this.toggleHeaderCollapsed();
       });
@@ -372,14 +395,14 @@ export class TabGroupView {
   }
 
   private applyHeaderCollapsed(): void {
+    // Note: data-dock-target is always kept so drag/drop, indicator detection,
+    // and tab lookup queries continue to work when the header is collapsed.
     if (this.headerCollapsed) {
       this.headerEl.style.display = 'none';
       this.element.setAttribute('data-header-collapsed', '');
-      this.element.removeAttribute('data-dock-target');
     } else {
       this.headerEl.style.display = '';
       this.element.removeAttribute('data-header-collapsed');
-      this.element.setAttribute('data-dock-target', this.node.id);
     }
   }
 
@@ -525,7 +548,7 @@ export class TabGroupView {
     this.scrollLeftBtn = document.createElement('button');
     this.scrollLeftBtn.style.cssText = scrollBtnStyle;
     this.scrollLeftBtn.setAttribute('aria-label', 'Scroll tabs left');
-    this.scrollLeftBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>';
+    this.scrollLeftBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>';
     this.scrollLeftBtn.addEventListener('mousedown', (e) => {
       e.stopPropagation();
       e.preventDefault();
@@ -538,7 +561,7 @@ export class TabGroupView {
     this.scrollRightBtn = document.createElement('button');
     this.scrollRightBtn.style.cssText = scrollBtnStyle;
     this.scrollRightBtn.setAttribute('aria-label', 'Scroll tabs right');
-    this.scrollRightBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>';
+    this.scrollRightBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>';
     this.scrollRightBtn.addEventListener('mousedown', (e) => {
       e.stopPropagation();
       e.preventDefault();

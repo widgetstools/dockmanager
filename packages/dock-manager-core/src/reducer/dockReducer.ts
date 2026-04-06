@@ -170,6 +170,8 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       if (sourceGroup === targetTabGroupId && position === 'center') return state;
       const targetGroup = findTabGroupById(state.layout, targetTabGroupId);
       if (sourceGroup === targetTabGroupId && targetGroup && targetGroup.panels.length === 1) return state;
+      // Reject drops onto a header-collapsed group
+      if (targetGroup?.headerCollapsed && sourceGroup !== targetTabGroupId) return state;
 
       // Document host enforcement: documentOnly panels can only move to document host groups
       const sourcePanel = state.panels[panelId];
@@ -182,8 +184,8 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       }
 
       let layout = movePanel(state.layout, panelId, targetTabGroupId, position);
-      // Clear headerCollapsed on target group when a panel is docked into it (center)
-      if (position === 'center' && targetGroup?.headerCollapsed) {
+      // Clear headerCollapsed on target group whenever something is docked into/around it
+      if (targetGroup?.headerCollapsed) {
         layout = updateTabGroup(layout, targetTabGroupId, tg => ({
           ...tg,
           headerCollapsed: undefined,
@@ -233,6 +235,12 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
         ? targetTabGroupId
         : null;
 
+      // Reject explicit drops onto a header-collapsed group
+      if (target) {
+        const explicitTarget = findTabGroupById(state.layout, target);
+        if (explicitTarget?.headerCollapsed) return state;
+      }
+
       // If no explicit target, try to dock back to the original tab group
       if (!target && floatingEntry?.sourceTabGroupId) {
         // Verify the source group still exists in the layout
@@ -262,8 +270,8 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
           : insertBySplit(state.layout, target, panelId, position))
         : { type: 'tabgroup' as const, id: genId('tg'), panels: [panelId], activePanel: panelId };
 
-      // Clear headerCollapsed when docking into a collapsed group (center)
-      if (target && position === 'center') {
+      // Clear headerCollapsed when docking into/around a collapsed group
+      if (target) {
         const targetGroup = findTabGroupById(state.layout, target);
         if (targetGroup?.headerCollapsed) {
           layout = updateTabGroup(layout, target, tg => ({
