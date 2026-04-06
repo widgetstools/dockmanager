@@ -282,7 +282,7 @@ dock-manager *,
   background: hsl(var(--dock-surface) / 0.85);
   color: hsl(var(--dock-text) / 0.9);
   cursor: pointer;
-  opacity: 0.85;
+  opacity: 0;
   transition: opacity 0.15s, background-color 0.15s, color 0.15s, border-color 0.15s;
   padding: 0;
   z-index: 2;
@@ -308,17 +308,26 @@ dock-manager *,
   top: 0;
   left: 0;
   right: 0;
-  height: 18px;
+  height: 20px;
   z-index: 3;
   cursor: pointer;
   display: none;
   pointer-events: none;
   align-items: center;
   justify-content: center;
-  color: hsl(var(--dock-text) / 0.85);
-  background: hsl(var(--dock-surface) / 0.6);
-  border-bottom: 1px solid hsl(var(--dock-text) / 0.2);
+  color: hsl(var(--dock-text) / 0.9);
+  background: transparent;
   transition: color 0.15s, background-color 0.15s;
+}
+
+/* Icon inside the hover zone is hidden until the user hovers it */
+.dock-header-hover-zone > svg {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.dock-header-hover-zone:hover > svg {
+  opacity: 1;
 }
 
 .dock-tab-group[data-header-collapsed] > .dock-header-hover-zone {
@@ -327,7 +336,7 @@ dock-manager *,
 }
 
 .dock-header-hover-zone:hover {
-  background: hsl(var(--dock-text) / 0.12);
+  background: hsl(var(--dock-text) / 0.08);
   color: hsl(var(--dock-text));
 }
 
