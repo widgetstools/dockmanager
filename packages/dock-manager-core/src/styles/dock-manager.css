@@ -273,8 +273,8 @@ dock-manager *,
 .dock-header-collapse-pill {
   position: absolute;
   top: 50%;
-  right: 6px;
-  transform: translateY(-50%);
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: 18px;
   height: 18px;
   border-radius: 3px;
