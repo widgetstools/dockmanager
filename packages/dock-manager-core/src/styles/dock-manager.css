@@ -267,23 +267,28 @@ dock-manager *,
   opacity: 0.9;
 }
 
-/* ── Header collapse pill (single-tab panes) ── */
+/* ── Header hide/show arrow buttons (single-tab panes) ── */
 
+/* Up-arrow button shown in the header — hides the header on click */
 .dock-header-collapse-pill {
   position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 32px;
-  height: 4px;
-  border-radius: 2px;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
   border: none;
-  background: hsl(var(--dock-text) / 0.15);
+  background: transparent;
+  color: hsl(var(--dock-text) / 0.6);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s, background-color 0.15s;
+  transition: opacity 0.15s, background-color 0.15s, color 0.15s;
   padding: 0;
   z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .dock-panel-header:hover .dock-header-collapse-pill {
@@ -291,10 +296,11 @@ dock-manager *,
 }
 
 .dock-header-collapse-pill:hover {
-  background: hsl(var(--dock-text) / 0.3);
+  background: hsl(var(--dock-text) / 0.1);
+  color: hsl(var(--dock-text));
 }
 
-/* Hover zone at top edge when header is collapsed */
+/* Down-arrow hover zone at top edge — shows the header when clicked */
 .dock-header-hover-zone {
   position: absolute;
   top: 0;
@@ -305,33 +311,20 @@ dock-manager *,
   cursor: pointer;
   display: none;
   pointer-events: none;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--dock-text) / 0.4);
+  transition: color 0.15s, background-color 0.15s;
 }
 
 .dock-tab-group[data-header-collapsed] > .dock-header-hover-zone {
-  display: block;
+  display: flex;
   pointer-events: auto;
 }
 
-.dock-header-hover-zone::after {
-  content: '';
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 32px;
-  height: 4px;
-  border-radius: 2px;
-  background: hsl(var(--dock-text) / 0.15);
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.dock-header-hover-zone:hover::after {
-  opacity: 1;
-}
-
-.dock-header-hover-zone:hover::after {
-  background: hsl(var(--dock-text) / 0.3);
+.dock-header-hover-zone:hover {
+  background: hsl(var(--dock-text) / 0.06);
+  color: hsl(var(--dock-text));
 }
 
 .dock-splitter {

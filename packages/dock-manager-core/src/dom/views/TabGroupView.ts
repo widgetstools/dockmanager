@@ -347,19 +347,28 @@ export class TabGroupView {
     const isSingleTab = this.node.panels.length === 1;
 
     if (isSingleTab && !this.headerCollapsePill) {
-      // Create the pill toggle button
+      // Create the up-arrow button (hides the header)
       this.headerCollapsePill = document.createElement('button');
       this.headerCollapsePill.className = 'dock-header-collapse-pill';
-      this.headerCollapsePill.setAttribute('aria-label', 'Toggle header');
+      this.headerCollapsePill.setAttribute('aria-label', 'Hide header');
+      this.headerCollapsePill.title = 'Hide header';
+      this.headerCollapsePill.innerHTML =
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>';
       this.headerCollapsePill.addEventListener('click', (e) => {
         e.stopPropagation();
         this.toggleHeaderCollapsed();
       });
       this.headerEl.appendChild(this.headerCollapsePill);
 
-      // Create the hover zone (overlays top of content area when header is collapsed)
+      // Create the hover zone (overlays top of content area when header is collapsed).
+      // It hosts a down-arrow affordance that reveals the header on click.
       this.headerHoverZone = document.createElement('div');
       this.headerHoverZone.className = 'dock-header-hover-zone';
+      this.headerHoverZone.setAttribute('role', 'button');
+      this.headerHoverZone.setAttribute('aria-label', 'Show header');
+      this.headerHoverZone.title = 'Show header';
+      this.headerHoverZone.innerHTML =
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
       this.headerHoverZone.addEventListener('click', () => {
         this.toggleHeaderCollapsed();
       });
