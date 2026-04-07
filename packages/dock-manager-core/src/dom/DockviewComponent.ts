@@ -864,21 +864,40 @@ export class DockviewComponent {
       // Check if structure changed
       const containers = existing.getChildContainers();
       if (containers.length === node.children.length) {
-        // Update sizes
-        existing.updateSizes(node.sizes);
-        // Recursively update children
+        // Pre-resolve children and check for DOM cycles. A cycle occurs when a
+        // drop swaps an ancestor with one of its descendants — the reused outer
+        // SplitView would be asked to appendChild a node that currently contains
+        // its own destination container, throwing HierarchyRequestError.
+        const childEls: HTMLElement[] = [];
+        let cycle = false;
         for (let i = 0; i < node.children.length; i++) {
           const childEl = this.renderLayoutNode(node.children[i]);
-          const container = containers[i];
-          if (container.firstChild !== childEl) {
-            // Remove old children individually to avoid detaching reusable elements
-            while (container.firstChild) {
-              container.removeChild(container.firstChild);
-            }
-            container.appendChild(childEl);
+          if (childEl === existing.element || childEl.contains(containers[i])) {
+            cycle = true;
+            break;
           }
+          childEls.push(childEl);
         }
-        return existing.element;
+        if (!cycle) {
+          existing.updateSizes(node.sizes);
+          for (let i = 0; i < node.children.length; i++) {
+            const childEl = childEls[i];
+            const container = containers[i];
+            if (container.firstChild !== childEl) {
+              while (container.firstChild) {
+                container.removeChild(container.firstChild);
+              }
+              container.appendChild(childEl);
+            }
+          }
+          return existing.element;
+        }
+        // Cycle detected — fall through to recreate this SplitView fresh.
+        if (existing.element.parentNode) {
+          existing.element.parentNode.removeChild(existing.element);
+        }
+        existing.dispose();
+        this.splitViews.delete(node.id);
       } else {
         // Structure changed — detach the element from the DOM before disposing
         // so that dispose() doesn't try to remove an already-orphaned element.
