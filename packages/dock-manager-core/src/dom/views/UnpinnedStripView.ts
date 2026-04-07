@@ -259,7 +259,23 @@ export class UnpinnedStripView {
     contentContainer.style.cssText = 'flex:1;overflow:hidden;min-height:0;position:relative;';
     this.flyoutEl.appendChild(contentContainer);
 
+    // Attach the flyout to the DOM BEFORE creating content. The cached content
+    // container's ResizeObserver only fires correctly if its parent chain has a
+    // resolvable layout at mount time; otherwise it stays at 0x0 until something
+    // else mutates the size (which is why a manual resize used to fix it).
+    this.stripEl.parentElement?.appendChild(this.flyoutEl);
+
     this.flyoutContentDisposable = this.callbacks.createContent(panelId, contentContainer);
+
+    // Force a layout flush so any synchronous getBoundingClientRect() inside
+    // the user's content sees the real flyout size, not 0x0.
+    void contentContainer.getBoundingClientRect();
+
+    // Belt-and-braces: on the next frame, read layout again so any
+    // ResizeObserver delivery queue is flushed before the user sees the flyout.
+    requestAnimationFrame(() => {
+      if (this.flyoutEl) void this.flyoutEl.getBoundingClientRect();
+    });
 
     // Resize handle on the flyout edge — hover handled by CSS: .dock-flyout-resize:hover
     const resizeHandle = document.createElement('div');
@@ -320,9 +336,6 @@ export class UnpinnedStripView {
     });
 
     this.flyoutEl.appendChild(resizeHandle);
-
-    // Append flyout to the strip's parent (which should be position:relative)
-    this.stripEl.parentElement?.appendChild(this.flyoutEl);
   }
 
   private closeFlyout(): void {

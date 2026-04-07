@@ -173,7 +173,7 @@ dock-manager *,
   margin-bottom: -1px;
   transition: color 0.15s, background-color 0.15s;
   position: relative;
-  box-shadow: -1px 0 0 hsl(var(--dock-border) / 0.6), 1px 0 0 hsl(var(--dock-border) / 0.6), 0 -1px 0 hsl(var(--dock-border) / 0.6);
+  box-shadow: -1px 0 0 hsl(var(--dock-border) / 0.7), 1px 0 0 hsl(var(--dock-border) / 0.7), 0 -1px 0 hsl(var(--dock-border) / 0.7);
 }
 
 .dock-tab:hover {
@@ -351,7 +351,7 @@ dock-manager *,
 
 .dock-splitter {
   flex-shrink: 0;
-  background: hsl(var(--dock-splitter));
+  background: hsl(var(--dock-splitter) / 0.7);
   position: relative;
   z-index: 1;
   transition: background-color 0.15s;
