@@ -119,7 +119,7 @@ export class TabGroupView {
     this.headerEl = document.createElement('div');
     this.headerEl.className = 'dock-panel-header';
     this.headerEl.style.cssText =
-      'display:flex;align-items:flex-end;justify-content:space-between;min-height:36px;padding:0 12px;flex-shrink:0;';
+      'display:flex;align-items:center;justify-content:space-between;min-height:36px;padding:0 12px;flex-shrink:0;';
     this.element.appendChild(this.headerEl);
 
     // Create content area
@@ -127,7 +127,7 @@ export class TabGroupView {
     this.contentAreaEl.setAttribute('role', 'tabpanel');
     this.contentAreaEl.id = `panel-${node.activePanel}`;
     this.contentAreaEl.setAttribute('aria-labelledby', `tab-${node.activePanel}`);
-    this.contentAreaEl.style.cssText = 'flex:1;position:relative;overflow:hidden;border-top:1px solid hsl(var(--dock-border));box-sizing:border-box;';
+    this.contentAreaEl.style.cssText = 'flex:1;position:relative;overflow:hidden;border-top:1px solid hsl(var(--dock-border) / 0.7);box-sizing:border-box;';
     this.element.appendChild(this.contentAreaEl);
 
     // For bottom tabs: create a separate bottom tab strip element
@@ -135,7 +135,7 @@ export class TabGroupView {
       this.bottomTabStripEl = document.createElement('div');
       this.bottomTabStripEl.className = 'dock-panel-header dock-bottom-tab-strip';
       this.bottomTabStripEl.style.cssText =
-        'display:flex;align-items:center;min-height:28px;padding:0 8px;flex-shrink:0;border-top:1px solid hsl(var(--dock-border));border-bottom:none;';
+        'display:flex;align-items:center;min-height:28px;padding:0 8px;flex-shrink:0;border-top:1px solid hsl(var(--dock-border) / 0.7);border-bottom:none;';
       this.element.appendChild(this.bottomTabStripEl);
     }
 
@@ -233,7 +233,7 @@ export class TabGroupView {
         this.bottomTabStripEl = document.createElement('div');
         this.bottomTabStripEl.className = 'dock-panel-header dock-bottom-tab-strip';
         this.bottomTabStripEl.style.cssText =
-          'display:flex;align-items:center;min-height:28px;padding:0 8px;flex-shrink:0;border-top:1px solid hsl(var(--dock-border));border-bottom:none;';
+          'display:flex;align-items:center;min-height:28px;padding:0 8px;flex-shrink:0;border-top:1px solid hsl(var(--dock-border) / 0.7);border-bottom:none;';
         this.element.appendChild(this.bottomTabStripEl);
       }
       // Remove bottom tab strip if transitioning to single-panel

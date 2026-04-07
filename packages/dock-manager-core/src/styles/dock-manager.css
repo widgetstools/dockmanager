@@ -17,7 +17,7 @@
   --dock-bg: 220 20% 96%;
   --dock-surface: 0 0% 100%;
   --dock-surface-alt: 220 14% 94%;
-  --dock-panel-header: 220 14% 92%;
+  --dock-panel-header: 220 14% 85%;
   --dock-tab-bar: 220 14% 90%;
   --dock-tab-active: 0 0% 100%;
   --dock-tab-text: 0 0% 38%;
@@ -25,8 +25,8 @@
   --dock-text: 0 0% 12%;
   --dock-text-secondary: 0 0% 35%;
   --dock-text-muted: 0 0% 50%;
-  --dock-border: 220 13% 55%;
-  --dock-splitter: 220 13% 55%;
+  --dock-border: 220 13% 75%;
+  --dock-splitter: 220 13% 60%;
   --dock-splitter-hover: 217 91% 55%;
   --dock-hover: 220 14% 90%;
   --dock-primary: 217 91% 48%;
@@ -47,7 +47,7 @@
   --dock-bg: 222 47% 7%;
   --dock-surface: 222 47% 10%;
   --dock-surface-alt: 222 47% 13%;
-  --dock-panel-header: 222 47% 15%;
+  --dock-panel-header: 222 47% 18%;
   --dock-tab-bar: 222 47% 12%;
   --dock-tab-active: 222 47% 10%;
   --dock-tab-text: 215 20% 65%;
@@ -55,8 +55,8 @@
   --dock-text: 210 40% 96%;
   --dock-text-secondary: 215 20% 70%;
   --dock-text-muted: 215 15% 50%;
-  --dock-border: 217 33% 50%;
-  --dock-splitter: 217 33% 50%;
+  --dock-border: 217 33% 28%;
+  --dock-splitter: 217 33% 45%;
   --dock-splitter-hover: 217 91% 60%;
   --dock-hover: 217 33% 18%;
   --dock-primary: 217 91% 72%;
@@ -142,13 +142,11 @@ dock-manager *,
   background: hsl(var(--dock-surface));
   overflow: hidden;
   position: relative;
-  border: 1px solid hsl(var(--dock-border));
-  box-sizing: border-box;
 }
 
 .dock-panel-header {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   min-height: 36px;
   padding: 0 8px;
   background: hsl(var(--dock-panel-header));
@@ -255,6 +253,10 @@ dock-manager *,
 .dock-tab-group > [role="tabpanel"] {
   border-top: 1px solid hsl(var(--dock-border));
   box-sizing: border-box;
+}
+
+.dock-tab-group[data-header-collapsed] > [role="tabpanel"] {
+  border-top-color: transparent !important;
 }
 
 .dock-action-btn {
