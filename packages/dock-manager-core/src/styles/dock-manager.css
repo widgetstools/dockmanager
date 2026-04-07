@@ -25,8 +25,8 @@
   --dock-text: 0 0% 12%;
   --dock-text-secondary: 0 0% 35%;
   --dock-text-muted: 0 0% 50%;
-  --dock-border: 220 13% 82%;
-  --dock-splitter: 220 13% 82%;
+  --dock-border: 220 13% 55%;
+  --dock-splitter: 220 13% 55%;
   --dock-splitter-hover: 217 91% 55%;
   --dock-hover: 220 14% 90%;
   --dock-primary: 217 91% 48%;
@@ -55,8 +55,8 @@
   --dock-text: 210 40% 96%;
   --dock-text-secondary: 215 20% 70%;
   --dock-text-muted: 215 15% 50%;
-  --dock-border: 217 33% 24%;
-  --dock-splitter: 217 33% 24%;
+  --dock-border: 217 33% 50%;
+  --dock-splitter: 217 33% 50%;
   --dock-splitter-hover: 217 91% 60%;
   --dock-hover: 217 33% 18%;
   --dock-primary: 217 91% 72%;
@@ -142,6 +142,8 @@ dock-manager *,
   background: hsl(var(--dock-surface));
   overflow: hidden;
   position: relative;
+  border: 1px solid hsl(var(--dock-border));
+  box-sizing: border-box;
 }
 
 .dock-panel-header {
@@ -248,6 +250,11 @@ dock-manager *,
   flex: 1;
   overflow: hidden;
   position: relative;
+}
+
+.dock-tab-group > [role="tabpanel"] {
+  border-top: 1px solid hsl(var(--dock-border));
+  box-sizing: border-box;
 }
 
 .dock-action-btn {

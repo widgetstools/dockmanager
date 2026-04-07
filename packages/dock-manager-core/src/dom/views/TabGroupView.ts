@@ -127,7 +127,7 @@ export class TabGroupView {
     this.contentAreaEl.setAttribute('role', 'tabpanel');
     this.contentAreaEl.id = `panel-${node.activePanel}`;
     this.contentAreaEl.setAttribute('aria-labelledby', `tab-${node.activePanel}`);
-    this.contentAreaEl.style.cssText = 'flex:1;position:relative;overflow:hidden;';
+    this.contentAreaEl.style.cssText = 'flex:1;position:relative;overflow:hidden;border-top:1px solid hsl(var(--dock-border));box-sizing:border-box;';
     this.element.appendChild(this.contentAreaEl);
 
     // For bottom tabs: create a separate bottom tab strip element
