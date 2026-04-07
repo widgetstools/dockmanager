@@ -271,10 +271,20 @@ export class UnpinnedStripView {
     // the user's content sees the real flyout size, not 0x0.
     void contentContainer.getBoundingClientRect();
 
-    // Belt-and-braces: on the next frame, read layout again so any
-    // ResizeObserver delivery queue is flushed before the user sees the flyout.
+    // Some content frameworks (charts, virtualized lists, anything using
+    // ResizeObserver) latch onto a 0x0 size at mount time and never recover
+    // unless an actual size *change* is observed. Mimic what a manual resize
+    // does: bump the flyout size by 1px on the next frame, then restore it.
+    // This guarantees ResizeObserver fires on the content.
+    const nudgeSize = unpinned.size;
+    const sizeProp: 'width' | 'height' = isVertical ? 'width' : 'height';
     requestAnimationFrame(() => {
-      if (this.flyoutEl) void this.flyoutEl.getBoundingClientRect();
+      if (!this.flyoutEl) return;
+      this.flyoutEl.style[sizeProp] = `${nudgeSize + 1}px`;
+      requestAnimationFrame(() => {
+        if (!this.flyoutEl) return;
+        this.flyoutEl.style[sizeProp] = `${nudgeSize}px`;
+      });
     });
 
     // Resize handle on the flyout edge — hover handled by CSS: .dock-flyout-resize:hover
