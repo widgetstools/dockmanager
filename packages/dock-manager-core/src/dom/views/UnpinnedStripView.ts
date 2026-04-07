@@ -278,12 +278,13 @@ export class UnpinnedStripView {
     // This guarantees ResizeObserver fires on the content.
     const nudgeSize = unpinned.size;
     const sizeProp: 'width' | 'height' = isVertical ? 'width' : 'height';
+    const flyoutEl = this.flyoutEl;
     requestAnimationFrame(() => {
-      if (!this.flyoutEl) return;
-      this.flyoutEl.style[sizeProp] = `${nudgeSize + 1}px`;
+      if (!flyoutEl.isConnected) return;
+      flyoutEl.style[sizeProp] = `${nudgeSize + 1}px`;
       requestAnimationFrame(() => {
-        if (!this.flyoutEl) return;
-        this.flyoutEl.style[sizeProp] = `${nudgeSize}px`;
+        if (!flyoutEl.isConnected) return;
+        flyoutEl.style[sizeProp] = `${nudgeSize}px`;
       });
     });
 
