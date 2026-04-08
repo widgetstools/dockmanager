@@ -702,14 +702,25 @@ export class DockviewComponent {
       // Bump generation so old disposables become no-ops
       cached.generation++;
       const myGen = cached.generation;
+      const prevParent = cached.container.parentElement;
       // Reparent existing content container into the new parent
       parentContainer.appendChild(cached.container);
+      console.log(
+        `[FLYOUT_CONTENT] getOrCreateContent CACHE HIT panel=${panelId} gen=${myGen} prevParentTag=${prevParent?.tagName ?? 'NONE'} prevParentClass="${prevParent?.className ?? ''}" newParentTag=${parentContainer.tagName} newParentClass="${parentContainer.className}" cachedChildren=${cached.container.children.length} cachedInnerHTMLLen=${cached.container.innerHTML.length}`,
+      );
       return {
         dispose: () => {
           // Only detach if this is still the current generation
           // (prevents stale FloatingWindowView dispose from removing reparented content)
           if (cached.generation === myGen) {
+            console.log(
+              `[FLYOUT_CONTENT] dispose CACHE panel=${panelId} gen=${myGen} (current) → removing container`,
+            );
             cached.container.remove();
+          } else {
+            console.log(
+              `[FLYOUT_CONTENT] dispose CACHE panel=${panelId} gen=${myGen} STALE (current=${cached.generation}) → no-op`,
+            );
           }
         },
       };
@@ -720,7 +731,19 @@ export class DockviewComponent {
     container.style.cssText = 'width:100%;height:100%;overflow:hidden;';
     parentContainer.appendChild(container);
 
-    const disposable = this.options.createContent(panelId, container, this.getPanelApi(panelId));
+    let disposable: IDisposable;
+    try {
+      disposable = this.options.createContent(panelId, container, this.getPanelApi(panelId));
+      console.log(
+        `[FLYOUT_CONTENT] getOrCreateContent CACHE MISS panel=${panelId} hostCreateContent OK children=${container.children.length} innerHTMLLen=${container.innerHTML.length} hasDisposable=${!!disposable}`,
+      );
+    } catch (err) {
+      console.error(
+        `[FLYOUT_CONTENT] getOrCreateContent CACHE MISS panel=${panelId} hostCreateContent THREW`,
+        err,
+      );
+      throw err;
+    }
     const entry = { container, disposable, generation: 0 };
     this.contentCache.set(panelId, entry);
 
@@ -728,7 +751,14 @@ export class DockviewComponent {
       dispose: () => {
         // Only detach if this is still the current generation
         if (entry.generation === 0) {
+          console.log(
+            `[FLYOUT_CONTENT] dispose NEW panel=${panelId} (current) → removing container`,
+          );
           container.remove();
+        } else {
+          console.log(
+            `[FLYOUT_CONTENT] dispose NEW panel=${panelId} STALE (gen=${entry.generation}) → no-op`,
+          );
         }
       },
     };

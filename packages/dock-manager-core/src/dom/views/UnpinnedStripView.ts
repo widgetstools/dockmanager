@@ -265,11 +265,58 @@ export class UnpinnedStripView {
     // else mutates the size (which is why a manual resize used to fix it).
     this.stripEl.parentElement?.appendChild(this.flyoutEl);
 
-    this.flyoutContentDisposable = this.callbacks.createContent(panelId, contentContainer);
+    {
+      const r = this.flyoutEl.getBoundingClientRect();
+      console.log(
+        `[FLYOUT_CONTENT] attached panel=${panelId} edge=${this.edge} connected=${this.flyoutEl.isConnected} flyoutW=${r.width} flyoutH=${r.height}`,
+      );
+    }
+
+    try {
+      this.flyoutContentDisposable = this.callbacks.createContent(panelId, contentContainer);
+      const r = contentContainer.getBoundingClientRect();
+      console.log(
+        `[FLYOUT_CONTENT] createContent OK panel=${panelId} children=${contentContainer.children.length} firstTag=${contentContainer.firstElementChild?.tagName ?? 'NONE'} contentW=${r.width} contentH=${r.height} innerHTMLLen=${contentContainer.innerHTML.length}`,
+      );
+    } catch (err) {
+      console.error(`[FLYOUT_CONTENT] createContent THREW panel=${panelId}`, err);
+      throw err;
+    }
 
     // Force a layout flush so any synchronous getBoundingClientRect() inside
     // the user's content sees the real flyout size, not 0x0.
     void contentContainer.getBoundingClientRect();
+
+    const flyoutElForLog = this.flyoutEl;
+    const contentContainerForLog = contentContainer;
+    requestAnimationFrame(() => {
+      if (!flyoutElForLog.isConnected) {
+        console.warn(`[FLYOUT_CONTENT] post-rAF DETACHED panel=${panelId}`);
+        return;
+      }
+      const rect = contentContainerForLog.getBoundingClientRect();
+      const first = contentContainerForLog.firstElementChild as HTMLElement | null;
+      const firstRect = first?.getBoundingClientRect();
+      console.log(
+        `[FLYOUT_CONTENT] post-rAF panel=${panelId} contentW=${rect.width} contentH=${rect.height} firstTag=${first?.tagName ?? 'NONE'} firstW=${firstRect?.width ?? 0} firstH=${firstRect?.height ?? 0} firstDisplay=${first ? getComputedStyle(first).display : 'n/a'} firstVisibility=${first ? getComputedStyle(first).visibility : 'n/a'}`,
+      );
+    });
+
+    // Check 200ms later to see if content was moved/cleared by a framework
+    // change-detection cycle (e.g., Angular re-attaching a view to its
+    // original ViewContainerRef parent).
+    setTimeout(() => {
+      if (!flyoutElForLog.isConnected) {
+        console.warn(`[FLYOUT_CONTENT] +200ms DETACHED panel=${panelId}`);
+        return;
+      }
+      const r = contentContainerForLog.getBoundingClientRect();
+      const first = contentContainerForLog.firstElementChild as HTMLElement | null;
+      const firstRect = first?.getBoundingClientRect();
+      console.log(
+        `[FLYOUT_CONTENT] +200ms panel=${panelId} children=${contentContainerForLog.children.length} firstTag=${first?.tagName ?? 'NONE'} contentW=${r.width} contentH=${r.height} firstW=${firstRect?.width ?? 0} firstH=${firstRect?.height ?? 0} innerHTMLLen=${contentContainerForLog.innerHTML.length} parentSameAsFlyout=${contentContainerForLog.parentElement === flyoutElForLog}`,
+      );
+    }, 200);
 
     // Some content frameworks (charts, virtualized lists, canvases, anything
     // using ResizeObserver) latch onto a 0x0 size at mount time and never
@@ -385,10 +432,12 @@ export class UnpinnedStripView {
     this.resizeUp = null;
 
     if (this.flyoutContentDisposable) {
+      console.log(`[FLYOUT_CONTENT] closeFlyout edge=${this.edge} disposing content`);
       this.flyoutContentDisposable.dispose();
       this.flyoutContentDisposable = null;
     }
     if (this.flyoutEl) {
+      console.log(`[FLYOUT_CONTENT] closeFlyout edge=${this.edge} removing flyoutEl`);
       this.flyoutEl.remove();
       this.flyoutEl = null;
     }
