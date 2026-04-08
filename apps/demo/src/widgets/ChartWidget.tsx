@@ -6,11 +6,10 @@ import { useEffect, useRef, useState } from 'react';
  * if the container has a 0x0 box at mount time, the chart draws nothing until
  * something triggers a size change.
  */
+import type { PanelConfig } from '@widgetstools/dock-manager-core';
+
 interface ChartWidgetProps {
-  /** CSS color for the line and gradient fill. Defaults to blue. */
-  color?: string;
-  /** 'line' | 'bars' | 'area' — visual variant. */
-  variant?: 'line' | 'bars' | 'area';
+  panel?: PanelConfig;
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -19,7 +18,9 @@ function hexToRgb(hex: string): [number, number, number] {
   return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
 }
 
-export function ChartWidget({ color = '#3b82f6', variant = 'area' }: ChartWidgetProps = {}) {
+export function ChartWidget({ panel }: ChartWidgetProps = {}) {
+  const color = (panel?.widgetProps?.color as string) ?? '#3b82f6';
+  const variant = (panel?.widgetProps?.variant as 'line' | 'bars' | 'area') ?? 'area';
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });

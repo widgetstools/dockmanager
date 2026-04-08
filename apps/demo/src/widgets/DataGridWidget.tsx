@@ -46,7 +46,8 @@ const seed: Row[] = [
  * render blank if mounted into a 0x0 container. Good stress test for the
  * dock-manager's unpinned-flyout fix.
  */
-export function DataGridWidget({ dark = true }: { dark?: boolean } = {}) {
+export function DataGridWidget() {
+  const dark = true;
   const [rowData] = useState<Row[]>(seed);
 
   const columnDefs = useMemo<ColDef<Row>[]>(

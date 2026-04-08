@@ -26,6 +26,8 @@ import { TerminalWidgetComponent } from './widgets/terminal-widget.component';
 import { FileTreeWidgetComponent } from './widgets/file-tree-widget.component';
 import { ProblemsWidgetComponent } from './widgets/problems-widget.component';
 import { PlaceholderWidgetComponent } from './widgets/placeholder-widget.component';
+import { ChartWidgetComponent } from './widgets/chart-widget.component';
+import { DataGridWidgetComponent } from './widgets/datagrid-widget.component';
 
 // Font Awesome
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
@@ -290,6 +292,8 @@ export class AppComponent implements OnDestroy, AfterViewInit {
     'file-tree': FileTreeWidgetComponent,
     'problems': ProblemsWidgetComponent,
     'placeholder': PlaceholderWidgetComponent,
+    'chart': ChartWidgetComponent,
+    'datagrid': DataGridWidgetComponent,
   };
 
   /** Custom tab renderer with Font Awesome icons and unsaved badges */
