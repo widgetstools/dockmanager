@@ -266,7 +266,16 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
         }
       }
 
-      if (content !== null && entry.container.isConnected) {
+      // NOTE: Do NOT gate this on `entry.container.isConnected`.
+      // dock-manager-core caches content containers across detach/reattach
+      // cycles (e.g. unpinned panels live detached between flyout opens).
+      // If we skip createPortal while detached, React unmounts the widget
+      // subtree and the cached container becomes empty — so when the
+      // flyout next reparents it, the user sees a blank pane. Letting the
+      // portal render into a detached node is supported by React; the DOM
+      // it produces lives inside the container and travels with it on
+      // reattach.
+      if (content !== null) {
         portalElements.push(createPortal(content, entry.container, key));
       }
     });
