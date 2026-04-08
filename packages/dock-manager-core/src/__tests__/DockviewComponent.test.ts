@@ -1064,11 +1064,19 @@ describe('DockviewComponent', () => {
       expect(restoredContent).not.toBeNull();
       expect(restoredContent?.textContent).toBe('Content for panel1');
 
-      // Verify it lives inside a tab group, not a stale overlay
+      // Verify a tab group exists (its content area is the placeholder for
+      // the persistent container in the render root) and the maximize
+      // overlay is gone.
       const tabGroup = root.querySelector('.dock-tab-group');
       expect(tabGroup).not.toBeNull();
-      const contentInTabGroup = tabGroup!.querySelector('.test-content[data-content-panel="panel1"]');
-      expect(contentInTabGroup).not.toBeNull();
+      // Under stable render containers the persistent container is
+      // reparented into the tab group's placeholder when bound. Verify it
+      // exists somewhere in the root and holds the content.
+      const persistentContainer = root.querySelector(
+        '[data-panel-container-id="panel1"]',
+      );
+      expect(persistentContainer).not.toBeNull();
+      expect(persistentContainer!.querySelector('.test-content[data-content-panel="panel1"]')).not.toBeNull();
     });
 
     it('DOCK_FLOATING preserves content visibility after float from multi-tab group', () => {

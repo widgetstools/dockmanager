@@ -1,11 +1,15 @@
 import type { PanelConfig } from '../../types/dock';
 import { iconRestore } from '../icons';
+import {
+  CompositeDisposable,
+  MutableDisposable,
+  listenEvent,
+  type IDisposable,
+} from '../../utils/lifecycle';
 
 // ─── Interfaces ──────────────────────────────────────────────────────
 
-export interface IDisposable {
-  dispose(): void;
-}
+export type { IDisposable };
 
 export interface MaximizeOverlayViewCallbacks {
   onRestorePanel: (panelId: string) => void;
@@ -25,8 +29,11 @@ export class MaximizeOverlayView {
   private panel: PanelConfig;
   private callbacks: MaximizeOverlayViewCallbacks;
 
-  // Content management
-  private contentDisposable: IDisposable | null = null;
+  // All listeners + the content disposable live here so dispose() is one call.
+  private readonly disposables = new CompositeDisposable();
+  // Content disposable lives in a slot so it can be replaced if we ever
+  // re-mount without rebuilding the overlay.
+  private readonly contentSlot = new MutableDisposable();
 
   constructor(
     panelId: string,
@@ -36,6 +43,7 @@ export class MaximizeOverlayView {
     this.panelId = panelId;
     this.panel = panel;
     this.callbacks = callbacks;
+    this.disposables.add(this.contentSlot);
 
     // Root overlay
     this.element = document.createElement('div');
@@ -68,8 +76,14 @@ export class MaximizeOverlayView {
       'padding:4px;color:hsl(var(--dock-text-muted));cursor:pointer;background:none;border:none;display:flex;align-items:center;transition:color 0.15s;';
     restoreBtn.title = 'Restore';
     restoreBtn.innerHTML = iconRestore();
-    restoreBtn.addEventListener('mouseenter', () => { restoreBtn.style.color = 'hsl(var(--dock-text))'; });
-    restoreBtn.addEventListener('mouseleave', () => { restoreBtn.style.color = 'hsl(var(--dock-text-muted))'; });
+    this.disposables.add(
+      listenEvent(restoreBtn, 'mouseenter', () => {
+        restoreBtn.style.color = 'hsl(var(--dock-text))';
+      }),
+      listenEvent(restoreBtn, 'mouseleave', () => {
+        restoreBtn.style.color = 'hsl(var(--dock-text-muted))';
+      }),
+    );
     headerEl.appendChild(restoreBtn);
 
     this.element.appendChild(headerEl);
@@ -80,14 +94,11 @@ export class MaximizeOverlayView {
     this.element.appendChild(contentEl);
 
     // Mount content
-    this.contentDisposable = this.callbacks.createContent(panelId, contentEl);
+    this.contentSlot.value = this.callbacks.createContent(panelId, contentEl);
   }
 
   dispose(): void {
-    if (this.contentDisposable) {
-      this.contentDisposable.dispose();
-      this.contentDisposable = null;
-    }
+    this.disposables.dispose();
     if (this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }

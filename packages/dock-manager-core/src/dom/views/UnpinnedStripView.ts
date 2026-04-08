@@ -1,11 +1,10 @@
 import type { DockEdge, UnpinnedPanel, PanelConfig } from '../../types/dock';
 import { iconClose, iconPin } from '../icons';
+import { MutableDisposable, type IDisposable } from '../../utils/lifecycle';
 
 // ─── Interfaces ──────────────────────────────────────────────────────
 
-export interface IDisposable {
-  dispose(): void;
-}
+export type { IDisposable };
 
 export interface UnpinnedStripViewCallbacks {
   onPinPanel: (panelId: string) => void;
@@ -34,7 +33,7 @@ export class UnpinnedStripView {
 
   // Flyout state
   private expandedPanelId: string | null = null;
-  private flyoutContentDisposable: IDisposable | null = null;
+  private readonly flyoutContentSlot = new MutableDisposable();
   private closeTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Bound handlers for cleanup
@@ -259,107 +258,12 @@ export class UnpinnedStripView {
     contentContainer.style.cssText = 'flex:1;overflow:hidden;min-height:0;position:relative;';
     this.flyoutEl.appendChild(contentContainer);
 
-    // Attach the flyout to the DOM BEFORE creating content. The cached content
-    // container's ResizeObserver only fires correctly if its parent chain has a
-    // resolvable layout at mount time; otherwise it stays at 0x0 until something
-    // else mutates the size (which is why a manual resize used to fix it).
+    // Attach the flyout to the DOM, then bind the persistent container into
+    // it. Stable render containers guarantee the panel container is already
+    // attached (in limbo) before bind, so any ResizeObserver inside the
+    // user's content has a resolvable layout at all times.
     this.stripEl.parentElement?.appendChild(this.flyoutEl);
-
-    {
-      const r = this.flyoutEl.getBoundingClientRect();
-      console.log(
-        `[FLYOUT_CONTENT] attached panel=${panelId} edge=${this.edge} connected=${this.flyoutEl.isConnected} flyoutW=${r.width} flyoutH=${r.height}`,
-      );
-    }
-
-    try {
-      this.flyoutContentDisposable = this.callbacks.createContent(panelId, contentContainer);
-      const r = contentContainer.getBoundingClientRect();
-      console.log(
-        `[FLYOUT_CONTENT] createContent OK panel=${panelId} children=${contentContainer.children.length} firstTag=${contentContainer.firstElementChild?.tagName ?? 'NONE'} contentW=${r.width} contentH=${r.height} innerHTMLLen=${contentContainer.innerHTML.length}`,
-      );
-    } catch (err) {
-      console.error(`[FLYOUT_CONTENT] createContent THREW panel=${panelId}`, err);
-      throw err;
-    }
-
-    // Force a layout flush so any synchronous getBoundingClientRect() inside
-    // the user's content sees the real flyout size, not 0x0.
-    void contentContainer.getBoundingClientRect();
-
-    const flyoutElForLog = this.flyoutEl;
-    const contentContainerForLog = contentContainer;
-    requestAnimationFrame(() => {
-      if (!flyoutElForLog.isConnected) {
-        console.warn(`[FLYOUT_CONTENT] post-rAF DETACHED panel=${panelId}`);
-        return;
-      }
-      const rect = contentContainerForLog.getBoundingClientRect();
-      const first = contentContainerForLog.firstElementChild as HTMLElement | null;
-      const firstRect = first?.getBoundingClientRect();
-      console.log(
-        `[FLYOUT_CONTENT] post-rAF panel=${panelId} contentW=${rect.width} contentH=${rect.height} firstTag=${first?.tagName ?? 'NONE'} firstW=${firstRect?.width ?? 0} firstH=${firstRect?.height ?? 0} firstDisplay=${first ? getComputedStyle(first).display : 'n/a'} firstVisibility=${first ? getComputedStyle(first).visibility : 'n/a'}`,
-      );
-    });
-
-    // Check 200ms later to see if content was moved/cleared by a framework
-    // change-detection cycle (e.g., Angular re-attaching a view to its
-    // original ViewContainerRef parent).
-    setTimeout(() => {
-      if (!flyoutElForLog.isConnected) {
-        console.warn(`[FLYOUT_CONTENT] +200ms DETACHED panel=${panelId}`);
-        return;
-      }
-      const r = contentContainerForLog.getBoundingClientRect();
-      const first = contentContainerForLog.firstElementChild as HTMLElement | null;
-      const firstRect = first?.getBoundingClientRect();
-      console.log(
-        `[FLYOUT_CONTENT] +200ms panel=${panelId} children=${contentContainerForLog.children.length} firstTag=${first?.tagName ?? 'NONE'} contentW=${r.width} contentH=${r.height} firstW=${firstRect?.width ?? 0} firstH=${firstRect?.height ?? 0} innerHTMLLen=${contentContainerForLog.innerHTML.length} parentSameAsFlyout=${contentContainerForLog.parentElement === flyoutElForLog}`,
-      );
-    }, 200);
-
-    // Some content frameworks (charts, virtualized lists, canvases, anything
-    // using ResizeObserver) latch onto a 0x0 size at mount time and never
-    // recover unless an actual size *change* is observed after they've been
-    // attached to the DOM. We pulse the flyout size multiple times to
-    // guarantee the observers inside the user's content fire:
-    //   (a) synchronously after attach (for code reading offsetWidth)
-    //   (b) on the next frame (for observers that queue after layout)
-    //   (c) via a ResizeObserver we own on the flyout — this fires once the
-    //       browser has actually resolved the flyout's box, which is the
-    //       moment nested observers will also start receiving entries.
-    // Each pulse is bound to *this* flyoutEl via closure, so stale callbacks
-    // from a previously-closed sibling flyout cannot touch the new element.
-    const nudgeSize = unpinned.size;
-    const sizeProp: 'width' | 'height' = isVertical ? 'width' : 'height';
-    const flyoutEl = this.flyoutEl;
-
-    const pulse = () => {
-      if (!flyoutEl.isConnected) return;
-      flyoutEl.style[sizeProp] = `${nudgeSize + 1}px`;
-      requestAnimationFrame(() => {
-        if (!flyoutEl.isConnected) return;
-        flyoutEl.style[sizeProp] = `${nudgeSize}px`;
-      });
-    };
-
-    // (a) + (b): two rAF passes
-    requestAnimationFrame(pulse);
-
-    // (c): fire once more as soon as the browser reports the flyout's real
-    // box, then disconnect. Guarded by isConnected so it's a no-op if the
-    // user has already hovered away.
-    if (typeof ResizeObserver !== 'undefined') {
-      let fired = false;
-      const ro = new ResizeObserver(() => {
-        if (fired) return;
-        fired = true;
-        ro.disconnect();
-        if (!flyoutEl.isConnected) return;
-        requestAnimationFrame(pulse);
-      });
-      ro.observe(flyoutEl);
-    }
+    this.flyoutContentSlot.value = this.callbacks.createContent(panelId, contentContainer);
 
     // Resize handle on the flyout edge — hover handled by CSS: .dock-flyout-resize:hover
     const resizeHandle = document.createElement('div');
@@ -431,13 +335,8 @@ export class UnpinnedStripView {
     this.resizeMove = null;
     this.resizeUp = null;
 
-    if (this.flyoutContentDisposable) {
-      console.log(`[FLYOUT_CONTENT] closeFlyout edge=${this.edge} disposing content`);
-      this.flyoutContentDisposable.dispose();
-      this.flyoutContentDisposable = null;
-    }
+    this.flyoutContentSlot.clear();
     if (this.flyoutEl) {
-      console.log(`[FLYOUT_CONTENT] closeFlyout edge=${this.edge} removing flyoutEl`);
       this.flyoutEl.remove();
       this.flyoutEl = null;
     }
