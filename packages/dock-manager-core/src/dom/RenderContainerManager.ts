@@ -193,8 +193,13 @@ export class RenderContainerManager implements IDisposable {
     const container = document.createElement('div');
     container.setAttribute('data-panel-container-id', panelId);
     container.className = 'dock-panel-render-container';
+    // Background matches the dock surface so the container is visually
+    // opaque wherever it's positioned (over tab bodies, flyout bodies,
+    // floating windows, maximize overlays). Without this, the container
+    // sits above its host's chrome at z 9500, and any user content with
+    // gaps would let you see straight through to the layout behind.
     container.style.cssText =
-      'position:absolute;left:0;top:0;width:0;height:0;overflow:hidden;pointer-events:auto;display:none;';
+      'position:absolute;left:0;top:0;width:0;height:0;overflow:hidden;pointer-events:auto;display:none;background:hsl(var(--dock-surface));';
     this.element.appendChild(container);
 
     const contentSlot = new MutableDisposable();
