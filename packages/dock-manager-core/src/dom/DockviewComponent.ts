@@ -27,6 +27,7 @@ import { MaximizeOverlayView } from './views/MaximizeOverlayView';
 import type { DockTheme } from '../theme/DockTheme';
 import { applyTheme, vsCodeLight, vsCodeDark } from '../theme/DockTheme';
 import { ensureStyles, releaseStyles } from './styleInjector';
+import { debugLog, debugError } from '../utils/debug';
 
 // ─── Options ─────────────────────────────────────────────────────────
 
@@ -705,21 +706,24 @@ export class DockviewComponent {
       const prevParent = cached.container.parentElement;
       // Reparent existing content container into the new parent
       parentContainer.appendChild(cached.container);
-      console.log(
-        `[FLYOUT_CONTENT] getOrCreateContent CACHE HIT panel=${panelId} gen=${myGen} prevParentTag=${prevParent?.tagName ?? 'NONE'} prevParentClass="${prevParent?.className ?? ''}" newParentTag=${parentContainer.tagName} newParentClass="${parentContainer.className}" cachedChildren=${cached.container.children.length} cachedInnerHTMLLen=${cached.container.innerHTML.length}`,
+      debugLog(
+        'FLYOUT_CONTENT',
+        `getOrCreateContent CACHE HIT panel=${panelId} gen=${myGen} prevParentTag=${prevParent?.tagName ?? 'NONE'} prevParentClass="${prevParent?.className ?? ''}" newParentTag=${parentContainer.tagName} newParentClass="${parentContainer.className}" cachedChildren=${cached.container.children.length} cachedInnerHTMLLen=${cached.container.innerHTML.length}`,
       );
       return {
         dispose: () => {
           // Only detach if this is still the current generation
           // (prevents stale FloatingWindowView dispose from removing reparented content)
           if (cached.generation === myGen) {
-            console.log(
-              `[FLYOUT_CONTENT] dispose CACHE panel=${panelId} gen=${myGen} (current) → removing container`,
+            debugLog(
+              'FLYOUT_CONTENT',
+              `dispose CACHE panel=${panelId} gen=${myGen} (current) → removing container`,
             );
             cached.container.remove();
           } else {
-            console.log(
-              `[FLYOUT_CONTENT] dispose CACHE panel=${panelId} gen=${myGen} STALE (current=${cached.generation}) → no-op`,
+            debugLog(
+              'FLYOUT_CONTENT',
+              `dispose CACHE panel=${panelId} gen=${myGen} STALE (current=${cached.generation}) → no-op`,
             );
           }
         },
@@ -734,12 +738,14 @@ export class DockviewComponent {
     let disposable: IDisposable;
     try {
       disposable = this.options.createContent(panelId, container, this.getPanelApi(panelId));
-      console.log(
-        `[FLYOUT_CONTENT] getOrCreateContent CACHE MISS panel=${panelId} hostCreateContent OK children=${container.children.length} innerHTMLLen=${container.innerHTML.length} hasDisposable=${!!disposable}`,
+      debugLog(
+        'FLYOUT_CONTENT',
+        `getOrCreateContent CACHE MISS panel=${panelId} hostCreateContent OK children=${container.children.length} innerHTMLLen=${container.innerHTML.length} hasDisposable=${!!disposable}`,
       );
     } catch (err) {
-      console.error(
-        `[FLYOUT_CONTENT] getOrCreateContent CACHE MISS panel=${panelId} hostCreateContent THREW`,
+      debugError(
+        'FLYOUT_CONTENT',
+        `getOrCreateContent CACHE MISS panel=${panelId} hostCreateContent THREW`,
         err,
       );
       throw err;
@@ -751,13 +757,15 @@ export class DockviewComponent {
       dispose: () => {
         // Only detach if this is still the current generation
         if (entry.generation === 0) {
-          console.log(
-            `[FLYOUT_CONTENT] dispose NEW panel=${panelId} (current) → removing container`,
+          debugLog(
+            'FLYOUT_CONTENT',
+            `dispose NEW panel=${panelId} (current) → removing container`,
           );
           container.remove();
         } else {
-          console.log(
-            `[FLYOUT_CONTENT] dispose NEW panel=${panelId} STALE (gen=${entry.generation}) → no-op`,
+          debugLog(
+            'FLYOUT_CONTENT',
+            `dispose NEW panel=${panelId} STALE (gen=${entry.generation}) → no-op`,
           );
         }
       },

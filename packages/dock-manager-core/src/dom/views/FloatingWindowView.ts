@@ -3,12 +3,15 @@ import type { DockResourceStrings } from '../../types/resourceStrings';
 import { defaultResourceStrings } from '../../types/resourceStrings';
 import { iconClose, iconDockBack } from '../icons';
 import type { DockDragManager } from '../DockDragManager';
+import {
+  CompositeDisposable,
+  MutableDisposable,
+  type IDisposable,
+} from '../../utils/lifecycle';
 
 // ─── Interfaces ──────────────────────────────────────────────────────
 
-export interface IDisposable {
-  dispose(): void;
-}
+export type { IDisposable };
 
 export type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
@@ -53,8 +56,10 @@ export class FloatingWindowView {
   private titleTextEl: HTMLSpanElement;
   private contentAreaEl: HTMLDivElement;
 
-  // Content management
-  private contentDisposable: IDisposable | null = null;
+  // Content management — held in a slot so it's auto-disposed and replaceable.
+  private readonly contentSlot = new MutableDisposable();
+  // Bag for any owned resources we want torn down on dispose().
+  private readonly disposables = new CompositeDisposable();
 
   // Drag state
   private isDragging = false;
@@ -183,7 +188,8 @@ export class FloatingWindowView {
     this.element.appendChild(this.contentAreaEl);
 
     // Mount content
-    this.contentDisposable = this.callbacks.createContent(floating.panelId, this.contentAreaEl);
+    this.contentSlot.value = this.callbacks.createContent(floating.panelId, this.contentAreaEl);
+    this.disposables.add(this.contentSlot);
 
     // Resize handles (skip if floatingResizable is explicitly false)
     if (panel.floatingResizable !== false) {
@@ -232,10 +238,7 @@ export class FloatingWindowView {
     // Remove delegated resize handle listener
     this.element.removeEventListener('mousedown', this.onResizeHandleMouseDown);
 
-    if (this.contentDisposable) {
-      this.contentDisposable.dispose();
-      this.contentDisposable = null;
-    }
+    this.disposables.dispose();
 
     if (this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);

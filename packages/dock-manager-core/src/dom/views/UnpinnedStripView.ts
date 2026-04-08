@@ -1,11 +1,11 @@
 import type { DockEdge, UnpinnedPanel, PanelConfig } from '../../types/dock';
 import { iconClose, iconPin } from '../icons';
+import { debugLog, debugWarn, debugError } from '../../utils/debug';
+import { MutableDisposable, type IDisposable } from '../../utils/lifecycle';
 
 // ─── Interfaces ──────────────────────────────────────────────────────
 
-export interface IDisposable {
-  dispose(): void;
-}
+export type { IDisposable };
 
 export interface UnpinnedStripViewCallbacks {
   onPinPanel: (panelId: string) => void;
@@ -34,7 +34,7 @@ export class UnpinnedStripView {
 
   // Flyout state
   private expandedPanelId: string | null = null;
-  private flyoutContentDisposable: IDisposable | null = null;
+  private readonly flyoutContentSlot = new MutableDisposable();
   private closeTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Bound handlers for cleanup
@@ -267,19 +267,21 @@ export class UnpinnedStripView {
 
     {
       const r = this.flyoutEl.getBoundingClientRect();
-      console.log(
-        `[FLYOUT_CONTENT] attached panel=${panelId} edge=${this.edge} connected=${this.flyoutEl.isConnected} flyoutW=${r.width} flyoutH=${r.height}`,
+      debugLog(
+        'FLYOUT_CONTENT',
+        `attached panel=${panelId} edge=${this.edge} connected=${this.flyoutEl.isConnected} flyoutW=${r.width} flyoutH=${r.height}`,
       );
     }
 
     try {
-      this.flyoutContentDisposable = this.callbacks.createContent(panelId, contentContainer);
+      this.flyoutContentSlot.value = this.callbacks.createContent(panelId, contentContainer);
       const r = contentContainer.getBoundingClientRect();
-      console.log(
-        `[FLYOUT_CONTENT] createContent OK panel=${panelId} children=${contentContainer.children.length} firstTag=${contentContainer.firstElementChild?.tagName ?? 'NONE'} contentW=${r.width} contentH=${r.height} innerHTMLLen=${contentContainer.innerHTML.length}`,
+      debugLog(
+        'FLYOUT_CONTENT',
+        `createContent OK panel=${panelId} children=${contentContainer.children.length} firstTag=${contentContainer.firstElementChild?.tagName ?? 'NONE'} contentW=${r.width} contentH=${r.height} innerHTMLLen=${contentContainer.innerHTML.length}`,
       );
     } catch (err) {
-      console.error(`[FLYOUT_CONTENT] createContent THREW panel=${panelId}`, err);
+      debugError('FLYOUT_CONTENT', `createContent THREW panel=${panelId}`, err);
       throw err;
     }
 
@@ -291,14 +293,15 @@ export class UnpinnedStripView {
     const contentContainerForLog = contentContainer;
     requestAnimationFrame(() => {
       if (!flyoutElForLog.isConnected) {
-        console.warn(`[FLYOUT_CONTENT] post-rAF DETACHED panel=${panelId}`);
+        debugWarn('FLYOUT_CONTENT', `post-rAF DETACHED panel=${panelId}`);
         return;
       }
       const rect = contentContainerForLog.getBoundingClientRect();
       const first = contentContainerForLog.firstElementChild as HTMLElement | null;
       const firstRect = first?.getBoundingClientRect();
-      console.log(
-        `[FLYOUT_CONTENT] post-rAF panel=${panelId} contentW=${rect.width} contentH=${rect.height} firstTag=${first?.tagName ?? 'NONE'} firstW=${firstRect?.width ?? 0} firstH=${firstRect?.height ?? 0} firstDisplay=${first ? getComputedStyle(first).display : 'n/a'} firstVisibility=${first ? getComputedStyle(first).visibility : 'n/a'}`,
+      debugLog(
+        'FLYOUT_CONTENT',
+        `post-rAF panel=${panelId} contentW=${rect.width} contentH=${rect.height} firstTag=${first?.tagName ?? 'NONE'} firstW=${firstRect?.width ?? 0} firstH=${firstRect?.height ?? 0} firstDisplay=${first ? getComputedStyle(first).display : 'n/a'} firstVisibility=${first ? getComputedStyle(first).visibility : 'n/a'}`,
       );
     });
 
@@ -307,14 +310,15 @@ export class UnpinnedStripView {
     // original ViewContainerRef parent).
     setTimeout(() => {
       if (!flyoutElForLog.isConnected) {
-        console.warn(`[FLYOUT_CONTENT] +200ms DETACHED panel=${panelId}`);
+        debugWarn('FLYOUT_CONTENT', `+200ms DETACHED panel=${panelId}`);
         return;
       }
       const r = contentContainerForLog.getBoundingClientRect();
       const first = contentContainerForLog.firstElementChild as HTMLElement | null;
       const firstRect = first?.getBoundingClientRect();
-      console.log(
-        `[FLYOUT_CONTENT] +200ms panel=${panelId} children=${contentContainerForLog.children.length} firstTag=${first?.tagName ?? 'NONE'} contentW=${r.width} contentH=${r.height} firstW=${firstRect?.width ?? 0} firstH=${firstRect?.height ?? 0} innerHTMLLen=${contentContainerForLog.innerHTML.length} parentSameAsFlyout=${contentContainerForLog.parentElement === flyoutElForLog}`,
+      debugLog(
+        'FLYOUT_CONTENT',
+        `+200ms panel=${panelId} children=${contentContainerForLog.children.length} firstTag=${first?.tagName ?? 'NONE'} contentW=${r.width} contentH=${r.height} firstW=${firstRect?.width ?? 0} firstH=${firstRect?.height ?? 0} innerHTMLLen=${contentContainerForLog.innerHTML.length} parentSameAsFlyout=${contentContainerForLog.parentElement === flyoutElForLog}`,
       );
     }, 200);
 
@@ -431,13 +435,12 @@ export class UnpinnedStripView {
     this.resizeMove = null;
     this.resizeUp = null;
 
-    if (this.flyoutContentDisposable) {
-      console.log(`[FLYOUT_CONTENT] closeFlyout edge=${this.edge} disposing content`);
-      this.flyoutContentDisposable.dispose();
-      this.flyoutContentDisposable = null;
+    if (this.flyoutContentSlot.value) {
+      debugLog('FLYOUT_CONTENT', `closeFlyout edge=${this.edge} disposing content`);
+      this.flyoutContentSlot.clear();
     }
     if (this.flyoutEl) {
-      console.log(`[FLYOUT_CONTENT] closeFlyout edge=${this.edge} removing flyoutEl`);
+      debugLog('FLYOUT_CONTENT', `closeFlyout edge=${this.edge} removing flyoutEl`);
       this.flyoutEl.remove();
       this.flyoutEl = null;
     }

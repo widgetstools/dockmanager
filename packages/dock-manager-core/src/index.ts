@@ -131,3 +131,19 @@ export type { PanelFinderOptions } from './dom/PanelFinder';
 
 /** @internal */
 export { genId, resetIdCounter } from './layout/LayoutTree';
+
+// ─── Lifecycle utilities ─────────────────────────────────────────────
+
+export {
+  CompositeDisposable,
+  MutableDisposable,
+  toDisposable,
+  listenEvent,
+} from './utils/lifecycle';
+
+// ─── Debug logging gate ──────────────────────────────────────────────
+
+export {
+  setDockManagerDebug,
+  isDockManagerDebugEnabled,
+} from './utils/debug';
