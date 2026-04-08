@@ -9,44 +9,47 @@ import { debugLog } from '../utils/debug';
 export type CreatePanelContent = (panelId: string, container: HTMLElement) => IDisposable;
 
 /**
- * RenderContainerManager — "stable render containers".
+ * RenderContainerManager — persistent panel containers with safe limbo.
  *
- * Every panel has exactly ONE content container that lives as a child of
- * a single hidden render-root for its entire lifetime. Containers are
- * NEVER reparented. Views render `<div>` placeholders where the panel
- * should appear; this manager mirrors each placeholder's bounding rect
- * onto its container's `top/left/width/height`.
+ * Each panel has exactly ONE content container. The container is created
+ * once and from then on it is ALWAYS attached to the document (either
+ * inside an active view's placeholder, or inside the hidden render-root
+ * limbo). The container's identity never changes, so React portals,
+ * Angular component refs, and other framework-bound state stay valid for
+ * the panel's entire lifetime — across tab switches, float/dock, maximize,
+ * and unpin/pin transitions.
  *
- * Why: reparenting cached content has caused multiple bugs (React portal
- * unmounts, ResizeObserver mount races, generation-counter complexity).
- * Stable containers eliminate the entire bug class.
+ * What this fixes vs the old cache+reparent flow:
+ *  - React portal unmounts caused by an isConnected check while a cached
+ *    container was momentarily detached
+ *  - ResizeObserver mount races (the container is always laid out)
+ *  - The generation counter that existed only to no-op stale dispose calls
  *
- * Pointer events: the render root is `pointer-events:none`; containers
- * opt back in via `pointer-events:auto`. Chrome (tab strips, headers,
- * splitters) lives in the layout DOM under the root and remains
- * hit-testable so long as containers don't visually overlap chrome —
- * which they won't, since their rects exactly match a placeholder rect.
+ * Why we reparent (and don't position absolutely in a fixed render root):
+ *  - Each view has its own stacking context (flyouts, floating windows,
+ *    maximize overlay all use z-index). A single absolute render root
+ *    can't be at the right z-layer for every view simultaneously.
+ *    Reparenting puts the container inside the right stacking context for
+ *    free.
+ *
+ * Lifecycle:
+ *  - bindPlaceholder(panelId, ph): the persistent container is appended
+ *    INSIDE `ph`, its display is restored, and a disposable is returned.
+ *  - The returned disposable moves the container back to limbo and hides
+ *    it. The container is never detached during the move.
+ *  - destroyContainer(panelId): runs the user content disposable and
+ *    removes the container from the DOM. Call when the panel is closed.
  */
 export class RenderContainerManager implements IDisposable {
-  /** The hidden host element that owns all panel containers. */
+  /** Hidden host that owns containers when they are not bound to a view. */
   readonly element: HTMLDivElement;
 
   private readonly host: HTMLElement;
   private readonly create: CreatePanelContent;
 
   private readonly entries = new Map<string, ContainerEntry>();
-  private hostRect: DOMRect;
 
-  // Single shared ResizeObserver for all placeholders + the host element.
-  // Whenever any placeholder or the host resizes, we re-mirror.
-  private readonly resizeObserver: ResizeObserver;
-  // Reverse map: placeholder element → panelId, so the RO callback can
-  // resolve which entries to update.
-  private readonly placeholderToPanel = new WeakMap<Element, string>();
-
-  // One scroll listener on host (capturing) so chrome scrolling re-mirrors.
   private readonly disposables = new CompositeDisposable();
-
   private _disposed = false;
 
   constructor(host: HTMLElement, create: CreatePanelContent) {
@@ -55,90 +58,45 @@ export class RenderContainerManager implements IDisposable {
 
     this.element = document.createElement('div');
     this.element.className = 'dock-render-root';
-    // z-index 9500 sits above flyouts (40), floating windows (~1000-1500),
-    // and the maximize overlay (9000), but below context menus / dock
-    // indicators / pane navigator (10000+). The render root itself is
-    // pointer-events:none so chrome under it remains hit-testable; only
-    // the containers inside opt back in to events.
+    // Off-screen, zero-size, non-interactive limbo. Containers parked here
+    // remain in the document (so React portals stay mounted) but are not
+    // visible or interactive.
     this.element.style.cssText =
-      'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:9500;';
+      'position:absolute;left:0;top:0;width:0;height:0;overflow:hidden;pointer-events:none;visibility:hidden;';
     this.host.appendChild(this.element);
-
-    this.hostRect = this.host.getBoundingClientRect();
-
-    this.resizeObserver = new ResizeObserver((entries) => {
-      // Host resized → every container's rect needs re-mirroring.
-      for (const e of entries) {
-        if (e.target === this.host) {
-          this.hostRect = this.host.getBoundingClientRect();
-          this.remirrorAll();
-          return;
-        }
-      }
-      // Otherwise: only mirror the placeholders that changed.
-      for (const e of entries) {
-        const panelId = this.placeholderToPanel.get(e.target);
-        if (panelId) this.mirror(panelId);
-      }
-    });
-    this.resizeObserver.observe(this.host);
-
-    // Capture-phase scroll: any scroll inside host (e.g. tab strip overflow,
-    // a content area) can shift placeholder positions without triggering RO.
-    const onScroll = () => this.remirrorAll();
-    this.host.addEventListener('scroll', onScroll, true);
-    this.disposables.add(toDisposable(() => this.host.removeEventListener('scroll', onScroll, true)));
   }
 
   /**
-   * Bind a placeholder element to a panel. Creates the persistent
-   * container on first call, makes it visible, mirrors the placeholder
-   * rect. Returns a disposable that hides the container (does NOT
-   * destroy it). Call destroyContainer() when the panel is permanently
-   * closed.
+   * Move the persistent container into the placeholder and make it
+   * visible. Creates the container on first call. Returns a disposable
+   * that moves the container back to limbo without destroying it.
    */
   bindPlaceholder(panelId: string, placeholder: HTMLElement): IDisposable {
     const entry = this.getOrCreate(panelId);
 
-    // If a previous placeholder is still bound, unbind it first. The
-    // most common case is the same view re-rendering and passing a new
-    // placeholder element for the same panel.
-    if (entry.placeholder && entry.placeholder !== placeholder) {
-      this.placeholderToPanel.delete(entry.placeholder);
-      this.resizeObserver.unobserve(entry.placeholder);
-    }
+    // Bump generation so any prior bind's disposable becomes a no-op.
+    entry.generation++;
+    const myGen = entry.generation;
 
-    entry.placeholder = placeholder;
-    this.placeholderToPanel.set(placeholder, panelId);
-    this.resizeObserver.observe(placeholder);
-
+    // Atomic reparent. appendChild moves the node — at no point is
+    // entry.container.parentElement null, so React portals do not see a
+    // detach event.
+    placeholder.appendChild(entry.container);
     entry.container.style.display = '';
-    this.mirror(panelId);
+
+    debugLog('RENDER_CONTAINER', `bind panel=${panelId} gen=${myGen}`);
 
     return toDisposable(() => {
-      // Only clear if we are still the bound placeholder for this panel.
-      // If a newer bind() reused the entry, leave it alone.
-      if (entry.placeholder === placeholder) {
-        this.placeholderToPanel.delete(placeholder);
-        this.resizeObserver.unobserve(placeholder);
-        entry.placeholder = null;
-        entry.container.style.display = 'none';
+      // If a newer bind has already taken over, this dispose is stale.
+      if (entry.generation !== myGen) {
+        debugLog('RENDER_CONTAINER', `unbind panel=${panelId} gen=${myGen} STALE (current=${entry.generation})`);
+        return;
       }
+      // Move back to limbo so the container stays attached.
+      entry.container.style.display = 'none';
+      this.element.appendChild(entry.container);
+      debugLog('RENDER_CONTAINER', `unbind panel=${panelId} gen=${myGen}`);
     });
-  }
-
-  /**
-   * Imperative re-mirror — called by views immediately after they have
-   * laid out their chrome (e.g. floating window drag). Avoids the
-   * one-frame lag of waiting for ResizeObserver.
-   */
-  syncPanel(panelId: string): void {
-    if (this.entries.has(panelId)) this.mirror(panelId);
-  }
-
-  /** Re-mirror every visible container. */
-  syncAll(): void {
-    this.remirrorAll();
   }
 
   /**
@@ -149,10 +107,6 @@ export class RenderContainerManager implements IDisposable {
     const entry = this.entries.get(panelId);
     if (!entry) return;
     debugLog('RENDER_CONTAINER', `destroyContainer panel=${panelId}`);
-    if (entry.placeholder) {
-      this.placeholderToPanel.delete(entry.placeholder);
-      this.resizeObserver.unobserve(entry.placeholder);
-    }
     entry.contentSlot.dispose();
     entry.container.remove();
     this.entries.delete(panelId);
@@ -168,7 +122,7 @@ export class RenderContainerManager implements IDisposable {
     return this.entries.keys();
   }
 
-  /** Test/debug accessor — do not use to mutate. */
+  /** Test/debug accessor — do not mutate the returned element. */
   getContainer(panelId: string): HTMLElement | undefined {
     return this.entries.get(panelId)?.container;
   }
@@ -176,7 +130,6 @@ export class RenderContainerManager implements IDisposable {
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
-    this.resizeObserver.disconnect();
     this.disposables.dispose();
     for (const panelId of Array.from(this.entries.keys())) {
       this.destroyContainer(panelId);
@@ -193,57 +146,30 @@ export class RenderContainerManager implements IDisposable {
     const container = document.createElement('div');
     container.setAttribute('data-panel-container-id', panelId);
     container.className = 'dock-panel-render-container';
-    // Background matches the dock surface so the container is visually
-    // opaque wherever it's positioned (over tab bodies, flyout bodies,
-    // floating windows, maximize overlays). Without this, the container
-    // sits above its host's chrome at z 9500, and any user content with
-    // gaps would let you see straight through to the layout behind.
-    container.style.cssText =
-      'position:absolute;left:0;top:0;width:0;height:0;overflow:hidden;pointer-events:auto;display:none;background:hsl(var(--dock-surface));';
+    // Container fills its current parent (placeholder or limbo).
+    container.style.cssText = 'width:100%;height:100%;overflow:hidden;display:none;';
+    // Park in limbo until the first bind.
     this.element.appendChild(container);
 
     const contentSlot = new MutableDisposable();
     try {
       contentSlot.value = this.create(panelId, container);
     } catch (err) {
-      // Surface the error but keep the container so future bind calls don't
+      // Surface the error but keep the container so future binds don't
       // re-throw the same error in a tighter loop.
       // eslint-disable-next-line no-console
       console.error('[RenderContainerManager] createContent threw for', panelId, err);
     }
 
-    entry = { container, contentSlot, placeholder: null };
+    entry = { container, contentSlot, generation: 0 };
     this.entries.set(panelId, entry);
     debugLog('RENDER_CONTAINER', `created panel=${panelId}`);
     return entry;
-  }
-
-  private mirror(panelId: string): void {
-    const entry = this.entries.get(panelId);
-    if (!entry || !entry.placeholder) return;
-    const r = entry.placeholder.getBoundingClientRect();
-    // Coordinates are relative to the host element so the render root
-    // (which is `inset:0` inside host) shares the same coordinate space.
-    const left = r.left - this.hostRect.left;
-    const top = r.top - this.hostRect.top;
-    const s = entry.container.style;
-    s.transform = `translate(${left}px, ${top}px)`;
-    s.left = '0px';
-    s.top = '0px';
-    s.width = `${r.width}px`;
-    s.height = `${r.height}px`;
-  }
-
-  private remirrorAll(): void {
-    this.hostRect = this.host.getBoundingClientRect();
-    for (const panelId of this.entries.keys()) {
-      this.mirror(panelId);
-    }
   }
 }
 
 interface ContainerEntry {
   container: HTMLDivElement;
   contentSlot: MutableDisposable;
-  placeholder: HTMLElement | null;
+  generation: number;
 }

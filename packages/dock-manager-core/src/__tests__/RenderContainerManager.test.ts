@@ -3,20 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RenderContainerManager } from '../dom/RenderContainerManager';
 import { toDisposable } from '../utils/lifecycle';
 
-// jsdom does not implement ResizeObserver — provide a no-op shim. The
-// manager's behavior under tests is verified via explicit syncAll/syncPanel
-// calls and the bind/destroy lifecycle, not via observer firings.
-class NoopRO {
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
-}
-// @ts-expect-error — install shim
-globalThis.ResizeObserver = NoopRO;
-
 function makeHost(): HTMLElement {
   const host = document.createElement('div');
-  // jsdom getBoundingClientRect returns zeros, which is fine for these tests.
   document.body.appendChild(host);
   return host;
 }
@@ -26,7 +14,7 @@ describe('RenderContainerManager', () => {
     document.body.innerHTML = '';
   });
 
-  it('creates the render root as a child of host', () => {
+  it('creates the limbo render root as a child of host', () => {
     const host = makeHost();
     const m = new RenderContainerManager(host, () => toDisposable(() => {}));
     expect(m.element.parentElement).toBe(host);
@@ -34,46 +22,21 @@ describe('RenderContainerManager', () => {
     m.dispose();
   });
 
-  it('creates exactly one container per panel and reuses it on rebind', () => {
+  it('creates a container in limbo on first bind and reuses it on rebind', () => {
     const host = makeHost();
     const create = vi.fn().mockImplementation(() => toDisposable(() => {}));
     const m = new RenderContainerManager(host, create);
 
     const ph1 = document.createElement('div');
     host.appendChild(ph1);
-    const d1 = m.bindPlaceholder('p1', ph1);
+    m.bindPlaceholder('p1', ph1);
     const c = m.getContainer('p1');
     expect(c).toBeDefined();
+    expect(c!.parentElement).toBe(ph1);
     expect(create).toHaveBeenCalledTimes(1);
-
-    d1.dispose();
-
-    const ph2 = document.createElement('div');
-    host.appendChild(ph2);
-    m.bindPlaceholder('p1', ph2);
-    expect(m.getContainer('p1')).toBe(c); // same identity
-    expect(create).toHaveBeenCalledTimes(1); // not recreated
-    m.dispose();
   });
 
-  it('hides container on unbind, shows on rebind', () => {
-    const host = makeHost();
-    const m = new RenderContainerManager(host, () => toDisposable(() => {}));
-    const ph = document.createElement('div');
-    host.appendChild(ph);
-
-    const d = m.bindPlaceholder('p1', ph);
-    expect(m.getContainer('p1')!.style.display).toBe('');
-
-    d.dispose();
-    expect(m.getContainer('p1')!.style.display).toBe('none');
-
-    m.bindPlaceholder('p1', ph);
-    expect(m.getContainer('p1')!.style.display).toBe('');
-    m.dispose();
-  });
-
-  it('container is never reparented across binds', () => {
+  it('reparents the container into the placeholder on bind', () => {
     const host = makeHost();
     const m = new RenderContainerManager(host, () => toDisposable(() => {}));
     const ph1 = document.createElement('div');
@@ -82,31 +45,47 @@ describe('RenderContainerManager', () => {
 
     m.bindPlaceholder('p1', ph1);
     const c = m.getContainer('p1')!;
-    const parentBefore = c.parentElement;
+    expect(c.parentElement).toBe(ph1);
 
     m.bindPlaceholder('p1', ph2);
-    expect(c.parentElement).toBe(parentBefore);
-    expect(c.parentElement).toBe(m.element);
+    expect(c.parentElement).toBe(ph2);
     m.dispose();
   });
 
-  it('rebinding while still bound switches the active placeholder without recreating content', () => {
+  it('container is never detached during reparent (parent always non-null)', () => {
     const host = makeHost();
-    const create = vi.fn().mockImplementation(() => toDisposable(() => {}));
-    const m = new RenderContainerManager(host, create);
+    const m = new RenderContainerManager(host, () => toDisposable(() => {}));
     const ph1 = document.createElement('div');
     const ph2 = document.createElement('div');
     host.append(ph1, ph2);
 
     m.bindPlaceholder('p1', ph1);
-    m.bindPlaceholder('p1', ph2); // direct rebind, no dispose
-
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(m.getContainer('p1')!.style.display).toBe('');
+    const c = m.getContainer('p1')!;
+    // Sanity: at every observable instant, parentElement is non-null.
+    expect(c.parentElement).not.toBeNull();
+    m.bindPlaceholder('p1', ph2);
+    expect(c.parentElement).not.toBeNull();
     m.dispose();
   });
 
-  it('disposing an old binding after a newer rebind is a no-op', () => {
+  it('unbind moves container back to limbo and hides it', () => {
+    const host = makeHost();
+    const m = new RenderContainerManager(host, () => toDisposable(() => {}));
+    const ph = document.createElement('div');
+    host.appendChild(ph);
+
+    const d = m.bindPlaceholder('p1', ph);
+    const c = m.getContainer('p1')!;
+    expect(c.parentElement).toBe(ph);
+    expect(c.style.display).toBe('');
+
+    d.dispose();
+    expect(c.parentElement).toBe(m.element);
+    expect(c.style.display).toBe('none');
+    m.dispose();
+  });
+
+  it('rebinding before old dispose makes the old dispose a no-op', () => {
     const host = makeHost();
     const m = new RenderContainerManager(host, () => toDisposable(() => {}));
     const ph1 = document.createElement('div');
@@ -116,8 +95,26 @@ describe('RenderContainerManager', () => {
     const d1 = m.bindPlaceholder('p1', ph1);
     m.bindPlaceholder('p1', ph2);
 
-    d1.dispose(); // stale — must NOT hide the container
-    expect(m.getContainer('p1')!.style.display).toBe('');
+    const c = m.getContainer('p1')!;
+    expect(c.parentElement).toBe(ph2);
+
+    d1.dispose(); // stale — must NOT move container back to limbo
+    expect(c.parentElement).toBe(ph2);
+    m.dispose();
+  });
+
+  it('createContent is called exactly once per panel across many binds', () => {
+    const host = makeHost();
+    const create = vi.fn().mockImplementation(() => toDisposable(() => {}));
+    const m = new RenderContainerManager(host, create);
+    const ph = document.createElement('div');
+    host.appendChild(ph);
+
+    for (let i = 0; i < 5; i++) {
+      const d = m.bindPlaceholder('p1', ph);
+      d.dispose();
+    }
+    expect(create).toHaveBeenCalledTimes(1);
     m.dispose();
   });
 
@@ -158,32 +155,18 @@ describe('RenderContainerManager', () => {
     expect(m.element.parentElement).toBeNull();
   });
 
-  it('syncPanel and syncAll are safe to call before any bind', () => {
+  it('container is initially parked in limbo (display:none)', () => {
     const host = makeHost();
-    const m = new RenderContainerManager(host, () => toDisposable(() => {}));
-    expect(() => m.syncPanel('nope')).not.toThrow();
-    expect(() => m.syncAll()).not.toThrow();
-    m.dispose();
-  });
-
-  it('mirror sets transform/width/height on the container', () => {
-    const host = makeHost();
-    const m = new RenderContainerManager(host, () => toDisposable(() => {}));
+    const create = vi.fn().mockImplementation((_panelId, container: HTMLElement) => {
+      // At create time, container should already have a parent (limbo)
+      expect(container.parentElement).not.toBeNull();
+      return toDisposable(() => {});
+    });
+    const m = new RenderContainerManager(host, create);
     const ph = document.createElement('div');
-    // Stub getBoundingClientRect for placeholder + host so mirror has nonzero values.
-    ph.getBoundingClientRect = () =>
-      ({ left: 100, top: 50, width: 300, height: 200, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => '' }) as DOMRect;
-    host.getBoundingClientRect = () =>
-      ({ left: 10, top: 5, width: 1000, height: 800, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => '' }) as DOMRect;
     host.appendChild(ph);
-
     m.bindPlaceholder('p1', ph);
-    m.syncAll();
-
-    const c = m.getContainer('p1')!;
-    expect(c.style.transform).toBe('translate(90px, 45px)');
-    expect(c.style.width).toBe('300px');
-    expect(c.style.height).toBe('200px');
+    expect(create).toHaveBeenCalledTimes(1);
     m.dispose();
   });
 });

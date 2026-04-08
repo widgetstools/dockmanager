@@ -1069,12 +1069,10 @@ describe('DockviewComponent', () => {
       // overlay is gone.
       const tabGroup = root.querySelector('.dock-tab-group');
       expect(tabGroup).not.toBeNull();
-      // Under stable render containers the content lives in .dock-render-root,
-      // not as a child of the tab group. Verify the persistent container
-      // exists and holds the content.
-      const renderRoot = root.querySelector('.dock-render-root');
-      expect(renderRoot).not.toBeNull();
-      const persistentContainer = renderRoot!.querySelector(
+      // Under stable render containers the persistent container is
+      // reparented into the tab group's placeholder when bound. Verify it
+      // exists somewhere in the root and holds the content.
+      const persistentContainer = root.querySelector(
         '[data-panel-container-id="panel1"]',
       );
       expect(persistentContainer).not.toBeNull();

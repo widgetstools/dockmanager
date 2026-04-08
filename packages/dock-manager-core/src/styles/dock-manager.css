@@ -318,9 +318,7 @@ dock-manager *,
   left: 0;
   right: 0;
   height: 20px;
-  /* Above the render root (9500) so the persistent panel container does
-     not occlude the hover affordance on collapsed-header panes. */
-  z-index: 9600;
+  z-index: 3;
   cursor: pointer;
   display: none;
   pointer-events: none;
