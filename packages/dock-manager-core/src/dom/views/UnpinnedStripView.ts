@@ -271,31 +271,59 @@ export class UnpinnedStripView {
     // the user's content sees the real flyout size, not 0x0.
     void contentContainer.getBoundingClientRect();
 
-    // Some content frameworks (charts, virtualized lists, anything using
-    // ResizeObserver) latch onto a 0x0 size at mount time and never recover
-    // unless an actual size *change* is observed. Mimic what a manual resize
-    // does: bump the flyout size by 1px on the next frame, then restore it.
-    // This guarantees ResizeObserver fires on the content.
+    // Some content frameworks (charts, virtualized lists, canvases, anything
+    // using ResizeObserver) latch onto a 0x0 size at mount time and never
+    // recover unless an actual size *change* is observed after they've been
+    // attached to the DOM. We pulse the flyout size multiple times to
+    // guarantee the observers inside the user's content fire:
+    //   (a) synchronously after attach (for code reading offsetWidth)
+    //   (b) on the next frame (for observers that queue after layout)
+    //   (c) via a ResizeObserver we own on the flyout — this fires once the
+    //       browser has actually resolved the flyout's box, which is the
+    //       moment nested observers will also start receiving entries.
+    // Each pulse is bound to *this* flyoutEl via closure, so stale callbacks
+    // from a previously-closed sibling flyout cannot touch the new element.
     const nudgeSize = unpinned.size;
     const sizeProp: 'width' | 'height' = isVertical ? 'width' : 'height';
     const flyoutEl = this.flyoutEl;
-    requestAnimationFrame(() => {
+
+    const pulse = () => {
       if (!flyoutEl.isConnected) return;
       flyoutEl.style[sizeProp] = `${nudgeSize + 1}px`;
       requestAnimationFrame(() => {
         if (!flyoutEl.isConnected) return;
         flyoutEl.style[sizeProp] = `${nudgeSize}px`;
       });
-    });
+    };
+
+    // (a) + (b): two rAF passes
+    requestAnimationFrame(pulse);
+
+    // (c): fire once more as soon as the browser reports the flyout's real
+    // box, then disconnect. Guarded by isConnected so it's a no-op if the
+    // user has already hovered away.
+    if (typeof ResizeObserver !== 'undefined') {
+      let fired = false;
+      const ro = new ResizeObserver(() => {
+        if (fired) return;
+        fired = true;
+        ro.disconnect();
+        if (!flyoutEl.isConnected) return;
+        requestAnimationFrame(pulse);
+      });
+      ro.observe(flyoutEl);
+    }
 
     // Resize handle on the flyout edge — hover handled by CSS: .dock-flyout-resize:hover
     const resizeHandle = document.createElement('div');
     resizeHandle.className = 'dock-flyout-resize';
-    resizeHandle.style.cssText = `position:absolute;transition:background-color 0.15s;${
+    resizeHandle.style.cssText = `position:absolute;z-index:1;transition:background-color 0.15s;${
       this.edge === 'left'
         ? 'right:0;top:0;bottom:0;width:4px;cursor:col-resize;'
         : this.edge === 'right'
         ? 'left:0;top:0;bottom:0;width:4px;cursor:col-resize;'
+        : this.edge === 'top'
+        ? 'bottom:0;left:0;right:0;height:4px;cursor:row-resize;'
         : 'top:0;left:0;right:0;height:4px;cursor:row-resize;'
     }`;
 

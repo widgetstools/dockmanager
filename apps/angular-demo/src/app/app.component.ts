@@ -1,15 +1,6 @@
 import { Component, OnDestroy, ElementRef, AfterViewInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import {
-  DockManagerCoreComponent,
-  serialize,
-  deserialize,
-  saveToLocalStorage,
-  loadFromLocalStorage,
-  clearLocalStorage,
-  exportToFile,
-  importFromFile,
-} from '@widgetstools/angular-dock-manager';
+import { DockManagerCoreComponent } from '@widgetstools/angular-dock-manager';
 import type {
   DockManagerState,
   PreventableDockEvent,
@@ -17,7 +8,17 @@ import type {
   DockTheme,
   DockviewApi,
 } from '@widgetstools/dock-manager-core';
-import { themes, applyTheme } from '@widgetstools/dock-manager-core';
+import {
+  themes,
+  applyTheme,
+  serialize,
+  deserialize,
+  saveToLocalStorage,
+  loadFromLocalStorage,
+  clearLocalStorage,
+  exportToFile,
+  importFromFile,
+} from '@widgetstools/dock-manager-core';
 import { defaultState } from './config/default-layout';
 import { ClockWidgetComponent } from './widgets/clock-widget.component';
 import { EditorWidgetComponent } from './widgets/editor-widget.component';

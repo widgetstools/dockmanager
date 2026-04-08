@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@widgetstools/react-dock-manager": "*",
+    "ag-grid-community": "^33.3.2",
+    "ag-grid-react": "^33.3.2",
     "lucide-react": "^0.462.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

@@ -31,6 +31,8 @@ import { TerminalWidget } from './widgets/TerminalWidget';
 import { FileTreeWidget } from './widgets/FileTreeWidget';
 import { ProblemsWidget } from './widgets/ProblemsWidget';
 import { PlaceholderWidget } from './widgets/PlaceholderWidget';
+import { ChartWidget } from './widgets/ChartWidget';
+import { DataGridWidget } from './widgets/DataGridWidget';
 
 /** Map panel icon strings to lucide components */
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -70,6 +72,8 @@ const WIDGETS = {
   'file-tree': FileTreeWidget,
   problems: ProblemsWidget,
   placeholder: PlaceholderWidget,
+  chart: ChartWidget,
+  datagrid: DataGridWidget,
 };
 
 /** Panels that should prompt before closing */

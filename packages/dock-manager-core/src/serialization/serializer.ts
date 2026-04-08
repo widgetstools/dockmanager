@@ -73,7 +73,7 @@ function isValidDockState(data: any): data is DockManagerState {
   for (const up of data.unpinnedPanels) {
     if (
       typeof up.panelId !== 'string' ||
-      !['left', 'right', 'bottom'].includes(up.edge) ||
+      !['left', 'right', 'top', 'bottom'].includes(up.edge) ||
       typeof up.size !== 'number'
     ) {
       return false;

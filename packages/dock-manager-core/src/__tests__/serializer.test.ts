@@ -65,6 +65,21 @@ describe('serialize / deserialize round-trip', () => {
     expect(restored.unpinnedPanels).toEqual(state.unpinnedPanels);
   });
 
+  it('accepts all four unpinned edges including top (regression)', () => {
+    // Regression: validator whitelist was missing 'top', so any layout with
+    // a top-edge unpinned panel failed to deserialize.
+    const state = makeState(['p1', 'p2', 'p3', 'p4']);
+    state.layout = { type: 'tabgroup', id: 'tg1', panels: [], activePanel: '' };
+    state.unpinnedPanels = [
+      { panelId: 'p1', edge: 'left', size: 200 },
+      { panelId: 'p2', edge: 'right', size: 200 },
+      { panelId: 'p3', edge: 'top', size: 150 },
+      { panelId: 'p4', edge: 'bottom', size: 150 },
+    ];
+    const { state: restored } = deserialize(serialize(state));
+    expect(restored.unpinnedPanels).toEqual(state.unpinnedPanels);
+  });
+
   it('preserves maximizedPanelId when set', () => {
     const state = makeState(['p1', 'p2']);
     state.maximizedPanelId = 'p1';

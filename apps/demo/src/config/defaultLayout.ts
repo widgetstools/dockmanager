@@ -106,6 +106,60 @@ export const defaultState: DockManagerState = {
       allowPinning: true,
       widgetType: 'terminal',
     },
+    // Chart — blue area (size-dependent canvas, ResizeObserver path)
+    chartPane: {
+      id: 'chartPane',
+      title: 'Revenue',
+      icon: 'list',
+      closable: true,
+      floatable: true,
+      allowPinning: true,
+      widgetType: 'chart',
+      widgetProps: { color: '#3b82f6', variant: 'area' },
+    },
+    // Chart — emerald line
+    chartPane2: {
+      id: 'chartPane2',
+      title: 'Signups',
+      icon: 'list',
+      closable: true,
+      floatable: true,
+      allowPinning: true,
+      widgetType: 'chart',
+      widgetProps: { color: '#10b981', variant: 'line' },
+    },
+    // Chart — amber bars
+    chartPane3: {
+      id: 'chartPane3',
+      title: 'Errors',
+      icon: 'list',
+      closable: true,
+      floatable: true,
+      allowPinning: true,
+      widgetType: 'chart',
+      widgetProps: { color: '#f59e0b', variant: 'bars' },
+    },
+    // Chart — rose area
+    chartPane4: {
+      id: 'chartPane4',
+      title: 'Latency',
+      icon: 'list',
+      closable: true,
+      floatable: true,
+      allowPinning: true,
+      widgetType: 'chart',
+      widgetProps: { color: '#f43f5e', variant: 'area' },
+    },
+    // AG Grid — heavy size-dependent data grid
+    dataGridPane: {
+      id: 'dataGridPane',
+      title: 'Vehicles',
+      icon: 'list',
+      closable: true,
+      floatable: true,
+      allowPinning: true,
+      widgetType: 'datagrid',
+    },
     // Unpinned Pane 2 (bottom edge auto-hide)
     unpinnedPane2: {
       id: 'unpinnedPane2',
@@ -177,6 +231,11 @@ export const defaultState: DockManagerState = {
   popoutPanels: [],
   unpinnedPanels: [
     { panelId: 'unpinnedPane1', edge: 'left', size: 200 },
+    { panelId: 'chartPane', edge: 'left', size: 320 },
+    { panelId: 'chartPane2', edge: 'left', size: 320 },
+    { panelId: 'chartPane3', edge: 'right', size: 320 },
+    { panelId: 'chartPane4', edge: 'right', size: 320 },
+    { panelId: 'dataGridPane', edge: 'right', size: 520 },
     { panelId: 'unpinnedPane2', edge: 'bottom', size: 180 },
   ],
   nextZIndex: 2,
