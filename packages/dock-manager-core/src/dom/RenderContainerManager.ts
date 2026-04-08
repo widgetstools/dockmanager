@@ -55,8 +55,13 @@ export class RenderContainerManager implements IDisposable {
 
     this.element = document.createElement('div');
     this.element.className = 'dock-render-root';
+    // z-index 9500 sits above flyouts (40), floating windows (~1000-1500),
+    // and the maximize overlay (9000), but below context menus / dock
+    // indicators / pane navigator (10000+). The render root itself is
+    // pointer-events:none so chrome under it remains hit-testable; only
+    // the containers inside opt back in to events.
     this.element.style.cssText =
-      'position:absolute;inset:0;pointer-events:none;overflow:hidden;';
+      'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:9500;';
     this.host.appendChild(this.element);
 
     this.hostRect = this.host.getBoundingClientRect();
