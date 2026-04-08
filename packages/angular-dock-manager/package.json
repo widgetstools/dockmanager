@@ -1,6 +1,6 @@
 {
   "name": "@widgetstools/angular-dock-manager",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "description": "Angular dock manager — thin wrapper around dock-manager-core",
   "peerDependencies": {
     "@angular/common": ">=21.0.0",
