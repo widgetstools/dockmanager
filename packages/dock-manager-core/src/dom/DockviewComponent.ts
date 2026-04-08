@@ -24,6 +24,7 @@ import { SplitView } from './views/SplitView';
 import { FloatingWindowView, type FloatingWindowViewCallbacks } from './views/FloatingWindowView';
 import { UnpinnedStripView } from './views/UnpinnedStripView';
 import { MaximizeOverlayView } from './views/MaximizeOverlayView';
+import { RenderContainerManager } from './RenderContainerManager';
 import type { DockTheme } from '../theme/DockTheme';
 import { applyTheme, vsCodeLight, vsCodeDark } from '../theme/DockTheme';
 import { ensureStyles, releaseStyles } from './styleInjector';
@@ -136,8 +137,13 @@ export class DockviewComponent {
   private floatingViews = new Map<string, FloatingWindowView>();
   private unpinnedStripViews = new Map<DockEdge, UnpinnedStripView>();
   private panelApis = new Map<string, PanelApi>();
-  /** Global content cache: content containers persist across layout changes (float/dock/move) */
-  private contentCache = new Map<string, { container: HTMLDivElement; disposable: IDisposable; generation: number }>();
+  /**
+   * Stable render container manager. Each panel has exactly ONE content
+   * container that lives at a fixed location in the DOM (the render root)
+   * for its entire lifetime. Views render placeholder divs and the manager
+   * mirrors the placeholder rect onto the container. No reparenting.
+   */
+  private renderManager!: RenderContainerManager;
   private _api: DockviewApi | null = null;
   private maximizeOverlay: MaximizeOverlayView | null = null;
   private maximizeOverlayPanelId: string | undefined;
@@ -210,6 +216,14 @@ export class DockviewComponent {
     this.centerEl.appendChild(this.layoutContentEl);
 
     this.container.appendChild(this.rootEl);
+
+    // Stable render container manager — owns the persistent content containers
+    // for every panel. Must be created AFTER rootEl is attached so its
+    // ResizeObserver sees the correct host rect, but BEFORE any views are built
+    // (views call createContent which routes through the manager).
+    this.renderManager = new RenderContainerManager(this.rootEl, (panelId, container) => {
+      return this.options.createContent(panelId, container, this.getPanelApi(panelId));
+    });
 
     // Set up event delegation for action buttons.
     // Use mousedown instead of click so that actions fire immediately,
@@ -503,12 +517,12 @@ export class DockviewComponent {
       if (!this.state.panels[panelId]) {
         api._dispose();
         this.panelApis.delete(panelId);
-        // Also destroy cached content for removed panels
         this.destroyContent(panelId);
       }
     }
-    // Clean up any orphaned content cache entries
-    for (const panelId of this.contentCache.keys()) {
+    // Clean up any orphaned render containers (e.g. content created for a
+    // panel that was removed without going through cleanupPanelApis above).
+    for (const panelId of Array.from(this.renderManager.panelIds())) {
       if (!this.state.panels[panelId]) {
         this.destroyContent(panelId);
       }
@@ -601,10 +615,8 @@ export class DockviewComponent {
       this.maximizeOverlay = null;
     }
 
-    // Destroy all cached content
-    for (const panelId of this.contentCache.keys()) {
-      this.destroyContent(panelId);
-    }
+    // Destroy all panel content via the render manager
+    this.renderManager.dispose();
 
     this.rootEl.removeEventListener('mousedown', this.onActionClick);
 
@@ -692,96 +704,24 @@ export class DockviewComponent {
   // ── Content management ──────────────────────────────────────────
 
   /**
-   * Get or create a content container for a panel. The container is cached
-   * so that when a panel moves between locations (tab group → floating → tab group),
-   * the content is preserved by reparenting the DOM element instead of destroying
-   * and recreating it.
+   * Bind a placeholder element to a panel. The persistent content container
+   * (owned by the render manager) is positioned over the placeholder. The
+   * returned disposable hides the container; call destroyContent() to
+   * permanently dispose it when the panel is closed.
+   *
+   * Views call this with whatever wrapper div they previously used as the
+   * createContent parent — the wrapper now serves as a placeholder rather
+   * than a parent. The container is never reparented.
    */
   private getOrCreateContent(panelId: string, parentContainer: HTMLElement): IDisposable {
-    const cached = this.contentCache.get(panelId);
-    if (cached) {
-      // Bump generation so old disposables become no-ops
-      cached.generation++;
-      const myGen = cached.generation;
-      const prevParent = cached.container.parentElement;
-      // Reparent existing content container into the new parent
-      parentContainer.appendChild(cached.container);
-      debugLog(
-        'FLYOUT_CONTENT',
-        `getOrCreateContent CACHE HIT panel=${panelId} gen=${myGen} prevParentTag=${prevParent?.tagName ?? 'NONE'} prevParentClass="${prevParent?.className ?? ''}" newParentTag=${parentContainer.tagName} newParentClass="${parentContainer.className}" cachedChildren=${cached.container.children.length} cachedInnerHTMLLen=${cached.container.innerHTML.length}`,
-      );
-      return {
-        dispose: () => {
-          // Only detach if this is still the current generation
-          // (prevents stale FloatingWindowView dispose from removing reparented content)
-          if (cached.generation === myGen) {
-            debugLog(
-              'FLYOUT_CONTENT',
-              `dispose CACHE panel=${panelId} gen=${myGen} (current) → removing container`,
-            );
-            cached.container.remove();
-          } else {
-            debugLog(
-              'FLYOUT_CONTENT',
-              `dispose CACHE panel=${panelId} gen=${myGen} STALE (current=${cached.generation}) → no-op`,
-            );
-          }
-        },
-      };
-    }
-
-    // Create new content container
-    const container = document.createElement('div');
-    container.style.cssText = 'width:100%;height:100%;overflow:hidden;';
-    parentContainer.appendChild(container);
-
-    let disposable: IDisposable;
-    try {
-      disposable = this.options.createContent(panelId, container, this.getPanelApi(panelId));
-      debugLog(
-        'FLYOUT_CONTENT',
-        `getOrCreateContent CACHE MISS panel=${panelId} hostCreateContent OK children=${container.children.length} innerHTMLLen=${container.innerHTML.length} hasDisposable=${!!disposable}`,
-      );
-    } catch (err) {
-      debugError(
-        'FLYOUT_CONTENT',
-        `getOrCreateContent CACHE MISS panel=${panelId} hostCreateContent THREW`,
-        err,
-      );
-      throw err;
-    }
-    const entry = { container, disposable, generation: 0 };
-    this.contentCache.set(panelId, entry);
-
-    return {
-      dispose: () => {
-        // Only detach if this is still the current generation
-        if (entry.generation === 0) {
-          debugLog(
-            'FLYOUT_CONTENT',
-            `dispose NEW panel=${panelId} (current) → removing container`,
-          );
-          container.remove();
-        } else {
-          debugLog(
-            'FLYOUT_CONTENT',
-            `dispose NEW panel=${panelId} STALE (gen=${entry.generation}) → no-op`,
-          );
-        }
-      },
-    };
+    return this.renderManager.bindPlaceholder(panelId, parentContainer);
   }
 
   /**
-   * Permanently destroy a panel's cached content (called when panel is closed).
+   * Permanently destroy a panel's content (called when panel is closed).
    */
   private destroyContent(panelId: string): void {
-    const cached = this.contentCache.get(panelId);
-    if (cached) {
-      cached.disposable.dispose();
-      cached.container.remove();
-      this.contentCache.delete(panelId);
-    }
+    this.renderManager.destroyContainer(panelId);
   }
 
   // ── Rendering ───────────────────────────────────────────────────
@@ -965,14 +905,6 @@ export class DockviewComponent {
     // Remove stale floating views (panel was docked back or closed)
     for (const [id, view] of this.floatingViews) {
       if (!currentIds.has(id)) {
-        // If the panel still exists in state (docked back, not closed),
-        // bump generation so the floating view's dispose doesn't remove
-        // the cached content, then invalidate the TabGroupView's stale slot.
-        if (this.state.panels[id]) {
-          const cached = this.contentCache.get(id);
-          if (cached) cached.generation++;
-        }
-
         view.dispose();
         this.floatingViews.delete(id);
 
@@ -1128,14 +1060,6 @@ export class DockviewComponent {
       }
     } else if (this.maximizeOverlay) {
       const restoredPanelId = this.maximizeOverlayPanelId;
-
-      // Bump the content cache generation so the overlay's dispose does NOT
-      // remove the cached content container from the DOM — we need it alive
-      // so the TabGroupView can reparent it back.
-      if (restoredPanelId) {
-        const cached = this.contentCache.get(restoredPanelId);
-        if (cached) cached.generation++;
-      }
 
       this.maximizeOverlay.dispose();
       this.maximizeOverlay = null;
