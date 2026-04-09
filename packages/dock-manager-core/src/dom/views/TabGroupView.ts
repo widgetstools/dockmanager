@@ -500,12 +500,12 @@ export class TabGroupView {
 
   private buildTabStrip(parentEl?: HTMLElement): void {
     const outerWrap = document.createElement('div');
-    outerWrap.style.cssText = 'display:flex;align-items:center;gap:0;flex:1;overflow:hidden;position:relative;';
+    outerWrap.style.cssText = 'display:flex;align-items:flex-end;align-self:stretch;gap:0;flex:1;overflow-x:hidden;overflow-y:visible;position:relative;';
 
     this.tabContainerEl = document.createElement('div');
     this.tabContainerEl.setAttribute('role', 'tablist');
     this.tabContainerEl.setAttribute('aria-label', 'Panel tabs');
-    this.tabContainerEl.style.cssText = 'display:flex;align-items:center;gap:0;overflow:hidden;flex:1;';
+    this.tabContainerEl.style.cssText = 'display:flex;align-items:flex-end;align-self:stretch;gap:0;overflow-x:hidden;overflow-y:visible;flex:1;';
 
     for (const panelId of this.node.panels) {
       const panel = this.panels[panelId];

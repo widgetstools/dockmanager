@@ -174,7 +174,8 @@ dock-manager *,
   align-items: center;
   gap: 4px;
   padding: 0 12px;
-  height: 31px;
+  height: 26px;
+  align-self: flex-end;
   cursor: pointer;
   user-select: none;
   font-size: 12px;
@@ -182,10 +183,11 @@ dock-manager *,
   color: hsl(var(--dock-text));
   opacity: 0.7;
   border-top: 2px solid transparent;
+  border-bottom: 1px solid transparent;
   margin-bottom: -1px;
   transition: color 0.15s, background-color 0.15s;
   position: relative;
-  box-shadow: -1px 0 0 hsl(var(--dock-border) / 0.7), 1px 0 0 hsl(var(--dock-border) / 0.7), 0 -1px 0 hsl(var(--dock-border) / 0.7);
+  box-shadow: -1px 0 0 hsl(var(--dock-border) / 0.8), 1px 0 0 hsl(var(--dock-border) / 0.8), 0 -1px 0 hsl(var(--dock-border) / 0.8);
 }
 
 .dock-tab:hover {
@@ -198,6 +200,8 @@ dock-manager *,
   font-weight: 500;
   background: hsl(var(--dock-surface));
   border-top-color: hsl(var(--dock-surface));
+  border-bottom-color: hsl(var(--dock-surface));
+  margin-bottom: -2px;
   box-shadow: -1px 0 0 hsl(var(--dock-border)), 1px 0 0 hsl(var(--dock-border)), 0 -1px 0 hsl(var(--dock-border));
   z-index: 1;
 }
