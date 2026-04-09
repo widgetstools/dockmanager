@@ -6,6 +6,7 @@ on:
     paths:
       - 'apps/demo/**'
       - 'apps/angular-demo/**'
+      - 'apps/trading-app/**'
       - 'packages/**'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
@@ -48,19 +49,30 @@ jobs:
 
       - name: Build React demo
         run: npm run build --workspace=demo
+        env:
+          VITE_BASE_PATH: /dockmanager/
 
       - name: Build Angular demo
         run: npm run build:angular-demo
 
+      - name: Build trading-app
+        run: npm run build --workspace=trading-app
+        env:
+          VITE_BASE_PATH: /dockmanager/trading/
+
       - name: Assemble deployment directory
         run: |
           mkdir -p deploy/angular
+          mkdir -p deploy/trading
 
           # React demo at root
           cp -r apps/demo/dist/. deploy/
 
           # Angular demo at /angular
           cp -r apps/angular-demo/dist/angular-demo/. deploy/angular/
+
+          # Trading app at /trading
+          cp -r apps/trading-app/dist/. deploy/trading/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
