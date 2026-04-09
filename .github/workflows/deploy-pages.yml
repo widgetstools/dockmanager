@@ -60,7 +60,7 @@ jobs:
           cp -r apps/demo/dist/. deploy/
 
           # Angular demo at /angular
-          cp -r apps/angular-demo/dist/angular-demo/browser/. deploy/angular/
+          cp -r apps/angular-demo/dist/angular-demo/. deploy/angular/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
