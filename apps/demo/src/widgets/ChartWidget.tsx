@@ -34,18 +34,36 @@ export function ChartWidget({ panel }: ChartWidgetProps = {}) {
     const el = containerRef.current;
     if (!el) return;
 
-    // Measure synchronously at mount — if parent is detached, this is 0x0.
-    const initial = el.getBoundingClientRect();
-    setSize({ w: initial.width, h: initial.height });
+    // rAF-based remeasure fallback. Even with stable render containers, a
+    // freshly-mounted widget may measure 0x0 on the first paint (the parent
+    // flyout has real size, but layout has not flushed to this subtree yet).
+    // Poll for up to ~1 second until we read a non-zero rect, then stop —
+    // the ResizeObserver below keeps tracking subsequent changes.
+    let raf = 0;
+    let frames = 0;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ w: rect.width, h: rect.height });
+        return;
+      }
+      if (frames++ < 60) raf = requestAnimationFrame(measure);
+    };
+    measure();
 
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
       const cr = entry.contentRect;
-      setSize({ w: cr.width, h: cr.height });
+      if (cr.width > 0 && cr.height > 0) {
+        setSize({ w: cr.width, h: cr.height });
+      }
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, []);
 
   useEffect(() => {
