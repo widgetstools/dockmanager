@@ -52,8 +52,6 @@ export class TabGroupView {
   private titleEl: HTMLSpanElement | null = null;
   private contentAreaEl: HTMLDivElement;
   private actionButtonsEl: HTMLDivElement;
-  private scrollLeftBtn: HTMLButtonElement | null = null;
-  private scrollRightBtn: HTMLButtonElement | null = null;
   private overflowBtn: HTMLButtonElement | null = null;
   private overflowMenuEl: HTMLDivElement | null = null;
   private overflowMenuOutsideHandler: ((e: MouseEvent) => void) | null = null;
@@ -76,10 +74,6 @@ export class TabGroupView {
   // Tab overflow
   private tabOverflowObserver: TabOverflowObserver;
   private overflowState: TabOverflowState = { visibleTabs: [], overflowTabs: [], hasOverflow: false };
-  // (scroll arrows replace the old dropdown)
-
-  // rAF throttle for scroll events
-  private scrollRafPending = false;
 
   // Header collapse for single-tab panes
   private headerCollapsed = false;
@@ -257,10 +251,9 @@ export class TabGroupView {
       this.clearHeader();
       this.buildHeader();
       this.updateHeaderCollapse();
-      // Reattach overflow observer and update scroll arrows after layout
+      // Reattach overflow observer after layout
       if (this.tabContainerEl) {
         this.tabOverflowObserver.observe(this.tabContainerEl);
-        requestAnimationFrame(() => this.updateScrollArrows());
       }
     } else if (activePanelChanged || activePaneChanged || maximizedStateChanged) {
       // Just update tab styling
@@ -565,32 +558,7 @@ export class TabGroupView {
       this.tabContainerEl.appendChild(tabEl);
     }
 
-    // Left scroll arrow (hidden initially)
-    const scrollBtnStyle = 'flex-shrink:0;padding:2px 4px;color:hsl(var(--dock-text-muted));cursor:pointer;background:none;border:none;display:none;align-items:center;justify-content:center;';
-
-    this.scrollLeftBtn = document.createElement('button');
-    this.scrollLeftBtn.style.cssText = scrollBtnStyle;
-    this.scrollLeftBtn.setAttribute('aria-label', 'Scroll tabs left');
-    this.scrollLeftBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>';
-    this.scrollLeftBtn.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      this.scrollTabs('left');
-    });
-    outerWrap.appendChild(this.scrollLeftBtn);
     outerWrap.appendChild(this.tabContainerEl);
-
-    // Right scroll arrow (hidden initially)
-    this.scrollRightBtn = document.createElement('button');
-    this.scrollRightBtn.style.cssText = scrollBtnStyle;
-    this.scrollRightBtn.setAttribute('aria-label', 'Scroll tabs right');
-    this.scrollRightBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>';
-    this.scrollRightBtn.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      this.scrollTabs('right');
-    });
-    outerWrap.appendChild(this.scrollRightBtn);
 
     // Overflow dropdown button — shown when tabs don't fit.
     this.overflowBtn = document.createElement('button');
@@ -610,17 +578,6 @@ export class TabGroupView {
       this.toggleOverflowMenu();
     });
     outerWrap.appendChild(this.overflowBtn);
-
-    // Listen to scroll events on the tab container to update arrow visibility (rAF-throttled)
-    this.tabContainerEl.addEventListener('scroll', () => {
-      if (!this.scrollRafPending) {
-        this.scrollRafPending = true;
-        requestAnimationFrame(() => {
-          this.scrollRafPending = false;
-          this.updateScrollArrows();
-        });
-      }
-    });
 
     const target = parentEl || this.headerEl;
     target.appendChild(outerWrap);
@@ -1050,8 +1007,6 @@ export class TabGroupView {
     if (!this.overflowState.hasOverflow) {
       this.hideOverflowMenu();
     }
-    // Keep scroll arrow visibility in sync with current scroll position too.
-    this.updateScrollArrows();
   }
 
   private toggleOverflowMenu(): void {
@@ -1187,24 +1142,4 @@ export class TabGroupView {
     }
   }
 
-  private updateScrollArrows(): void {
-    if (!this.tabContainerEl || !this.scrollLeftBtn || !this.scrollRightBtn) return;
-
-    const el = this.tabContainerEl;
-    const canScrollLeft = el.scrollLeft > 0;
-    const canScrollRight = el.scrollLeft < el.scrollWidth - el.clientWidth - 1;
-
-    this.scrollLeftBtn.style.display = canScrollLeft ? 'flex' : 'none';
-    this.scrollRightBtn.style.display = canScrollRight ? 'flex' : 'none';
-  }
-
-  private scrollTabs(direction: 'left' | 'right'): void {
-    if (!this.tabContainerEl) return;
-    const scrollAmount = 120; // pixels per click
-    this.tabContainerEl.scrollBy({
-      left: direction === 'right' ? scrollAmount : -scrollAmount,
-      behavior: 'smooth',
-    });
-    // The scroll event handler (rAF-throttled) will naturally update arrow visibility
-  }
 }
