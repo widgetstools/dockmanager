@@ -131,6 +131,12 @@ export interface TabGroupNode {
   headerPosition?: HeaderPosition;
   /** Whether the header is collapsed (hidden). Only applies to single-tab panes. */
   headerCollapsed?: boolean;
+  /**
+   * When true, panels inside this group cannot be dragged out, external panels
+   * cannot be dropped into it, and tab close buttons are hidden.
+   * Useful for pinning critical panels (main editor, persistent toolbox).
+   */
+  locked?: boolean;
 }
 
 /**

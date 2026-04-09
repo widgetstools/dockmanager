@@ -71,6 +71,18 @@ export interface DockviewComponentOptions {
    * @returns A disposable that cleans up the rendered actions.
    */
   createHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string, container: HTMLElement) => IDisposable;
+  /**
+   * Optional factory to render a watermark (placeholder) into an empty tab
+   * group. When a tab group has no panels and this callback is provided, the
+   * returned element is rendered inside the group's content area instead of
+   * the default `.dock-empty-placeholder`. The group remains a valid drop
+   * target so users can drag panels into it.
+   *
+   * @param container - The DOM element to mount the watermark into.
+   * @returns A disposable that cleans up the watermark when a panel is added
+   *          to the group (or the group is disposed).
+   */
+  createWatermark?: (container: HTMLElement) => IDisposable;
   /** Called after every state change with the new state. */
   onStateChange?: (state: DockManagerState) => void;
   /** Called before a panel is closed. Call `event.preventDefault()` to cancel. */
@@ -222,7 +234,23 @@ export class DockviewComponent {
     // ResizeObserver sees the correct host rect, but BEFORE any views are built
     // (views call createContent which routes through the manager).
     this.renderManager = new RenderContainerManager(this.rootEl, (panelId, container) => {
-      return this.options.createContent(panelId, container, this.getPanelApi(panelId));
+      const api = this.getPanelApi(panelId);
+      // Observe container resizes and forward to the PanelApi as dimension events.
+      let ro: ResizeObserver | null = null;
+      if (typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(entries => {
+          const rect = entries[0]?.contentRect;
+          if (rect) api._setDimensions({ width: rect.width, height: rect.height });
+        });
+        ro.observe(container);
+      }
+      const inner = this.options.createContent(panelId, container, api);
+      return {
+        dispose: () => {
+          if (ro) ro.disconnect();
+          inner.dispose();
+        },
+      };
     });
 
     // Set up event delegation for action buttons.
@@ -510,6 +538,81 @@ export class DockviewComponent {
   }
 
   /**
+   * Compute the minimum size (pixels) a layout node can occupy along an axis.
+   * For tab groups: max of all contained panels' min along that axis (any
+   * panel could become active). For splits: sum along the same axis, max
+   * along the perpendicular axis. Falls back to 0 when unconstrained.
+   */
+  private computeNodeMinSize(node: LayoutNode, axis: 'horizontal' | 'vertical'): number {
+    if (node.type === 'tabgroup') {
+      let maxMin = 0;
+      for (const pid of node.panels) {
+        const p = this.state.panels[pid];
+        if (!p) continue;
+        const m = axis === 'horizontal'
+          ? (p.minimumWidth ?? p.minimumSize ?? 0)
+          : (p.minimumHeight ?? p.minimumSize ?? 0);
+        if (m > maxMin) maxMin = m;
+      }
+      return maxMin;
+    }
+    // split
+    if (node.direction === axis) {
+      return node.children.reduce((sum, c) => sum + this.computeNodeMinSize(c, axis), 0);
+    }
+    return node.children.reduce((m, c) => Math.max(m, this.computeNodeMinSize(c, axis)), 0);
+  }
+
+  /**
+   * Compute the maximum size (pixels) a layout node can occupy along an axis.
+   * For tab groups: min of all contained panels' max. For splits: sum along
+   * the same axis, min along perpendicular. Returns Infinity when unconstrained.
+   */
+  private computeNodeMaxSize(node: LayoutNode, axis: 'horizontal' | 'vertical'): number {
+    if (node.type === 'tabgroup') {
+      let minMax = Infinity;
+      for (const pid of node.panels) {
+        const p = this.state.panels[pid];
+        if (!p) continue;
+        const m = axis === 'horizontal' ? p.maximumWidth : p.maximumHeight;
+        if (m !== undefined && m < minMax) minMax = m;
+      }
+      return minMax;
+    }
+    if (node.direction === axis) {
+      return node.children.reduce((sum, c) => sum + this.computeNodeMaxSize(c, axis), 0);
+    }
+    return node.children.reduce((m, c) => Math.min(m, this.computeNodeMaxSize(c, axis)), Infinity);
+  }
+
+  /**
+   * After each render, push visibility + active flags to each cached PanelApi.
+   * Visibility = panel is the active tab of its tab group. Active = panel is
+   * the globally focused pane (state.activePaneId).
+   */
+  private propagatePanelApiState(): void {
+    // Collect the set of visible panel IDs (active tab in each tab group).
+    const visible = new Set<string>();
+    const walk = (node: LayoutNode): void => {
+      if (node.type === 'tabgroup') {
+        if (node.activePanel) visible.add(node.activePanel);
+      } else if (node.type === 'split') {
+        for (const c of node.children) walk(c);
+      }
+    };
+    walk(this.state.layout);
+    // Floating + popout panels count as visible.
+    for (const fp of this.state.floatingPanels) visible.add(fp.panelId);
+    for (const pp of (this.state.popoutPanels || [])) visible.add(pp.panelId);
+
+    const activeId = this.state.activePaneId;
+    for (const [panelId, api] of this.panelApis) {
+      api._setVisible(visible.has(panelId));
+      api._setActive(panelId === activeId);
+    }
+  }
+
+  /**
    * Dispose PanelApis for panels that no longer exist in state.
    */
   private cleanupPanelApis(): void {
@@ -732,6 +835,7 @@ export class DockviewComponent {
       this.renderFloatingPanels();
       this.renderUnpinnedStrips();
       this.renderMaximizeOverlay();
+      this.propagatePanelApiState();
     } catch (err) {
       console.error('[DockviewComponent] Render error:', err);
       // Don't re-throw — prevent DOM manipulation errors from freezing the component.
@@ -823,6 +927,7 @@ export class DockviewComponent {
       createContent: (panelId, container) => this.getOrCreateContent(panelId, container),
       createTab: this.options.createTab,
       createHeaderActions: this.options.createHeaderActions,
+      createWatermark: this.options.createWatermark,
     };
 
     const view = new TabGroupView(
@@ -892,6 +997,8 @@ export class DockviewComponent {
         this.dispatch({ type: 'RESIZE_SPLIT', payload: { splitId, sizes } });
       },
       createChildView: (childNode) => this.renderLayoutNode(childNode),
+      getChildMinSize: (childNode, axis) => this.computeNodeMinSize(childNode, axis),
+      getChildMaxSize: (childNode, axis) => this.computeNodeMaxSize(childNode, axis),
     });
     this.splitViews.set(node.id, view);
     return view.element;

@@ -523,6 +523,8 @@ export class DockDragManager {
       if (!attr) continue;
       // Header-collapsed panes refuse drops
       if (htmlEl.hasAttribute('data-header-collapsed')) continue;
+      // Locked groups refuse external drops
+      if (htmlEl.hasAttribute('data-locked-group')) continue;
 
       // Document host enforcement: if source panel is documentOnly,
       // only allow drops on document host tab groups

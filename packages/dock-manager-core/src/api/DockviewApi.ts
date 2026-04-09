@@ -459,6 +459,17 @@ export class DockviewApi {
     this.dispatch({ type: 'SET_HEADER_POSITION', payload: { tabGroupId: groupId, headerPosition: position } });
   }
 
+  /**
+   * Lock or unlock a tab group. Locked groups reject drops, prevent their
+   * panels from being dragged out / floated / closed, and hide tab close buttons.
+   *
+   * @param groupId - The tab group to lock/unlock.
+   * @param locked - `true` to lock, `false` to unlock.
+   */
+  setTabGroupLocked(groupId: string, locked: boolean): void {
+    this.dispatch({ type: 'SET_TAB_GROUP_LOCKED', payload: { tabGroupId: groupId, locked } });
+  }
+
   // ── Unpinned panels ────────────────────────────────────────────
 
   /**

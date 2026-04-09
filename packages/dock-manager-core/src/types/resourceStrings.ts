@@ -14,6 +14,7 @@ export interface DockResourceStrings {
   maximize: string;
   restore: string;
   dock: string;
+  tabOverflowMenu: string;
 }
 
 export const defaultResourceStrings: DockResourceStrings = {
@@ -26,4 +27,5 @@ export const defaultResourceStrings: DockResourceStrings = {
   maximize: 'Maximize',
   restore: 'Restore',
   dock: 'Dock',
+  tabOverflowMenu: 'Show all tabs',
 };

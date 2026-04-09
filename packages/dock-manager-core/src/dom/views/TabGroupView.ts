@@ -9,6 +9,7 @@ import {
   iconFloat,
   iconUnpin,
 } from '../icons';
+import { MutableDisposable } from '../../utils/lifecycle';
 
 // ─── Interfaces ──────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ export interface TabGroupViewCallbacks {
   createTab?: (panelId: string, container: HTMLElement, isActive: boolean) => IDisposable;
   onSetHeaderCollapsed: (tabGroupId: string, collapsed: boolean) => void;
   createHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string, container: HTMLElement) => IDisposable;
+  createWatermark?: (container: HTMLElement) => IDisposable;
 }
 
 // ─── TabGroupView ────────────────────────────────────────────────────
@@ -52,6 +54,10 @@ export class TabGroupView {
   private actionButtonsEl: HTMLDivElement;
   private scrollLeftBtn: HTMLButtonElement | null = null;
   private scrollRightBtn: HTMLButtonElement | null = null;
+  private overflowBtn: HTMLButtonElement | null = null;
+  private overflowMenuEl: HTMLDivElement | null = null;
+  private overflowMenuOutsideHandler: ((e: MouseEvent) => void) | null = null;
+  private overflowMenuKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   // Header action slots
   private prefixSlotEl: HTMLDivElement | null = null;
@@ -64,6 +70,8 @@ export class TabGroupView {
   // Content management
   private contentSlots = new Map<string, { container: HTMLDivElement; disposable: IDisposable }>();
   private tabDisposables = new Map<string, IDisposable>();
+  private readonly watermarkSlot = new MutableDisposable();
+  private watermarkEl: HTMLDivElement | null = null;
 
   // Tab overflow
   private tabOverflowObserver: TabOverflowObserver;
@@ -101,6 +109,7 @@ export class TabGroupView {
     this.element.style.cssText = 'display:flex;flex-direction:column;height:100%;width:100%;position:relative;';
     this.element.className = this.getRootClassName();
     this.element.setAttribute('data-dock-target', node.id);
+    if (node.locked) this.element.setAttribute('data-locked-group', 'true');
     this.element.setAttribute('role', 'region');
     this.element.setAttribute('aria-label', panels[node.activePanel]?.title || 'Panel');
     this.element.tabIndex = -1;
@@ -119,7 +128,7 @@ export class TabGroupView {
     this.headerEl = document.createElement('div');
     this.headerEl.className = 'dock-panel-header';
     this.headerEl.style.cssText =
-      'display:flex;align-items:center;justify-content:space-between;min-height:36px;padding:0 12px;flex-shrink:0;';
+      'display:flex;align-items:center;justify-content:space-between;min-height:38px;padding:0 12px;flex-shrink:0;';
     this.element.appendChild(this.headerEl);
 
     // Create content area
@@ -189,13 +198,16 @@ export class TabGroupView {
     this.element.setAttribute('data-panel-id', node.activePanel);
     this.element.setAttribute('aria-label', panels[node.activePanel]?.title || 'Panel');
     this.applyHasTabsAttr();
+    if (node.locked) this.element.setAttribute('data-locked-group', 'true');
+    else this.element.removeAttribute('data-locked-group');
     this.element.className = this.getRootClassName();
     this.contentAreaEl.id = `panel-${node.activePanel}`;
     this.contentAreaEl.setAttribute('aria-labelledby', `tab-${node.activePanel}`);
 
     const panelsChanged =
       prevNode.panels.length !== node.panels.length ||
-      prevNode.panels.some((p, i) => p !== node.panels[i]);
+      prevNode.panels.some((p, i) => p !== node.panels[i]) ||
+      prevNode.locked !== node.locked;
     const activePanelChanged = prevNode.activePanel !== node.activePanel;
     const activePaneChanged = prevActivePaneId !== activePaneId;
     const maximizedStateChanged = prevMaximizedPanelId !== maximizedPanelId;
@@ -315,6 +327,13 @@ export class TabGroupView {
     this.leftSlotDisposable?.dispose();
     this.rightSlotDisposable?.dispose();
 
+    // Dispose watermark
+    this.watermarkSlot.dispose();
+    this.watermarkEl = null;
+
+    // Close overflow menu if open
+    this.hideOverflowMenu();
+
     // Cleanup header collapse pill and hover zone
     this.headerCollapsePill?.remove();
     this.headerCollapsePill = null;
@@ -409,6 +428,10 @@ export class TabGroupView {
   // ── Private: Header building ────────────────────────────────────
 
   private clearHeader(): void {
+    // Close any open overflow menu before tearing down the tab strip that owns it
+    this.hideOverflowMenu();
+    this.overflowBtn = null;
+
     // Dispose tab disposables
     for (const [, d] of this.tabDisposables) {
       d.dispose();
@@ -481,12 +504,12 @@ export class TabGroupView {
 
   private buildTabStrip(parentEl?: HTMLElement): void {
     const outerWrap = document.createElement('div');
-    outerWrap.style.cssText = 'display:flex;align-items:center;gap:0;flex:1;overflow:hidden;position:relative;';
+    outerWrap.style.cssText = 'display:flex;align-items:flex-end;align-self:stretch;gap:0;flex:1;overflow-x:hidden;overflow-y:visible;position:relative;';
 
     this.tabContainerEl = document.createElement('div');
     this.tabContainerEl.setAttribute('role', 'tablist');
     this.tabContainerEl.setAttribute('aria-label', 'Panel tabs');
-    this.tabContainerEl.style.cssText = 'display:flex;align-items:center;gap:0;overflow:hidden;flex:1;';
+    this.tabContainerEl.style.cssText = 'display:flex;align-items:flex-end;align-self:stretch;gap:0;overflow-x:hidden;overflow-y:visible;flex:1;';
 
     for (const panelId of this.node.panels) {
       const panel = this.panels[panelId];
@@ -569,6 +592,25 @@ export class TabGroupView {
     });
     outerWrap.appendChild(this.scrollRightBtn);
 
+    // Overflow dropdown button — shown when tabs don't fit.
+    this.overflowBtn = document.createElement('button');
+    this.overflowBtn.className = 'dock-tab-overflow-btn';
+    this.overflowBtn.style.cssText = 'flex-shrink:0;padding:2px 6px;color:hsl(var(--dock-text-muted));cursor:pointer;background:none;border:none;display:none;align-items:center;justify-content:center;';
+    this.overflowBtn.setAttribute('aria-label', this.resourceStrings.tabOverflowMenu ?? 'Show all tabs');
+    this.overflowBtn.setAttribute('aria-haspopup', 'menu');
+    this.overflowBtn.setAttribute('aria-expanded', 'false');
+    this.overflowBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    this.overflowBtn.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+    });
+    this.overflowBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      this.toggleOverflowMenu();
+    });
+    outerWrap.appendChild(this.overflowBtn);
+
     // Listen to scroll events on the tab container to update arrow visibility (rAF-throttled)
     this.tabContainerEl.addEventListener('scroll', () => {
       if (!this.scrollRafPending) {
@@ -629,7 +671,7 @@ export class TabGroupView {
     //   .dock-tab:hover .dock-tab-close, .dock-tab.dock-tab-selected .dock-tab-close { opacity: 0.5 }
     //   .dock-tab-close:hover { opacity: 1 !important }
     // No JS mouseenter/mouseleave needed — avoids memory leaks when tabs are rebuilt.
-    if (panel.closable !== false) {
+    if (panel.closable !== false && !this.node.locked) {
       const closeBtn = document.createElement('button');
       closeBtn.className = 'dock-tab-close';
       closeBtn.setAttribute('data-action', 'close');
@@ -679,8 +721,10 @@ export class TabGroupView {
       menu.appendChild(sep);
     };
 
+    const locked = !!this.node.locked;
+
     // Close
-    addItem(this.resourceStrings.close, () => this.callbacks.onClosePanel(panelId), panel.closable === false);
+    addItem(this.resourceStrings.close, () => this.callbacks.onClosePanel(panelId), panel.closable === false || locked);
 
     // Close Others (only if multiple tabs)
     if (this.node.panels.length > 1) {
@@ -718,18 +762,21 @@ export class TabGroupView {
     addSeparator();
 
     // Float
-    addItem(this.resourceStrings.float, () => this.callbacks.onFloatPanel(panelId), panel.floatable === false);
+    addItem(this.resourceStrings.float, () => this.callbacks.onFloatPanel(panelId), panel.floatable === false || locked);
 
     // Unpin
     if (panel.allowPinning !== false) {
-      addItem(this.resourceStrings.unpin, () => this.callbacks.onUnpinPanel(panelId));
+      addItem(this.resourceStrings.unpin, () => this.callbacks.onUnpinPanel(panelId), locked);
     }
 
     addSeparator();
 
     // Maximize
-    addItem(this.resourceStrings.maximize, () => this.callbacks.onMaximizePanel(panelId));
+    addItem(this.resourceStrings.maximize, () => this.callbacks.onMaximizePanel(panelId), locked);
 
+    // Propagate dark-mode class so CSS vars resolve correctly when the menu is
+    // portaled to document.body (outside the dock root's `.dark` ancestor).
+    if (this.element.closest('.dark')) menu.classList.add('dark');
     document.body.appendChild(menu);
     this.contextMenuEl = menu;
 
@@ -843,8 +890,17 @@ export class TabGroupView {
     const activeId = this.node.activePanel;
     this.previousActiveId = activeId;
     if (!activeId || !this.panels[activeId]) {
-      // Show empty placeholder
-      if (!this.contentAreaEl.querySelector('.dock-empty-placeholder')) {
+      // Empty group: render host-provided watermark if any, else fallback
+      // placeholder. The watermark slot is cleared on the next content build.
+      if (this.callbacks.createWatermark) {
+        if (!this.watermarkEl) {
+          const wm = document.createElement('div');
+          wm.className = 'dock-watermark';
+          this.contentAreaEl.appendChild(wm);
+          this.watermarkEl = wm;
+          this.watermarkSlot.value = this.callbacks.createWatermark(wm);
+        }
+      } else if (!this.contentAreaEl.querySelector('.dock-empty-placeholder')) {
         const placeholder = document.createElement('div');
         placeholder.className = 'dock-empty-placeholder';
         placeholder.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:hsl(var(--dock-text-muted));font-size:14px;';
@@ -854,7 +910,12 @@ export class TabGroupView {
       return;
     }
 
-    // Remove empty placeholder if present
+    // Tear down watermark / fallback placeholder if present
+    if (this.watermarkEl) {
+      this.watermarkSlot.clear();
+      this.watermarkEl.remove();
+      this.watermarkEl = null;
+    }
     const placeholder = this.contentAreaEl.querySelector('.dock-empty-placeholder');
     if (placeholder) placeholder.remove();
 
@@ -983,8 +1044,147 @@ export class TabGroupView {
 
   private updateOverflowButton(): void {
     // Called by the TabOverflowObserver when overflow state changes.
-    // Update scroll arrow visibility based on current scroll position.
+    if (this.overflowBtn) {
+      this.overflowBtn.style.display = this.overflowState.hasOverflow ? 'flex' : 'none';
+    }
+    if (!this.overflowState.hasOverflow) {
+      this.hideOverflowMenu();
+    }
+    // Keep scroll arrow visibility in sync with current scroll position too.
     this.updateScrollArrows();
+  }
+
+  private toggleOverflowMenu(): void {
+    if (this.overflowMenuEl) {
+      this.hideOverflowMenu();
+    } else {
+      this.showOverflowMenu();
+    }
+  }
+
+  private showOverflowMenu(): void {
+    if (!this.overflowBtn || !this.tabContainerEl) return;
+    this.hideOverflowMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'dock-context-menu dock-tab-overflow-menu';
+    menu.style.cssText = 'position:fixed;z-index:10010;max-height:60vh;overflow-y:auto;';
+    menu.setAttribute('role', 'menu');
+
+    for (const panelId of this.node.panels) {
+      const panel = this.panels[panelId];
+      if (!panel) continue;
+
+      const item = document.createElement('div');
+      item.className = 'dock-context-menu-item dock-tab-overflow-menu-item';
+      item.style.cssText = 'display:flex;align-items:center;min-width:160px;max-width:320px;';
+      item.setAttribute('role', 'menuitem');
+      item.setAttribute('data-panel-id', panelId);
+      if (panelId === this.node.activePanel) {
+        item.setAttribute('aria-current', 'true');
+      }
+
+      // Icon
+      if (panel.icon) {
+        const iconSpan = document.createElement('span');
+        iconSpan.style.cssText = 'margin-right:6px;display:inline-flex;align-items:center;';
+        iconSpan.textContent = panel.icon;
+        item.appendChild(iconSpan);
+      }
+
+      // Label
+      const label = document.createElement('span');
+      label.textContent = panel.title;
+      label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      item.appendChild(label);
+
+      // Mark overflowing tabs (the ones not currently visible) with a dot
+      if (this.overflowState.overflowTabs.includes(panelId)) {
+        const dot = document.createElement('span');
+        dot.style.cssText = 'margin-left:8px;width:6px;height:6px;border-radius:50%;background:hsl(var(--dock-primary));flex-shrink:0;';
+        item.appendChild(dot);
+      }
+
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.hideOverflowMenu();
+        this.callbacks.onSetActivePanel(this.node.id, panelId);
+        this.callbacks.onSetActivePane(panelId);
+        this.scrollTabIntoView(panelId);
+      });
+      menu.appendChild(item);
+    }
+
+    // Propagate dark theme class from the dock root so CSS vars resolve
+    // correctly when the menu is portaled into document.body.
+    if (this.element.closest('.dark')) {
+      menu.classList.add('dark');
+    }
+    document.body.appendChild(menu);
+
+    // Position below the button, clamped to the viewport.
+    const btnRect = this.overflowBtn.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    let left = btnRect.right - menuRect.width;
+    if (left < 4) left = 4;
+    if (left + menuRect.width > window.innerWidth - 4) {
+      left = window.innerWidth - menuRect.width - 4;
+    }
+    let top = btnRect.bottom + 2;
+    if (top + menuRect.height > window.innerHeight - 4) {
+      top = btnRect.top - menuRect.height - 2;
+    }
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+
+    this.overflowMenuEl = menu;
+    this.overflowBtn.setAttribute('aria-expanded', 'true');
+
+    // Close on outside click / Escape
+    this.overflowMenuOutsideHandler = (ev: MouseEvent) => {
+      const target = ev.target as Node;
+      if (this.overflowMenuEl && !this.overflowMenuEl.contains(target) && target !== this.overflowBtn) {
+        this.hideOverflowMenu();
+      }
+    };
+    this.overflowMenuKeyHandler = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') {
+        ev.stopPropagation();
+        this.hideOverflowMenu();
+      }
+    };
+    // Use mousedown so outside close beats item click handlers consistently.
+    document.addEventListener('mousedown', this.overflowMenuOutsideHandler, true);
+    document.addEventListener('keydown', this.overflowMenuKeyHandler, true);
+  }
+
+  private hideOverflowMenu(): void {
+    if (this.overflowMenuEl) {
+      this.overflowMenuEl.remove();
+      this.overflowMenuEl = null;
+    }
+    if (this.overflowMenuOutsideHandler) {
+      document.removeEventListener('mousedown', this.overflowMenuOutsideHandler, true);
+      this.overflowMenuOutsideHandler = null;
+    }
+    if (this.overflowMenuKeyHandler) {
+      document.removeEventListener('keydown', this.overflowMenuKeyHandler, true);
+      this.overflowMenuKeyHandler = null;
+    }
+    this.overflowBtn?.setAttribute('aria-expanded', 'false');
+  }
+
+  private scrollTabIntoView(panelId: string): void {
+    if (!this.tabContainerEl) return;
+    const tab = this.tabContainerEl.querySelector<HTMLElement>(`[data-tab-id="${panelId}"]`);
+    if (!tab) return;
+    if (typeof tab.scrollIntoView === 'function') {
+      tab.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    }
   }
 
   private updateScrollArrows(): void {

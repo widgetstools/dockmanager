@@ -1115,4 +1115,363 @@ describe('DockviewComponent', () => {
       expect(restoredContent?.textContent).toBe('Content for panel1');
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════
+  // Watermark (empty tab group placeholder)
+  // ══════════════════════════════════════════════════════════════════
+
+  describe('createWatermark', () => {
+    it('renders watermark when the layout starts empty', () => {
+      const { factory } = createContentFactory();
+      const disposals: number[] = [];
+      let callCount = 0;
+      component = new DockviewComponent(container, {
+        initialState: {
+          layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
+          panels: {},
+          floatingPanels: [],
+          popoutPanels: [],
+          unpinnedPanels: [],
+          nextZIndex: 1000,
+          activePaneId: '',
+        },
+        createContent: factory,
+        createWatermark: (el) => {
+          const idx = ++callCount;
+          const div = document.createElement('div');
+          div.className = 'test-watermark';
+          div.textContent = 'Drop a panel here';
+          el.appendChild(div);
+          return { dispose: () => { disposals.push(idx); div.remove(); } };
+        },
+      });
+
+      const root = container.querySelector('.dock-manager-root')!;
+      const wm = root.querySelector('.dock-watermark > .test-watermark');
+      expect(wm).not.toBeNull();
+      expect(wm?.textContent).toBe('Drop a panel here');
+      // The default "Empty" fallback must NOT be present when watermark provided
+      expect(root.querySelector('.dock-empty-placeholder')).toBeNull();
+      expect(callCount).toBe(1);
+    });
+
+    it('disposes watermark when a panel is added, recreates when emptied', () => {
+      const { factory } = createContentFactory();
+      const disposals: number[] = [];
+      let callCount = 0;
+      component = new DockviewComponent(container, {
+        initialState: {
+          layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
+          panels: {},
+          floatingPanels: [],
+          popoutPanels: [],
+          unpinnedPanels: [],
+          nextZIndex: 1000,
+          activePaneId: '',
+        },
+        createContent: factory,
+        createWatermark: (el) => {
+          const idx = ++callCount;
+          const div = document.createElement('div');
+          div.className = 'test-watermark';
+          el.appendChild(div);
+          return { dispose: () => { disposals.push(idx); div.remove(); } };
+        },
+      });
+
+      const root = container.querySelector('.dock-manager-root')!;
+      expect(root.querySelector('.test-watermark')).not.toBeNull();
+
+      component.dispatch({
+        type: 'ADD_PANEL',
+        payload: { panelId: 'p1', title: 'P1' },
+      });
+
+      expect(root.querySelector('.test-watermark')).toBeNull();
+      expect(disposals).toEqual([1]);
+      expect(root.querySelector('.test-content[data-content-panel="p1"]')).not.toBeNull();
+
+      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'p1' } });
+
+      expect(root.querySelector('.test-watermark')).not.toBeNull();
+      expect(callCount).toBe(2);
+    });
+
+    it('falls back to .dock-empty-placeholder when createWatermark is not provided', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: {
+          layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
+          panels: {},
+          floatingPanels: [],
+          popoutPanels: [],
+          unpinnedPanels: [],
+          nextZIndex: 1000,
+          activePaneId: '',
+        },
+        createContent: factory,
+      });
+
+      const root = container.querySelector('.dock-manager-root')!;
+      expect(root.querySelector('.dock-empty-placeholder')).not.toBeNull();
+      expect(root.querySelector('.dock-watermark')).toBeNull();
+    });
+
+    it('disposes watermark on component dispose', () => {
+      const { factory } = createContentFactory();
+      const disposals: number[] = [];
+      component = new DockviewComponent(container, {
+        initialState: {
+          layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
+          panels: {},
+          floatingPanels: [],
+          popoutPanels: [],
+          unpinnedPanels: [],
+          nextZIndex: 1000,
+          activePaneId: '',
+        },
+        createContent: factory,
+        createWatermark: (el) => {
+          const div = document.createElement('div');
+          el.appendChild(div);
+          return { dispose: () => { disposals.push(1); div.remove(); } };
+        },
+      });
+
+      component.dispose();
+      // Prevent double-dispose in afterEach
+      (component as any) = null;
+      expect(disposals).toEqual([1]);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════
+  // Tab overflow menu
+  // ══════════════════════════════════════════════════════════════════
+
+  describe('tab overflow menu', () => {
+    function createMultiPanelState(): DockManagerState {
+      return {
+        layout: {
+          type: 'tabgroup',
+          id: 'tg1',
+          panels: ['p1', 'p2', 'p3'],
+          activePanel: 'p1',
+        },
+        panels: {
+          p1: { id: 'p1', title: 'Panel One' },
+          p2: { id: 'p2', title: 'Panel Two' },
+          p3: { id: 'p3', title: 'Panel Three' },
+        },
+        floatingPanels: [],
+        popoutPanels: [],
+        unpinnedPanels: [],
+        nextZIndex: 1000,
+        activePaneId: 'p1',
+      };
+    }
+
+    it('renders an overflow button (hidden initially, no overflow in jsdom)', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createMultiPanelState(),
+        createContent: factory,
+      });
+      const btn = container.querySelector<HTMLElement>('.dock-tab-overflow-btn');
+      expect(btn).not.toBeNull();
+      // jsdom has no real layout, so the observer never marks overflow.
+      // The button exists in the DOM with display:none until overflow is detected.
+      expect(btn!.style.display).toBe('none');
+    });
+
+    it('opens a menu listing all panels when the overflow button is clicked', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createMultiPanelState(),
+        createContent: factory,
+      });
+      const btn = container.querySelector<HTMLButtonElement>('.dock-tab-overflow-btn')!;
+      // Force show (jsdom doesn't produce real overflow)
+      btn.style.display = 'flex';
+      btn.click();
+
+      const menu = document.querySelector('.dock-tab-overflow-menu');
+      expect(menu).not.toBeNull();
+      const items = menu!.querySelectorAll<HTMLElement>('.dock-tab-overflow-menu-item');
+      expect(items.length).toBe(3);
+      expect(items[0].getAttribute('data-panel-id')).toBe('p1');
+      expect(items[0].getAttribute('aria-current')).toBe('true');
+      expect(items[1].getAttribute('data-panel-id')).toBe('p2');
+      expect(items[2].getAttribute('data-panel-id')).toBe('p3');
+      expect(btn.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('activates the clicked panel and closes the menu', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createMultiPanelState(),
+        createContent: factory,
+      });
+      const btn = container.querySelector<HTMLButtonElement>('.dock-tab-overflow-btn')!;
+      btn.style.display = 'flex';
+      btn.click();
+
+      const item = document.querySelector<HTMLElement>('.dock-tab-overflow-menu-item[data-panel-id="p2"]')!;
+      item.click();
+
+      expect(document.querySelector('.dock-tab-overflow-menu')).toBeNull();
+      expect(component.getState().activePaneId).toBe('p2');
+      // The tab group's active panel also updated
+      const layout = component.getState().layout;
+      expect(layout.type).toBe('tabgroup');
+      if (layout.type === 'tabgroup') {
+        expect(layout.activePanel).toBe('p2');
+      }
+    });
+
+    it('closes the menu on Escape', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createMultiPanelState(),
+        createContent: factory,
+      });
+      const btn = container.querySelector<HTMLButtonElement>('.dock-tab-overflow-btn')!;
+      btn.style.display = 'flex';
+      btn.click();
+      expect(document.querySelector('.dock-tab-overflow-menu')).not.toBeNull();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(document.querySelector('.dock-tab-overflow-menu')).toBeNull();
+      expect(btn.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('cleans up the menu on component dispose', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createMultiPanelState(),
+        createContent: factory,
+      });
+      const btn = container.querySelector<HTMLButtonElement>('.dock-tab-overflow-btn')!;
+      btn.style.display = 'flex';
+      btn.click();
+      expect(document.querySelector('.dock-tab-overflow-menu')).not.toBeNull();
+
+      component.dispose();
+      (component as any) = null;
+      expect(document.querySelector('.dock-tab-overflow-menu')).toBeNull();
+    });
+  });
+
+  describe('locked tab groups', () => {
+    function createLockedState(): DockManagerState {
+      return {
+        layout: {
+          type: 'split',
+          id: 's1',
+          direction: 'horizontal',
+          sizes: [0.5, 0.5],
+          children: [
+            { type: 'tabgroup', id: 'tgA', panels: ['p1'], activePanel: 'p1', locked: true },
+            { type: 'tabgroup', id: 'tgB', panels: ['p2'], activePanel: 'p2' },
+          ],
+        },
+        panels: {
+          p1: { id: 'p1', title: 'Locked' },
+          p2: { id: 'p2', title: 'Free' },
+        },
+        floatingPanels: [],
+        popoutPanels: [],
+        unpinnedPanels: [],
+        nextZIndex: 1000,
+        activePaneId: 'p1',
+      };
+    }
+
+    it('marks locked tab group with data-locked-group attribute', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createLockedState(),
+        createContent: factory,
+      });
+      const locked = container.querySelector('[data-dock-target="tgA"]');
+      const free = container.querySelector('[data-dock-target="tgB"]');
+      expect(locked?.getAttribute('data-locked-group')).toBe('true');
+      expect(free?.getAttribute('data-locked-group')).toBeNull();
+    });
+
+    it('hides close button on tabs in a locked group', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createLockedState(),
+        createContent: factory,
+      });
+      const lockedTab = container.querySelector('[data-dock-target="tgA"] .dock-tab');
+      const freeTab = container.querySelector('[data-dock-target="tgB"] .dock-tab');
+      expect(lockedTab?.querySelector('.dock-tab-close')).toBeNull();
+      expect(freeTab?.querySelector('.dock-tab-close')).not.toBeNull();
+    });
+
+    it('rejects CLOSE_PANEL / FLOAT_PANEL / MOVE_PANEL for locked groups', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createLockedState(),
+        createContent: factory,
+      });
+      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'p1' } });
+      expect(component.getState().panels.p1).toBeDefined();
+
+      component.dispatch({ type: 'FLOAT_PANEL', payload: { panelId: 'p1', x: 0, y: 0, width: 200, height: 200 } });
+      expect(component.getState().floatingPanels).toHaveLength(0);
+
+      // Can't drag p2 INTO tgA
+      component.dispatch({ type: 'MOVE_PANEL', payload: { panelId: 'p2', targetTabGroupId: 'tgA', position: 'center' } });
+      const tgA = (component.getState().layout as any).children[0];
+      expect(tgA.panels).toEqual(['p1']);
+    });
+
+    it('panel api observables: visibility + active fire on tab/pane changes', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: {
+          layout: { type: 'tabgroup', id: 'tg', panels: ['p1', 'p2'], activePanel: 'p1' },
+          panels: { p1: { id: 'p1', title: 'One' }, p2: { id: 'p2', title: 'Two' } },
+          floatingPanels: [], popoutPanels: [], unpinnedPanels: [], nextZIndex: 1000, activePaneId: 'p1',
+        } as DockManagerState,
+        createContent: factory,
+      });
+      const api1 = component.getPanelApi('p1');
+      const api2 = component.getPanelApi('p2');
+      const visLog: Array<[string, boolean]> = [];
+      const actLog: Array<[string, boolean]> = [];
+      api1.onDidChangeVisibility(v => visLog.push(['p1', v]));
+      api2.onDidChangeVisibility(v => visLog.push(['p2', v]));
+      api1.onDidChangeActive(a => actLog.push(['p1', a]));
+      api2.onDidChangeActive(a => actLog.push(['p2', a]));
+
+      // Switch active tab to p2
+      component.dispatch({ type: 'SET_ACTIVE_PANEL', payload: { tabGroupId: 'tg', panelId: 'p2' } });
+      component.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId: 'p2' } });
+
+      expect(visLog).toContainEqual(['p1', false]);
+      expect(actLog).toContainEqual(['p2', true]);
+      expect(api2.isVisible).toBe(true);
+      expect(api2.isActive).toBe(true);
+      expect(api1.isVisible).toBe(false);
+      expect(api1.isActive).toBe(false);
+    });
+
+    it('api.setTabGroupLocked toggles the locked flag', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createLockedState(),
+        createContent: factory,
+      });
+      component.api.setTabGroupLocked('tgA', false);
+      const tgA = (component.getState().layout as any).children[0];
+      expect(tgA.locked).toBeUndefined();
+      // close now works
+      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'p1' } });
+      expect(component.getState().panels.p1).toBeUndefined();
+    });
+  });
 });

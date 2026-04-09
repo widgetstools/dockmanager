@@ -158,6 +158,10 @@ export class FloatingWindowView {
 
     // Title bar drag
     this.titleBarEl.addEventListener('mousedown', (e) => {
+      // Only start drag on primary (left) button. Right/middle clicks must not
+      // capture the cursor — otherwise a right-click on the title bar would
+      // silently begin a drag that follows the mouse until the next click.
+      if (e.button !== 0) return;
       // Don't drag on button clicks
       if ((e.target as HTMLElement).closest('button')) return;
       e.preventDefault();
@@ -388,6 +392,7 @@ export class FloatingWindowView {
 
   /** Event delegation handler for resize handle mousedown */
   private onResizeHandleMouseDown = (e: MouseEvent): void => {
+    if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     const dir = target.getAttribute('data-resize') as ResizeDirection | null;
     if (!dir) return;

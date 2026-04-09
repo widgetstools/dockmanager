@@ -58,6 +58,7 @@ export type DockAction =
   | { type: 'UPDATE_POPOUT'; payload: { panelId: string; x?: number; y?: number; width?: number; height?: number } }
   | { type: 'SET_HEADER_POSITION'; payload: { tabGroupId: string; headerPosition: HeaderPosition | undefined } }
   | { type: 'SET_HEADER_COLLAPSED'; payload: { tabGroupId: string; collapsed: boolean } }
+  | { type: 'SET_TAB_GROUP_LOCKED'; payload: { tabGroupId: string; locked: boolean } }
   | { type: 'NAVIGATE'; payload: { direction: 'next' | 'previous' } }
   | { type: 'ACTIVATE_OVERFLOW_TAB'; payload: { tabGroupId: string; panelId: string } }
   | { type: 'DOCK_TO_EDGE'; payload: { panelId: string; edge: DockPosition } }
@@ -142,6 +143,12 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
 
     case 'CLOSE_PANEL': {
       const { panelId } = action.payload;
+      // Reject close if the panel belongs to a locked group
+      const srcGroupId = findTabGroupForPanel(state.layout, panelId);
+      if (srcGroupId) {
+        const src = findTabGroupById(state.layout, srcGroupId);
+        if (src?.locked) return state;
+      }
       const layout = removePanel(state.layout, panelId) ?? safeEmptyGroup();
       const panels = { ...state.panels };
       delete panels[panelId];
@@ -172,6 +179,13 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       if (sourceGroup === targetTabGroupId && targetGroup && targetGroup.panels.length === 1) return state;
       // Reject drops onto a header-collapsed group
       if (targetGroup?.headerCollapsed && sourceGroup !== targetTabGroupId) return state;
+      // Reject drops into a locked group (external drops); intra-group reorder not handled here
+      if (targetGroup?.locked && sourceGroup !== targetTabGroupId) return state;
+      // Reject dragging panels OUT of a locked source group
+      if (sourceGroup && sourceGroup !== targetTabGroupId) {
+        const src = findTabGroupById(state.layout, sourceGroup);
+        if (src?.locked) return state;
+      }
 
       // Document host enforcement: documentOnly panels can only move to document host groups
       const sourcePanel = state.panels[panelId];
@@ -200,6 +214,12 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
     case 'FLOAT_PANEL': {
       const { panelId, width, height } = action.payload;
       let { x, y } = action.payload;
+      // Reject float if the panel belongs to a locked group
+      const _srcGid = findTabGroupForPanel(state.layout, panelId);
+      if (_srcGid) {
+        const _src = findTabGroupById(state.layout, _srcGid);
+        if (_src?.locked) return state;
+      }
       // Remember which tab group the panel came from so we can dock it back
       const sourceTabGroupId = findTabGroupForPanel(state.layout, panelId) || undefined;
       const layout = removePanel(state.layout, panelId) ?? safeEmptyGroup();
@@ -308,6 +328,8 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
 
     case 'UNPIN_PANEL': {
       const { panelId } = action.payload;
+      const _unpinSrc = findTabGroupForPanel(state.layout, panelId);
+      if (_unpinSrc && findTabGroupById(state.layout, _unpinSrc)?.locked) return state;
       const edge = detectPanelEdge(state.layout, panelId);
       const sourceTabGroupId = findTabGroupForPanel(state.layout, panelId) || undefined;
       const layout = removePanel(state.layout, panelId) ?? safeEmptyGroup();
@@ -468,11 +490,24 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       };
     }
 
+    case 'SET_TAB_GROUP_LOCKED': {
+      const { tabGroupId, locked } = action.payload;
+      return {
+        ...state,
+        layout: updateTabGroup(state.layout, tabGroupId, tg => ({
+          ...tg,
+          locked: locked || undefined,
+        })),
+      };
+    }
+
     // ── Maximize / Restore ───────────────────────────────────────────
 
     case 'MAXIMIZE_PANEL': {
       const { panelId } = action.payload;
       if (!state.panels[panelId]) return state;
+      const _maxSrc = findTabGroupForPanel(state.layout, panelId);
+      if (_maxSrc && findTabGroupById(state.layout, _maxSrc)?.locked) return state;
       return { ...state, maximizedPanelId: panelId, activePaneId: panelId };
     }
 

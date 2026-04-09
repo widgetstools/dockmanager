@@ -21,7 +21,7 @@ import {
   Terminal, AlertTriangle, ScrollText, List,
   Info, Keyboard, Ban, Dock,
   Undo2, Redo2, Bookmark, BookmarkCheck,
-  Anchor, Bug, Link, Unlink,
+  Anchor, Bug, Link, Unlink, Lock,
 } from 'lucide-react';
 
 // Widget components
@@ -202,6 +202,24 @@ function App() {
     else showToast('No saved layout found');
   }, [api, showToast]);
   const handleReset = useCallback(() => { clearLocalStorage(); api?.loadState(defaultState); showToast('Layout reset'); }, [api, showToast]);
+
+  // Find the tab group currently containing the active panel and toggle its locked flag.
+  const handleToggleLock = useCallback(() => {
+    if (!api) return;
+    const st = latestStateRef.current;
+    const activeId = st.activePaneId;
+    if (!activeId) { showToast('No active panel'); return; }
+    const findGroup = (n: any): any => {
+      if (n.type === 'tabgroup') return n.panels.includes(activeId) ? n : null;
+      for (const c of n.children) { const f = findGroup(c); if (f) return f; }
+      return null;
+    };
+    const grp = findGroup(st.layout);
+    if (!grp) { showToast('Active panel not in a docked group'); return; }
+    const next = !grp.locked;
+    api.setTabGroupLocked(grp.id, next);
+    showToast(next ? `Locked group ${grp.id}` : `Unlocked group ${grp.id}`);
+  }, [api, showToast]);
   const handleExport = useCallback(() => { exportToFile(latestStateRef.current); showToast('Layout exported'); }, [showToast]);
   const handleImport = useCallback(async () => {
     try { const r = await importFromFile(); api?.loadState(r.state); showToast('Layout imported'); }
@@ -233,6 +251,7 @@ function App() {
             <Btn icon={<Save className="w-3.5 h-3.5" />} title="Save layout" onClick={handleSave} />
             <Btn icon={<FolderOpen className="w-3.5 h-3.5" />} title="Load layout" onClick={handleLoad} />
             <Btn icon={<RotateCcw className="w-3.5 h-3.5" />} title="Reset layout" onClick={handleReset} />
+            <Btn icon={<Lock className="w-3.5 h-3.5" />} title="Lock/unlock active group" onClick={handleToggleLock} />
             <Sep />
             <Btn icon={<Download className="w-3.5 h-3.5" />} title="Export to file" onClick={handleExport} />
             <Btn icon={<Upload className="w-3.5 h-3.5" />} title="Import from file" onClick={handleImport} />
@@ -321,6 +340,16 @@ function App() {
           onStateChange={state => { latestStateRef.current = state; }}
           renderTab={renderTab}
           renderHeaderActions={renderHeaderActions}
+          renderWatermark={() => (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: 0.7 }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18M9 21V9" />
+              </svg>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>No panels</div>
+              <div style={{ fontSize: 11 }}>Drag a panel here to dock it</div>
+            </div>
+          )}
           onWillClose={onWillClose}
           theme={selectedTheme}
           allowRootDock={allowRootDock}

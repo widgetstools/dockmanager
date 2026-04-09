@@ -6,6 +6,17 @@ export interface SplitViewCallbacks {
   onResizeSplit: (splitId: string, sizes: number[]) => void;
   onResetSizes?: (splitId: string) => void;
   createChildView: (node: LayoutNode) => HTMLElement;
+  /**
+   * Optional min-size provider. Returns the minimum pixel size a child node
+   * can occupy along the split axis. Used by the splitter drag handler to
+   * clamp per-child based on the panels inside that subtree.
+   */
+  getChildMinSize?: (node: LayoutNode, axis: 'horizontal' | 'vertical') => number;
+  /**
+   * Optional max-size provider. Same semantics as `getChildMinSize` but for
+   * upper bound. Return `Infinity` for unconstrained.
+   */
+  getChildMaxSize?: (node: LayoutNode, axis: 'horizontal' | 'vertical') => number;
 }
 
 // ─── SplitView ───────────────────────────────────────────────────────
@@ -222,9 +233,19 @@ export class SplitView {
       for (let i = 0; i < this.resizingIndex; i++) {
         cumBefore += newSizes[i];
       }
-      // Enforce minimum pane size: 50px converted to percentage
-      const minPx = 50;
-      const minPct = Math.max(1, (minPx / totalSize) * 100);
+      // Compute per-child min/max in pixels (from panel constraints), fall
+      // back to the global 50px floor and Infinity ceiling when no provider.
+      const axis = this.node.direction;
+      const leftChild = this.node.children[this.resizingIndex];
+      const rightChild = this.node.children[this.resizingIndex + 1];
+      const leftMinPx = Math.max(50, this.callbacks.getChildMinSize?.(leftChild, axis) ?? 50);
+      const rightMinPx = Math.max(50, this.callbacks.getChildMinSize?.(rightChild, axis) ?? 50);
+      const leftMaxPx = this.callbacks.getChildMaxSize?.(leftChild, axis) ?? Infinity;
+      const rightMaxPx = this.callbacks.getChildMaxSize?.(rightChild, axis) ?? Infinity;
+      const leftMinPct = (leftMinPx / totalSize) * 100;
+      const rightMinPct = (rightMinPx / totalSize) * 100;
+      const leftMaxPct = isFinite(leftMaxPx) ? (leftMaxPx / totalSize) * 100 : Infinity;
+      const rightMaxPct = isFinite(rightMaxPx) ? (rightMaxPx / totalSize) * 100 : Infinity;
       // Collapse threshold: 30px
       const collapsePct = (30 / totalSize) * 100;
 
@@ -232,16 +253,17 @@ export class SplitView {
       let newFirst = Math.max(0, Math.min(combined, percentage - cumBefore));
       let newSecond = combined - newFirst;
 
-      // Collapse pane when dragged to edge (< 30px)
-      if (newFirst < collapsePct) {
+      // Collapse pane when dragged to edge (< 30px) — only if not min-constrained
+      if (newFirst < collapsePct && leftMinPx <= 50) {
         newFirst = 0;
         newSecond = combined;
-      } else if (newSecond < collapsePct) {
+      } else if (newSecond < collapsePct && rightMinPx <= 50) {
         newSecond = 0;
         newFirst = combined;
       } else {
-        // Enforce minimum sizes
-        newFirst = Math.max(minPct, Math.min(combined - minPct, newFirst));
+        // Enforce per-child minimum + maximum sizes
+        newFirst = Math.max(leftMinPct, Math.min(combined - rightMinPct, newFirst));
+        newFirst = Math.min(leftMaxPct, Math.max(combined - rightMaxPct, newFirst));
         newSecond = combined - newFirst;
       }
 

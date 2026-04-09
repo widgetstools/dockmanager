@@ -18,6 +18,10 @@ Zero-dependency layout manager for React and Angular. Tabbed panels, split panes
 | **Accessibility** | ARIA roles on tab groups and panels, keyboard navigation, focus indicators |
 | **Developer Tools** | Debug overlay showing group IDs, panel IDs, and split ratios |
 | **Mobile/Touch** | Long-press drag (300 ms), touch move/end handling |
+| **Locked Groups** | Freeze a tab group — blocks close/float/unpin/maximize and all drag in/out |
+| **Watermark** | Host-supplied placeholder rendered in empty tab groups |
+| **Tab Overflow Menu** | Dropdown listing tabs that don't fit, theme-aware (light/dark) |
+| **Split Constraints** | Per-panel `minimumWidth`/`maximumWidth`/`minimumHeight`/`maximumHeight` honored by the splitter |
 
 ---
 
@@ -178,7 +182,58 @@ All shortcuts are platform-aware (Ctrl on Windows/Linux, Cmd on macOS). Shortcut
 
 ### Context Menus
 
-Right-click on any tab to access operations: close, float, maximize, pin/unpin, and more. The context menu is fully styled using CSS custom properties.
+Right-click on any tab to access operations: close, float, maximize, pin/unpin, and more. The context menu is fully styled using CSS custom properties and automatically tracks the dock's light/dark theme (the `.dark` class is propagated onto the portaled menu so CSS variables resolve correctly).
+
+### Locked Tab Groups
+
+Lock a tab group to freeze its contents. While a group is locked:
+
+- The per-tab close (×) button is hidden (both default renderer and any custom `createTab`)
+- Close / Float / Unpin / Maximize context menu items are disabled
+- Panels cannot be dragged **out** of the group
+- Panels from other groups cannot be dropped **into** it
+- The group root carries a `data-locked-group="true"` attribute for CSS hooks
+
+```ts
+// Toggle lock on whichever tab group contains the active panel
+api.setTabGroupLocked(groupId, true);   // lock
+api.setTabGroupLocked(groupId, false);  // unlock
+```
+
+The locked state is serialized as `TabGroupNode.locked?: boolean` and round-trips through `saveToLocalStorage` / `exportToFile`.
+
+### Watermark (Empty Group Placeholder)
+
+Supply a `createWatermark` callback to render custom content inside an empty tab group (e.g. a branded "Drag a panel here" message). The group remains a valid drop target, so dragging any panel onto the watermark docks it in and disposes the watermark.
+
+```tsx
+<DockManagerCore
+  initialState={state}
+  widgets={widgets}
+  createWatermark={(container) => {
+    const el = document.createElement('div');
+    el.className = 'dock-watermark';
+    el.textContent = 'Drag a panel here';
+    container.appendChild(el);
+    return { dispose: () => el.remove() };
+  }}
+/>
+```
+
+Without a `createWatermark` callback, a minimal built-in placeholder is used.
+
+### Tab Overflow Menu
+
+When the tab strip is narrower than the sum of its tabs, a ▾ chevron appears on the right edge of the header. Clicking it opens a dropdown listing the hidden tabs; selecting one activates the tab and scrolls it into view. The menu is portaled to `document.body` and inherits the dock's theme.
+
+### Split Size Constraints
+
+Splitters honor per-child aggregated constraints derived from each panel's `minimumWidth` / `maximumWidth` / `minimumHeight` / `maximumHeight`:
+
+- **Tab group:** the max across the group's panels on the splitter axis
+- **Split node:** the sum on the same axis, max on the perpendicular axis
+
+A child with an explicit min size will not collapse to zero during drag.
 
 ### Undo / Redo
 
@@ -300,6 +355,7 @@ High-level programmatic API. Wraps the reducer with validated, documented method
 |--------|-------------|
 | `resizeSplit(splitId, sizes)` | Resize split children (sizes must sum to 100) |
 | `setHeaderPosition(groupId, position)` | Set tab bar position (`top`/`bottom`/`left`/`right`) |
+| `setTabGroupLocked(groupId, locked)` | Lock/unlock a tab group (see [Locked Tab Groups](#locked-tab-groups)) |
 
 #### State Management
 
@@ -342,6 +398,22 @@ Per-panel API passed to every widget. Allows widgets to control their own tab he
 | `isVisible` | Whether panel content is currently visible |
 | `onDidDispose(callback)` | Register cleanup callback for panel close |
 | `onDidChangeVisibility(callback)` | Listen for visibility changes |
+| `isActive` | Whether this panel is the globally focused pane |
+| `onDidChangeActive(callback)` | Listen for active-pane transitions (`(active: boolean) => void`) |
+| `dimensions` | `{ width, height }` of the panel's content container |
+| `onDidChangeDimensions(callback)` | Listen for resize events (ResizeObserver-backed) |
+
+```ts
+// Inside a widget
+const offActive = api.onDidChangeActive(active => {
+  if (active) startPolling();
+  else stopPolling();
+});
+const offResize = api.onDidChangeDimensions(({ width, height }) => {
+  chart.resize(width, height);
+});
+api.onDidDispose(() => { offActive(); offResize(); });
+```
 
 ---
 
@@ -494,6 +566,7 @@ The single source of truth for the entire dock layout. Fully JSON-serializable.
 | `panels` | `string[]` | Ordered panel IDs |
 | `activePanel` | `string` | Currently visible tab |
 | `headerPosition` | `HeaderPosition?` | Tab bar position (`top`/`bottom`/`left`/`right`) |
+| `locked` | `boolean?` | When `true`, the group is frozen — see [Locked Tab Groups](#locked-tab-groups) |
 
 **SplitNode** (branch):
 | Field | Type | Description |
@@ -536,6 +609,7 @@ All state mutations go through the reducer. Use `DockviewApi` for a typed wrappe
 | `REORDER_TABS` | Reorder tabs within a group |
 | `ACTIVATE_OVERFLOW_TAB` | Activate a tab from the overflow menu |
 | `LOAD_STATE` | Replace the entire state |
+| `SET_TAB_GROUP_LOCKED` | Toggle the `locked` flag on a tab group |
 
 ---
 

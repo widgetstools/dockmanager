@@ -49,6 +49,7 @@ import type { DockAction } from '@widgetstools/dock-manager-core';
 export type ContentRenderer = (panelId: string, container: HTMLElement, api: PanelApi) => IDisposable;
 export type TabRenderer = (panelId: string, container: HTMLElement, isActive: boolean) => IDisposable;
 export type HeaderActionsRenderer = (slot: 'left' | 'right' | 'prefix', tabGroupId: string, container: HTMLElement) => IDisposable;
+export type WatermarkRenderer = (container: HTMLElement) => IDisposable;
 
 @Component({
   selector: 'dock-manager-core',
@@ -77,6 +78,9 @@ export class DockManagerCoreComponent implements AfterViewInit, OnDestroy, OnCha
 
   /** Optional header actions renderer */
   @Input() createHeaderActions?: HeaderActionsRenderer;
+
+  /** Optional watermark renderer for empty tab groups */
+  @Input() createWatermark?: WatermarkRenderer;
 
   /** Theme: 'light', 'dark', or a DockTheme object */
   @Input() theme: 'light' | 'dark' | DockTheme = 'light';
@@ -151,6 +155,14 @@ export class DockManagerCoreComponent implements AfterViewInit, OnDestroy, OnCha
       createHeaderActions: this.createHeaderActions
         ? (slot, tabGroupId, container): IDisposable => {
             const disposable = this.createHeaderActions!(slot, tabGroupId, container);
+            this.cdr.markForCheck();
+            return disposable;
+          }
+        : undefined,
+
+      createWatermark: this.createWatermark
+        ? (container): IDisposable => {
+            const disposable = this.createWatermark!(container);
             this.cdr.markForCheck();
             return disposable;
           }
