@@ -620,9 +620,9 @@ export class TabGroupView {
     // Title label
     const labelSpan = document.createElement('span');
     labelSpan.className = 'dock-tab-label';
-    labelSpan.style.whiteSpace = 'nowrap';
     labelSpan.textContent = panel.title;
     tabEl.appendChild(labelSpan);
+    tabEl.title = panel.title;
 
     // Close button — hover visibility is handled by CSS:
     //   .dock-tab:hover .dock-tab-close, .dock-tab.dock-tab-selected .dock-tab-close { opacity: 0.5 }
