@@ -1,6 +1,6 @@
 {
   "name": "@widgetstools/react-dock-manager",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "description": "A powerful, extensible dock manager for React with drag-and-drop, floating panels, split views, tabs, and auto-hide pinnable panels.",
   "type": "module",
   "main": "./dist/index.cjs",

@@ -174,7 +174,7 @@ dock-manager *,
   align-items: center;
   gap: 4px;
   padding: 0 12px;
-  height: 26px;
+  height: 32px;
   align-self: flex-end;
   cursor: pointer;
   user-select: none;
