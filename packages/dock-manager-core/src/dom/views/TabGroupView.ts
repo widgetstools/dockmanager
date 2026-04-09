@@ -9,6 +9,7 @@ import {
   iconFloat,
   iconUnpin,
 } from '../icons';
+import { MutableDisposable } from '../../utils/lifecycle';
 
 // ─── Interfaces ──────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ export interface TabGroupViewCallbacks {
   createTab?: (panelId: string, container: HTMLElement, isActive: boolean) => IDisposable;
   onSetHeaderCollapsed: (tabGroupId: string, collapsed: boolean) => void;
   createHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string, container: HTMLElement) => IDisposable;
+  createWatermark?: (container: HTMLElement) => IDisposable;
 }
 
 // ─── TabGroupView ────────────────────────────────────────────────────
@@ -64,6 +66,8 @@ export class TabGroupView {
   // Content management
   private contentSlots = new Map<string, { container: HTMLDivElement; disposable: IDisposable }>();
   private tabDisposables = new Map<string, IDisposable>();
+  private readonly watermarkSlot = new MutableDisposable();
+  private watermarkEl: HTMLDivElement | null = null;
 
   // Tab overflow
   private tabOverflowObserver: TabOverflowObserver;
@@ -314,6 +318,10 @@ export class TabGroupView {
     this.prefixSlotDisposable?.dispose();
     this.leftSlotDisposable?.dispose();
     this.rightSlotDisposable?.dispose();
+
+    // Dispose watermark
+    this.watermarkSlot.dispose();
+    this.watermarkEl = null;
 
     // Cleanup header collapse pill and hover zone
     this.headerCollapsePill?.remove();
@@ -843,8 +851,17 @@ export class TabGroupView {
     const activeId = this.node.activePanel;
     this.previousActiveId = activeId;
     if (!activeId || !this.panels[activeId]) {
-      // Show empty placeholder
-      if (!this.contentAreaEl.querySelector('.dock-empty-placeholder')) {
+      // Empty group: render host-provided watermark if any, else fallback
+      // placeholder. The watermark slot is cleared on the next content build.
+      if (this.callbacks.createWatermark) {
+        if (!this.watermarkEl) {
+          const wm = document.createElement('div');
+          wm.className = 'dock-watermark';
+          this.contentAreaEl.appendChild(wm);
+          this.watermarkEl = wm;
+          this.watermarkSlot.value = this.callbacks.createWatermark(wm);
+        }
+      } else if (!this.contentAreaEl.querySelector('.dock-empty-placeholder')) {
         const placeholder = document.createElement('div');
         placeholder.className = 'dock-empty-placeholder';
         placeholder.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:hsl(var(--dock-text-muted));font-size:14px;';
@@ -854,7 +871,12 @@ export class TabGroupView {
       return;
     }
 
-    // Remove empty placeholder if present
+    // Tear down watermark / fallback placeholder if present
+    if (this.watermarkEl) {
+      this.watermarkSlot.clear();
+      this.watermarkEl.remove();
+      this.watermarkEl = null;
+    }
     const placeholder = this.contentAreaEl.querySelector('.dock-empty-placeholder');
     if (placeholder) placeholder.remove();
 

@@ -1115,4 +1115,133 @@ describe('DockviewComponent', () => {
       expect(restoredContent?.textContent).toBe('Content for panel1');
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════
+  // Watermark (empty tab group placeholder)
+  // ══════════════════════════════════════════════════════════════════
+
+  describe('createWatermark', () => {
+    it('renders watermark when the layout starts empty', () => {
+      const { factory } = createContentFactory();
+      const disposals: number[] = [];
+      let callCount = 0;
+      component = new DockviewComponent(container, {
+        initialState: {
+          layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
+          panels: {},
+          floatingPanels: [],
+          popoutPanels: [],
+          unpinnedPanels: [],
+          nextZIndex: 1000,
+          activePaneId: '',
+        },
+        createContent: factory,
+        createWatermark: (el) => {
+          const idx = ++callCount;
+          const div = document.createElement('div');
+          div.className = 'test-watermark';
+          div.textContent = 'Drop a panel here';
+          el.appendChild(div);
+          return { dispose: () => { disposals.push(idx); div.remove(); } };
+        },
+      });
+
+      const root = container.querySelector('.dock-manager-root')!;
+      const wm = root.querySelector('.dock-watermark > .test-watermark');
+      expect(wm).not.toBeNull();
+      expect(wm?.textContent).toBe('Drop a panel here');
+      // The default "Empty" fallback must NOT be present when watermark provided
+      expect(root.querySelector('.dock-empty-placeholder')).toBeNull();
+      expect(callCount).toBe(1);
+    });
+
+    it('disposes watermark when a panel is added, recreates when emptied', () => {
+      const { factory } = createContentFactory();
+      const disposals: number[] = [];
+      let callCount = 0;
+      component = new DockviewComponent(container, {
+        initialState: {
+          layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
+          panels: {},
+          floatingPanels: [],
+          popoutPanels: [],
+          unpinnedPanels: [],
+          nextZIndex: 1000,
+          activePaneId: '',
+        },
+        createContent: factory,
+        createWatermark: (el) => {
+          const idx = ++callCount;
+          const div = document.createElement('div');
+          div.className = 'test-watermark';
+          el.appendChild(div);
+          return { dispose: () => { disposals.push(idx); div.remove(); } };
+        },
+      });
+
+      const root = container.querySelector('.dock-manager-root')!;
+      expect(root.querySelector('.test-watermark')).not.toBeNull();
+
+      component.dispatch({
+        type: 'ADD_PANEL',
+        payload: { panelId: 'p1', title: 'P1' },
+      });
+
+      expect(root.querySelector('.test-watermark')).toBeNull();
+      expect(disposals).toEqual([1]);
+      expect(root.querySelector('.test-content[data-content-panel="p1"]')).not.toBeNull();
+
+      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'p1' } });
+
+      expect(root.querySelector('.test-watermark')).not.toBeNull();
+      expect(callCount).toBe(2);
+    });
+
+    it('falls back to .dock-empty-placeholder when createWatermark is not provided', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: {
+          layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
+          panels: {},
+          floatingPanels: [],
+          popoutPanels: [],
+          unpinnedPanels: [],
+          nextZIndex: 1000,
+          activePaneId: '',
+        },
+        createContent: factory,
+      });
+
+      const root = container.querySelector('.dock-manager-root')!;
+      expect(root.querySelector('.dock-empty-placeholder')).not.toBeNull();
+      expect(root.querySelector('.dock-watermark')).toBeNull();
+    });
+
+    it('disposes watermark on component dispose', () => {
+      const { factory } = createContentFactory();
+      const disposals: number[] = [];
+      component = new DockviewComponent(container, {
+        initialState: {
+          layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
+          panels: {},
+          floatingPanels: [],
+          popoutPanels: [],
+          unpinnedPanels: [],
+          nextZIndex: 1000,
+          activePaneId: '',
+        },
+        createContent: factory,
+        createWatermark: (el) => {
+          const div = document.createElement('div');
+          el.appendChild(div);
+          return { dispose: () => { disposals.push(1); div.remove(); } };
+        },
+      });
+
+      component.dispose();
+      // Prevent double-dispose in afterEach
+      (component as any) = null;
+      expect(disposals).toEqual([1]);
+    });
+  });
 });

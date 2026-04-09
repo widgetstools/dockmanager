@@ -120,6 +120,18 @@ dock-manager *,
 .dock-border { border-color: hsl(var(--dock-border)); }
 .dock-hover:hover { background: hsl(var(--dock-hover)); }
 
+.dock-watermark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: hsl(var(--dock-text-muted));
+  font-size: 13px;
+  user-select: none;
+  pointer-events: none;
+}
+
 /* ══════════════════════════════════════════════════════════════════════
  * Core layout structure (used by DockviewComponent DOM renderer)
  * ══════════════════════════════════════════════════════════════════════ */

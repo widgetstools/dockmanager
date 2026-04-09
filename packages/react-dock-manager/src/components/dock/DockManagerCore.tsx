@@ -66,6 +66,8 @@ export interface DockManagerCoreProps {
   renderTab?: (panelId: string, panel: PanelConfig, isActive: boolean) => React.ReactNode;
   /** Optional header action slots */
   renderHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string) => React.ReactNode;
+  /** Optional watermark shown in an empty tab group */
+  renderWatermark?: () => React.ReactNode;
   /** Called with the DockviewApi when the component is ready. Simplest way to access the API. */
   onReady?: (api: DockviewApi) => void;
   /** Called when state changes */
@@ -100,7 +102,7 @@ export interface DockManagerCoreHandle {
 interface PortalEntry {
   container: HTMLElement;
   panelId: string;
-  type: 'content' | 'tab' | 'headerAction';
+  type: 'content' | 'tab' | 'headerAction' | 'watermark';
   api?: PanelApi;
   isActive?: boolean;
   slot?: 'left' | 'right' | 'prefix';
@@ -117,6 +119,7 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
       renderPanel,
       renderTab,
       renderHeaderActions,
+      renderWatermark,
       onReady,
       onStateChange,
       onWillClose,
@@ -133,8 +136,8 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
     const [, forceUpdate] = useState(0);
 
     // Keep refs to latest callbacks so core doesn't need to be re-created
-    const callbackRefs = useRef({ renderPanel, renderTab, renderHeaderActions, onStateChange, onWillClose, onWillDrop, onReady, widgets });
-    callbackRefs.current = { renderPanel, renderTab, renderHeaderActions, onStateChange, onWillClose, onWillDrop, onReady, widgets };
+    const callbackRefs = useRef({ renderPanel, renderTab, renderHeaderActions, renderWatermark, onStateChange, onWillClose, onWillDrop, onReady, widgets });
+    callbackRefs.current = { renderPanel, renderTab, renderHeaderActions, renderWatermark, onStateChange, onWillClose, onWillDrop, onReady, widgets };
 
     // Initialize DockviewComponent
     useEffect(() => {
@@ -178,6 +181,14 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
           ? (slot, tabGroupId, container): IDisposable => {
               const key = `header:${slot}:${tabGroupId}:${++portalCounter}`;
               addPortal(key, { container, panelId: '', type: 'headerAction', slot, tabGroupId });
+              return { dispose: () => removePortal(key) };
+            }
+          : undefined,
+
+        createWatermark: renderWatermark
+          ? (container): IDisposable => {
+              const key = `watermark:${++portalCounter}`;
+              addPortal(key, { container, panelId: '', type: 'watermark' });
               return { dispose: () => removePortal(key) };
             }
           : undefined,
@@ -261,6 +272,12 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
         case 'headerAction': {
           if (cbs.renderHeaderActions && entry.slot && entry.tabGroupId) {
             content = cbs.renderHeaderActions(entry.slot, entry.tabGroupId);
+          }
+          break;
+        }
+        case 'watermark': {
+          if (cbs.renderWatermark) {
+            content = cbs.renderWatermark();
           }
           break;
         }

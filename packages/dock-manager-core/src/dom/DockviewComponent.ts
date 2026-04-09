@@ -71,6 +71,18 @@ export interface DockviewComponentOptions {
    * @returns A disposable that cleans up the rendered actions.
    */
   createHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string, container: HTMLElement) => IDisposable;
+  /**
+   * Optional factory to render a watermark (placeholder) into an empty tab
+   * group. When a tab group has no panels and this callback is provided, the
+   * returned element is rendered inside the group's content area instead of
+   * the default `.dock-empty-placeholder`. The group remains a valid drop
+   * target so users can drag panels into it.
+   *
+   * @param container - The DOM element to mount the watermark into.
+   * @returns A disposable that cleans up the watermark when a panel is added
+   *          to the group (or the group is disposed).
+   */
+  createWatermark?: (container: HTMLElement) => IDisposable;
   /** Called after every state change with the new state. */
   onStateChange?: (state: DockManagerState) => void;
   /** Called before a panel is closed. Call `event.preventDefault()` to cancel. */
@@ -823,6 +835,7 @@ export class DockviewComponent {
       createContent: (panelId, container) => this.getOrCreateContent(panelId, container),
       createTab: this.options.createTab,
       createHeaderActions: this.options.createHeaderActions,
+      createWatermark: this.options.createWatermark,
     };
 
     const view = new TabGroupView(

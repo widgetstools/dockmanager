@@ -321,6 +321,16 @@ function App() {
           onStateChange={state => { latestStateRef.current = state; }}
           renderTab={renderTab}
           renderHeaderActions={renderHeaderActions}
+          renderWatermark={() => (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: 0.7 }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18M9 21V9" />
+              </svg>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>No panels</div>
+              <div style={{ fontSize: 11 }}>Drag a panel here to dock it</div>
+            </div>
+          )}
           onWillClose={onWillClose}
           theme={selectedTheme}
           allowRootDock={allowRootDock}
