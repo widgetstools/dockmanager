@@ -25,6 +25,16 @@ Zero-dependency layout manager for React and Angular. Tabbed panels, split panes
 
 ---
 
+## Live Demos
+
+| Demo | URL |
+|------|-----|
+| React Demo | https://widgetstools.github.io/dockmanager/ |
+| Angular Demo | https://widgetstools.github.io/dockmanager/angular/ |
+| Trading App | https://widgetstools.github.io/dockmanager/trading/ |
+
+---
+
 ## Quick Start
 
 ### React
