@@ -36,7 +36,7 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
-    "@widgetstools/dock-manager-core": "0.1.31",
+    "@widgetstools/dock-manager-core": "^0.1.31",
     "fix-dts-default-cjs-exports": "^1.0.1"
   },
   "devDependencies": {
