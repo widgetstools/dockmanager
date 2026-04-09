@@ -109,6 +109,7 @@ export class TabGroupView {
     this.element.style.cssText = 'display:flex;flex-direction:column;height:100%;width:100%;position:relative;';
     this.element.className = this.getRootClassName();
     this.element.setAttribute('data-dock-target', node.id);
+    if (node.locked) this.element.setAttribute('data-locked-group', 'true');
     this.element.setAttribute('role', 'region');
     this.element.setAttribute('aria-label', panels[node.activePanel]?.title || 'Panel');
     this.element.tabIndex = -1;
@@ -197,6 +198,8 @@ export class TabGroupView {
     this.element.setAttribute('data-panel-id', node.activePanel);
     this.element.setAttribute('aria-label', panels[node.activePanel]?.title || 'Panel');
     this.applyHasTabsAttr();
+    if (node.locked) this.element.setAttribute('data-locked-group', 'true');
+    else this.element.removeAttribute('data-locked-group');
     this.element.className = this.getRootClassName();
     this.contentAreaEl.id = `panel-${node.activePanel}`;
     this.contentAreaEl.setAttribute('aria-labelledby', `tab-${node.activePanel}`);
@@ -667,7 +670,7 @@ export class TabGroupView {
     //   .dock-tab:hover .dock-tab-close, .dock-tab.dock-tab-selected .dock-tab-close { opacity: 0.5 }
     //   .dock-tab-close:hover { opacity: 1 !important }
     // No JS mouseenter/mouseleave needed — avoids memory leaks when tabs are rebuilt.
-    if (panel.closable !== false) {
+    if (panel.closable !== false && !this.node.locked) {
       const closeBtn = document.createElement('button');
       closeBtn.className = 'dock-tab-close';
       closeBtn.setAttribute('data-action', 'close');
@@ -717,8 +720,10 @@ export class TabGroupView {
       menu.appendChild(sep);
     };
 
+    const locked = !!this.node.locked;
+
     // Close
-    addItem(this.resourceStrings.close, () => this.callbacks.onClosePanel(panelId), panel.closable === false);
+    addItem(this.resourceStrings.close, () => this.callbacks.onClosePanel(panelId), panel.closable === false || locked);
 
     // Close Others (only if multiple tabs)
     if (this.node.panels.length > 1) {
@@ -756,7 +761,7 @@ export class TabGroupView {
     addSeparator();
 
     // Float
-    addItem(this.resourceStrings.float, () => this.callbacks.onFloatPanel(panelId), panel.floatable === false);
+    addItem(this.resourceStrings.float, () => this.callbacks.onFloatPanel(panelId), panel.floatable === false || locked);
 
     // Unpin
     if (panel.allowPinning !== false) {

@@ -15,6 +15,9 @@ import type { PanelConfig } from '../types/dock';
 
 type DisposeCallback = () => void;
 type VisibilityCallback = (visible: boolean) => void;
+type ActiveCallback = (active: boolean) => void;
+export interface PanelDimensions { width: number; height: number; }
+type DimensionsCallback = (dims: PanelDimensions) => void;
 
 // ─── PanelApi ────────────────────────────────────────────────────────
 
@@ -27,6 +30,10 @@ export class PanelApi {
   private _visible = true;
   private _disposeCallbacks: DisposeCallback[] = [];
   private _visibilityCallbacks: VisibilityCallback[] = [];
+  private _active = false;
+  private _activeCallbacks: ActiveCallback[] = [];
+  private _dimensions: PanelDimensions = { width: 0, height: 0 };
+  private _dimensionsCallbacks: DimensionsCallback[] = [];
 
   // External hooks (set by DockviewComponent)
   private _onUpdateConfig: ((panelId: string, updates: Partial<PanelConfig>) => void) | null = null;
@@ -124,6 +131,29 @@ export class PanelApi {
     return this._visible;
   }
 
+  /** Register a callback for active-state changes (focused pane). */
+  onDidChangeActive(callback: ActiveCallback): void {
+    this._activeCallbacks.push(callback);
+  }
+
+  /** Whether this panel is the globally active (focused) pane. */
+  get isActive(): boolean {
+    return this._active;
+  }
+
+  /**
+   * Register a callback for dimension changes of the panel's content container.
+   * Fires whenever the container is resized (via splitter drag, window resize, etc).
+   */
+  onDidChangeDimensions(callback: DimensionsCallback): void {
+    this._dimensionsCallbacks.push(callback);
+  }
+
+  /** Current pixel dimensions of the panel content container. */
+  get dimensions(): PanelDimensions {
+    return this._dimensions;
+  }
+
   // ── Internal methods (called by DockviewComponent) ─────────────────
 
   /** @internal Set the config accessor */
@@ -150,6 +180,24 @@ export class PanelApi {
     });
   }
 
+  /** @internal Notify active-state change */
+  _setActive(active: boolean): void {
+    if (this._active === active) return;
+    this._active = active;
+    this._activeCallbacks.forEach(cb => {
+      try { cb(active); } catch (e) { console.error('PanelApi active callback error:', e); }
+    });
+  }
+
+  /** @internal Notify dimension change */
+  _setDimensions(dims: PanelDimensions): void {
+    if (this._dimensions.width === dims.width && this._dimensions.height === dims.height) return;
+    this._dimensions = dims;
+    this._dimensionsCallbacks.forEach(cb => {
+      try { cb(dims); } catch (e) { console.error('PanelApi dimensions callback error:', e); }
+    });
+  }
+
   /** @internal Dispose this API (called when panel is closed) */
   _dispose(): void {
     if (this._disposed) return;
@@ -159,6 +207,8 @@ export class PanelApi {
     });
     this._disposeCallbacks = [];
     this._visibilityCallbacks = [];
+    this._activeCallbacks = [];
+    this._dimensionsCallbacks = [];
     this._onUpdateConfig = null;
     this._onRequestAttention = null;
     this._getConfig = null;

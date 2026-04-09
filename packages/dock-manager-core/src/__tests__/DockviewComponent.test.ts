@@ -1361,4 +1361,117 @@ describe('DockviewComponent', () => {
       expect(document.querySelector('.dock-tab-overflow-menu')).toBeNull();
     });
   });
+
+  describe('locked tab groups', () => {
+    function createLockedState(): DockManagerState {
+      return {
+        layout: {
+          type: 'split',
+          id: 's1',
+          direction: 'horizontal',
+          sizes: [0.5, 0.5],
+          children: [
+            { type: 'tabgroup', id: 'tgA', panels: ['p1'], activePanel: 'p1', locked: true },
+            { type: 'tabgroup', id: 'tgB', panels: ['p2'], activePanel: 'p2' },
+          ],
+        },
+        panels: {
+          p1: { id: 'p1', title: 'Locked' },
+          p2: { id: 'p2', title: 'Free' },
+        },
+        floatingPanels: [],
+        popoutPanels: [],
+        unpinnedPanels: [],
+        nextZIndex: 1000,
+        activePaneId: 'p1',
+      };
+    }
+
+    it('marks locked tab group with data-locked-group attribute', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createLockedState(),
+        createContent: factory,
+      });
+      const locked = container.querySelector('[data-dock-target="tgA"]');
+      const free = container.querySelector('[data-dock-target="tgB"]');
+      expect(locked?.getAttribute('data-locked-group')).toBe('true');
+      expect(free?.getAttribute('data-locked-group')).toBeNull();
+    });
+
+    it('hides close button on tabs in a locked group', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createLockedState(),
+        createContent: factory,
+      });
+      const lockedTab = container.querySelector('[data-dock-target="tgA"] .dock-tab');
+      const freeTab = container.querySelector('[data-dock-target="tgB"] .dock-tab');
+      expect(lockedTab?.querySelector('.dock-tab-close')).toBeNull();
+      expect(freeTab?.querySelector('.dock-tab-close')).not.toBeNull();
+    });
+
+    it('rejects CLOSE_PANEL / FLOAT_PANEL / MOVE_PANEL for locked groups', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createLockedState(),
+        createContent: factory,
+      });
+      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'p1' } });
+      expect(component.getState().panels.p1).toBeDefined();
+
+      component.dispatch({ type: 'FLOAT_PANEL', payload: { panelId: 'p1', x: 0, y: 0, width: 200, height: 200 } });
+      expect(component.getState().floatingPanels).toHaveLength(0);
+
+      // Can't drag p2 INTO tgA
+      component.dispatch({ type: 'MOVE_PANEL', payload: { panelId: 'p2', targetTabGroupId: 'tgA', position: 'center' } });
+      const tgA = (component.getState().layout as any).children[0];
+      expect(tgA.panels).toEqual(['p1']);
+    });
+
+    it('panel api observables: visibility + active fire on tab/pane changes', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: {
+          layout: { type: 'tabgroup', id: 'tg', panels: ['p1', 'p2'], activePanel: 'p1' },
+          panels: { p1: { id: 'p1', title: 'One' }, p2: { id: 'p2', title: 'Two' } },
+          floatingPanels: [], popoutPanels: [], unpinnedPanels: [], nextZIndex: 1000, activePaneId: 'p1',
+        } as DockManagerState,
+        createContent: factory,
+      });
+      const api1 = component.getPanelApi('p1');
+      const api2 = component.getPanelApi('p2');
+      const visLog: Array<[string, boolean]> = [];
+      const actLog: Array<[string, boolean]> = [];
+      api1.onDidChangeVisibility(v => visLog.push(['p1', v]));
+      api2.onDidChangeVisibility(v => visLog.push(['p2', v]));
+      api1.onDidChangeActive(a => actLog.push(['p1', a]));
+      api2.onDidChangeActive(a => actLog.push(['p2', a]));
+
+      // Switch active tab to p2
+      component.dispatch({ type: 'SET_ACTIVE_PANEL', payload: { tabGroupId: 'tg', panelId: 'p2' } });
+      component.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId: 'p2' } });
+
+      expect(visLog).toContainEqual(['p1', false]);
+      expect(actLog).toContainEqual(['p2', true]);
+      expect(api2.isVisible).toBe(true);
+      expect(api2.isActive).toBe(true);
+      expect(api1.isVisible).toBe(false);
+      expect(api1.isActive).toBe(false);
+    });
+
+    it('api.setTabGroupLocked toggles the locked flag', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createLockedState(),
+        createContent: factory,
+      });
+      component.api.setTabGroupLocked('tgA', false);
+      const tgA = (component.getState().layout as any).children[0];
+      expect(tgA.locked).toBeUndefined();
+      // close now works
+      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'p1' } });
+      expect(component.getState().panels.p1).toBeUndefined();
+    });
+  });
 });
