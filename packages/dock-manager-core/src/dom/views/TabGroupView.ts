@@ -1039,26 +1039,11 @@ export class TabGroupView {
         item.setAttribute('aria-current', 'true');
       }
 
-      // Icon
-      if (panel.icon) {
-        const iconSpan = document.createElement('span');
-        iconSpan.style.cssText = 'margin-right:6px;display:inline-flex;align-items:center;';
-        iconSpan.textContent = panel.icon;
-        item.appendChild(iconSpan);
-      }
-
-      // Label
+      // Label (tab caption only)
       const label = document.createElement('span');
       label.textContent = panel.title;
       label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
       item.appendChild(label);
-
-      // Mark overflowing tabs (the ones not currently visible) with a dot
-      if (this.overflowState.overflowTabs.includes(panelId)) {
-        const dot = document.createElement('span');
-        dot.style.cssText = 'margin-left:8px;width:6px;height:6px;border-radius:50%;background:hsl(var(--dock-primary));flex-shrink:0;';
-        item.appendChild(dot);
-      }
 
       item.addEventListener('mousedown', (e) => {
         e.preventDefault();
