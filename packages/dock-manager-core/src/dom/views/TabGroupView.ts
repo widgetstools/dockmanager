@@ -563,7 +563,7 @@ export class TabGroupView {
     // Overflow dropdown button — shown when tabs don't fit.
     this.overflowBtn = document.createElement('button');
     this.overflowBtn.className = 'dock-tab-overflow-btn';
-    this.overflowBtn.style.cssText = 'flex-shrink:0;padding:2px 6px;color:hsl(var(--dock-text-muted));cursor:pointer;background:none;border:none;display:none;align-items:center;justify-content:center;';
+    this.overflowBtn.style.cssText = 'flex-shrink:0;align-self:stretch;padding:2px 6px;color:hsl(var(--dock-text-muted));cursor:pointer;background:none;border:none;display:none;align-items:center;justify-content:center;';
     this.overflowBtn.setAttribute('aria-label', this.resourceStrings.tabOverflowMenu ?? 'Show all tabs');
     this.overflowBtn.setAttribute('aria-haspopup', 'menu');
     this.overflowBtn.setAttribute('aria-expanded', 'false');
