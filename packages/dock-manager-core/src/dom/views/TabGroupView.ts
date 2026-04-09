@@ -54,6 +54,10 @@ export class TabGroupView {
   private actionButtonsEl: HTMLDivElement;
   private scrollLeftBtn: HTMLButtonElement | null = null;
   private scrollRightBtn: HTMLButtonElement | null = null;
+  private overflowBtn: HTMLButtonElement | null = null;
+  private overflowMenuEl: HTMLDivElement | null = null;
+  private overflowMenuOutsideHandler: ((e: MouseEvent) => void) | null = null;
+  private overflowMenuKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   // Header action slots
   private prefixSlotEl: HTMLDivElement | null = null;
@@ -323,6 +327,9 @@ export class TabGroupView {
     this.watermarkSlot.dispose();
     this.watermarkEl = null;
 
+    // Close overflow menu if open
+    this.hideOverflowMenu();
+
     // Cleanup header collapse pill and hover zone
     this.headerCollapsePill?.remove();
     this.headerCollapsePill = null;
@@ -417,6 +424,10 @@ export class TabGroupView {
   // ── Private: Header building ────────────────────────────────────
 
   private clearHeader(): void {
+    // Close any open overflow menu before tearing down the tab strip that owns it
+    this.hideOverflowMenu();
+    this.overflowBtn = null;
+
     // Dispose tab disposables
     for (const [, d] of this.tabDisposables) {
       d.dispose();
@@ -576,6 +587,25 @@ export class TabGroupView {
       this.scrollTabs('right');
     });
     outerWrap.appendChild(this.scrollRightBtn);
+
+    // Overflow dropdown button — shown when tabs don't fit.
+    this.overflowBtn = document.createElement('button');
+    this.overflowBtn.className = 'dock-tab-overflow-btn';
+    this.overflowBtn.style.cssText = 'flex-shrink:0;padding:2px 6px;color:hsl(var(--dock-text-muted));cursor:pointer;background:none;border:none;display:none;align-items:center;justify-content:center;';
+    this.overflowBtn.setAttribute('aria-label', this.resourceStrings.tabOverflowMenu ?? 'Show all tabs');
+    this.overflowBtn.setAttribute('aria-haspopup', 'menu');
+    this.overflowBtn.setAttribute('aria-expanded', 'false');
+    this.overflowBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    this.overflowBtn.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+    });
+    this.overflowBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      this.toggleOverflowMenu();
+    });
+    outerWrap.appendChild(this.overflowBtn);
 
     // Listen to scroll events on the tab container to update arrow visibility (rAF-throttled)
     this.tabContainerEl.addEventListener('scroll', () => {
@@ -1005,8 +1035,142 @@ export class TabGroupView {
 
   private updateOverflowButton(): void {
     // Called by the TabOverflowObserver when overflow state changes.
-    // Update scroll arrow visibility based on current scroll position.
+    if (this.overflowBtn) {
+      this.overflowBtn.style.display = this.overflowState.hasOverflow ? 'flex' : 'none';
+    }
+    if (!this.overflowState.hasOverflow) {
+      this.hideOverflowMenu();
+    }
+    // Keep scroll arrow visibility in sync with current scroll position too.
     this.updateScrollArrows();
+  }
+
+  private toggleOverflowMenu(): void {
+    if (this.overflowMenuEl) {
+      this.hideOverflowMenu();
+    } else {
+      this.showOverflowMenu();
+    }
+  }
+
+  private showOverflowMenu(): void {
+    if (!this.overflowBtn || !this.tabContainerEl) return;
+    this.hideOverflowMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'dock-context-menu dock-tab-overflow-menu';
+    menu.style.cssText = 'position:fixed;z-index:10010;max-height:60vh;overflow-y:auto;';
+    menu.setAttribute('role', 'menu');
+
+    for (const panelId of this.node.panels) {
+      const panel = this.panels[panelId];
+      if (!panel) continue;
+
+      const item = document.createElement('div');
+      item.className = 'dock-context-menu-item dock-tab-overflow-menu-item';
+      item.style.cssText = 'display:flex;align-items:center;min-width:160px;max-width:320px;';
+      item.setAttribute('role', 'menuitem');
+      item.setAttribute('data-panel-id', panelId);
+      if (panelId === this.node.activePanel) {
+        item.setAttribute('aria-current', 'true');
+      }
+
+      // Icon
+      if (panel.icon) {
+        const iconSpan = document.createElement('span');
+        iconSpan.style.cssText = 'margin-right:6px;display:inline-flex;align-items:center;';
+        iconSpan.textContent = panel.icon;
+        item.appendChild(iconSpan);
+      }
+
+      // Label
+      const label = document.createElement('span');
+      label.textContent = panel.title;
+      label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      item.appendChild(label);
+
+      // Mark overflowing tabs (the ones not currently visible) with a dot
+      if (this.overflowState.overflowTabs.includes(panelId)) {
+        const dot = document.createElement('span');
+        dot.style.cssText = 'margin-left:8px;width:6px;height:6px;border-radius:50%;background:hsl(var(--dock-primary));flex-shrink:0;';
+        item.appendChild(dot);
+      }
+
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.hideOverflowMenu();
+        this.callbacks.onSetActivePanel(this.node.id, panelId);
+        this.callbacks.onSetActivePane(panelId);
+        this.scrollTabIntoView(panelId);
+      });
+      menu.appendChild(item);
+    }
+
+    document.body.appendChild(menu);
+
+    // Position below the button, clamped to the viewport.
+    const btnRect = this.overflowBtn.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    let left = btnRect.right - menuRect.width;
+    if (left < 4) left = 4;
+    if (left + menuRect.width > window.innerWidth - 4) {
+      left = window.innerWidth - menuRect.width - 4;
+    }
+    let top = btnRect.bottom + 2;
+    if (top + menuRect.height > window.innerHeight - 4) {
+      top = btnRect.top - menuRect.height - 2;
+    }
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+
+    this.overflowMenuEl = menu;
+    this.overflowBtn.setAttribute('aria-expanded', 'true');
+
+    // Close on outside click / Escape
+    this.overflowMenuOutsideHandler = (ev: MouseEvent) => {
+      const target = ev.target as Node;
+      if (this.overflowMenuEl && !this.overflowMenuEl.contains(target) && target !== this.overflowBtn) {
+        this.hideOverflowMenu();
+      }
+    };
+    this.overflowMenuKeyHandler = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') {
+        ev.stopPropagation();
+        this.hideOverflowMenu();
+      }
+    };
+    // Use mousedown so outside close beats item click handlers consistently.
+    document.addEventListener('mousedown', this.overflowMenuOutsideHandler, true);
+    document.addEventListener('keydown', this.overflowMenuKeyHandler, true);
+  }
+
+  private hideOverflowMenu(): void {
+    if (this.overflowMenuEl) {
+      this.overflowMenuEl.remove();
+      this.overflowMenuEl = null;
+    }
+    if (this.overflowMenuOutsideHandler) {
+      document.removeEventListener('mousedown', this.overflowMenuOutsideHandler, true);
+      this.overflowMenuOutsideHandler = null;
+    }
+    if (this.overflowMenuKeyHandler) {
+      document.removeEventListener('keydown', this.overflowMenuKeyHandler, true);
+      this.overflowMenuKeyHandler = null;
+    }
+    this.overflowBtn?.setAttribute('aria-expanded', 'false');
+  }
+
+  private scrollTabIntoView(panelId: string): void {
+    if (!this.tabContainerEl) return;
+    const tab = this.tabContainerEl.querySelector<HTMLElement>(`[data-tab-id="${panelId}"]`);
+    if (!tab) return;
+    if (typeof tab.scrollIntoView === 'function') {
+      tab.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    }
   }
 
   private updateScrollArrows(): void {

@@ -1244,4 +1244,121 @@ describe('DockviewComponent', () => {
       expect(disposals).toEqual([1]);
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════
+  // Tab overflow menu
+  // ══════════════════════════════════════════════════════════════════
+
+  describe('tab overflow menu', () => {
+    function createMultiPanelState(): DockManagerState {
+      return {
+        layout: {
+          type: 'tabgroup',
+          id: 'tg1',
+          panels: ['p1', 'p2', 'p3'],
+          activePanel: 'p1',
+        },
+        panels: {
+          p1: { id: 'p1', title: 'Panel One' },
+          p2: { id: 'p2', title: 'Panel Two' },
+          p3: { id: 'p3', title: 'Panel Three' },
+        },
+        floatingPanels: [],
+        popoutPanels: [],
+        unpinnedPanels: [],
+        nextZIndex: 1000,
+        activePaneId: 'p1',
+      };
+    }
+
+    it('renders an overflow button (hidden initially, no overflow in jsdom)', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createMultiPanelState(),
+        createContent: factory,
+      });
+      const btn = container.querySelector<HTMLElement>('.dock-tab-overflow-btn');
+      expect(btn).not.toBeNull();
+      // jsdom has no real layout, so the observer never marks overflow.
+      // The button exists in the DOM with display:none until overflow is detected.
+      expect(btn!.style.display).toBe('none');
+    });
+
+    it('opens a menu listing all panels when the overflow button is clicked', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createMultiPanelState(),
+        createContent: factory,
+      });
+      const btn = container.querySelector<HTMLButtonElement>('.dock-tab-overflow-btn')!;
+      // Force show (jsdom doesn't produce real overflow)
+      btn.style.display = 'flex';
+      btn.click();
+
+      const menu = document.querySelector('.dock-tab-overflow-menu');
+      expect(menu).not.toBeNull();
+      const items = menu!.querySelectorAll<HTMLElement>('.dock-tab-overflow-menu-item');
+      expect(items.length).toBe(3);
+      expect(items[0].getAttribute('data-panel-id')).toBe('p1');
+      expect(items[0].getAttribute('aria-current')).toBe('true');
+      expect(items[1].getAttribute('data-panel-id')).toBe('p2');
+      expect(items[2].getAttribute('data-panel-id')).toBe('p3');
+      expect(btn.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('activates the clicked panel and closes the menu', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createMultiPanelState(),
+        createContent: factory,
+      });
+      const btn = container.querySelector<HTMLButtonElement>('.dock-tab-overflow-btn')!;
+      btn.style.display = 'flex';
+      btn.click();
+
+      const item = document.querySelector<HTMLElement>('.dock-tab-overflow-menu-item[data-panel-id="p2"]')!;
+      item.click();
+
+      expect(document.querySelector('.dock-tab-overflow-menu')).toBeNull();
+      expect(component.getState().activePaneId).toBe('p2');
+      // The tab group's active panel also updated
+      const layout = component.getState().layout;
+      expect(layout.type).toBe('tabgroup');
+      if (layout.type === 'tabgroup') {
+        expect(layout.activePanel).toBe('p2');
+      }
+    });
+
+    it('closes the menu on Escape', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createMultiPanelState(),
+        createContent: factory,
+      });
+      const btn = container.querySelector<HTMLButtonElement>('.dock-tab-overflow-btn')!;
+      btn.style.display = 'flex';
+      btn.click();
+      expect(document.querySelector('.dock-tab-overflow-menu')).not.toBeNull();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(document.querySelector('.dock-tab-overflow-menu')).toBeNull();
+      expect(btn.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('cleans up the menu on component dispose', () => {
+      const { factory } = createContentFactory();
+      component = new DockviewComponent(container, {
+        initialState: createMultiPanelState(),
+        createContent: factory,
+      });
+      const btn = container.querySelector<HTMLButtonElement>('.dock-tab-overflow-btn')!;
+      btn.style.display = 'flex';
+      btn.click();
+      expect(document.querySelector('.dock-tab-overflow-menu')).not.toBeNull();
+
+      component.dispose();
+      (component as any) = null;
+      expect(document.querySelector('.dock-tab-overflow-menu')).toBeNull();
+    });
+  });
 });
