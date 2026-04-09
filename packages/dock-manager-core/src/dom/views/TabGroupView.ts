@@ -1110,6 +1110,11 @@ export class TabGroupView {
       menu.appendChild(item);
     }
 
+    // Propagate dark theme class from the dock root so CSS vars resolve
+    // correctly when the menu is portaled into document.body.
+    if (this.element.closest('.dark')) {
+      menu.classList.add('dark');
+    }
     document.body.appendChild(menu);
 
     // Position below the button, clamped to the viewport.
