@@ -243,6 +243,12 @@ dock-manager *,
   background: hsl(var(--dock-hover));
 }
 
+/* Hide tab close buttons inside locked groups (works for both default and
+   custom tab renderers since they both use the .dock-tab-close class). */
+[data-locked-group] .dock-tab-close {
+  display: none !important;
+}
+
 /* Inactive pane title — same color, reduced opacity */
 .dock-panel-title {
   font-size: 12px;
