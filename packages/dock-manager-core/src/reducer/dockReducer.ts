@@ -328,6 +328,8 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
 
     case 'UNPIN_PANEL': {
       const { panelId } = action.payload;
+      const _unpinSrc = findTabGroupForPanel(state.layout, panelId);
+      if (_unpinSrc && findTabGroupById(state.layout, _unpinSrc)?.locked) return state;
       const edge = detectPanelEdge(state.layout, panelId);
       const sourceTabGroupId = findTabGroupForPanel(state.layout, panelId) || undefined;
       const layout = removePanel(state.layout, panelId) ?? safeEmptyGroup();
@@ -504,6 +506,8 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
     case 'MAXIMIZE_PANEL': {
       const { panelId } = action.payload;
       if (!state.panels[panelId]) return state;
+      const _maxSrc = findTabGroupForPanel(state.layout, panelId);
+      if (_maxSrc && findTabGroupById(state.layout, _maxSrc)?.locked) return state;
       return { ...state, maximizedPanelId: panelId, activePaneId: panelId };
     }
 

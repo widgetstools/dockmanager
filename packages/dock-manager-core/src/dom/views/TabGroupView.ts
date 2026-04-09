@@ -206,7 +206,8 @@ export class TabGroupView {
 
     const panelsChanged =
       prevNode.panels.length !== node.panels.length ||
-      prevNode.panels.some((p, i) => p !== node.panels[i]);
+      prevNode.panels.some((p, i) => p !== node.panels[i]) ||
+      prevNode.locked !== node.locked;
     const activePanelChanged = prevNode.activePanel !== node.activePanel;
     const activePaneChanged = prevActivePaneId !== activePaneId;
     const maximizedStateChanged = prevMaximizedPanelId !== maximizedPanelId;
@@ -765,13 +766,13 @@ export class TabGroupView {
 
     // Unpin
     if (panel.allowPinning !== false) {
-      addItem(this.resourceStrings.unpin, () => this.callbacks.onUnpinPanel(panelId));
+      addItem(this.resourceStrings.unpin, () => this.callbacks.onUnpinPanel(panelId), locked);
     }
 
     addSeparator();
 
     // Maximize
-    addItem(this.resourceStrings.maximize, () => this.callbacks.onMaximizePanel(panelId));
+    addItem(this.resourceStrings.maximize, () => this.callbacks.onMaximizePanel(panelId), locked);
 
     document.body.appendChild(menu);
     this.contextMenuEl = menu;
