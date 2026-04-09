@@ -25,8 +25,8 @@
   --dock-text: 0 0% 12%;
   --dock-text-secondary: 0 0% 35%;
   --dock-text-muted: 0 0% 50%;
-  --dock-border: 220 13% 75%;
-  --dock-splitter: 220 13% 60%;
+  --dock-border: 220 13% 62%;
+  --dock-splitter: 220 13% 48%;
   --dock-splitter-hover: 217 91% 55%;
   --dock-hover: 220 14% 90%;
   --dock-primary: 217 91% 48%;
@@ -55,8 +55,8 @@
   --dock-text: 210 40% 96%;
   --dock-text-secondary: 215 20% 70%;
   --dock-text-muted: 215 15% 50%;
-  --dock-border: 217 33% 28%;
-  --dock-splitter: 217 33% 45%;
+  --dock-border: 217 33% 42%;
+  --dock-splitter: 217 33% 58%;
   --dock-splitter-hover: 217 91% 60%;
   --dock-hover: 217 33% 18%;
   --dock-primary: 217 91% 72%;
