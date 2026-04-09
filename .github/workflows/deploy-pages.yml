@@ -59,8 +59,12 @@ jobs:
           # React demo at root
           cp -r apps/demo/dist/. deploy/
 
-          # Angular demo at /angular
-          cp -r apps/angular-demo/dist/angular-demo/. deploy/angular/
+          # Angular demo at /angular (handle both browser/ subdir and flat output)
+          if [ -d apps/angular-demo/dist/angular-demo/browser ]; then
+            cp -r apps/angular-demo/dist/angular-demo/browser/. deploy/angular/
+          else
+            cp -r apps/angular-demo/dist/angular-demo/. deploy/angular/
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
