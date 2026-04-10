@@ -157,11 +157,7 @@ export class SplitView {
     splitter.setAttribute('aria-orientation', isHorizontal ? 'vertical' : 'horizontal');
     splitter.setAttribute('aria-valuenow', String(Math.round(this.liveSizes[index])));
     splitter.tabIndex = 0;
-    splitter.style.cssText = `flex-shrink:0;position:relative;transition:background-color 0.15s;background:hsl(var(--dock-splitter));${
-      isHorizontal
-        ? 'width:1px;cursor:col-resize;'
-        : 'height:1px;cursor:row-resize;'
-    }`;
+    splitter.setAttribute('data-direction', isHorizontal ? 'horizontal' : 'vertical');
 
     // Invisible wider hit area
     const hitArea = document.createElement('div');

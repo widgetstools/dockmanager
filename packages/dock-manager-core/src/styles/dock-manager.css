@@ -38,6 +38,8 @@
   --dock-scrollbar-thumb: 0 0% 55%;
   --dock-scrollbar-track: transparent;
   --dock-scrollbar-width: 6px;
+  --dock-splitter-bg: 220 14% 82%;
+  --dock-splitter-grip: 0 0% 100%;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -67,6 +69,8 @@
   --dock-tab-overflow-hover: 222 47% 16%;
   --dock-scrollbar-thumb: 215 20% 40%;
   --dock-scrollbar-track: transparent;
+  --dock-splitter-bg: 222 47% 20%;
+  --dock-splitter-grip: 215 20% 40%;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -382,26 +386,52 @@ dock-manager *,
 
 .dock-splitter {
   flex-shrink: 0;
-  background: hsl(var(--dock-splitter) / 0.7);
   position: relative;
   z-index: 1;
+  background: hsl(var(--dock-splitter-bg));
   transition: background-color 0.15s;
 }
 
 .dock-splitter:hover {
-  background: hsl(var(--dock-splitter-hover));
+  background: hsl(var(--dock-splitter-hover) / 0.5);
 }
 
 /* Horizontal splitter (between left/right panes) */
 .dock-splitter[data-direction="horizontal"] {
-  width: 1px;
+  width: 5px;
   cursor: col-resize;
 }
 
 /* Vertical splitter (between top/bottom panes) */
 .dock-splitter[data-direction="vertical"] {
-  height: 1px;
+  height: 5px;
   cursor: row-resize;
+}
+
+/* Grip handle pill in the center of the splitter */
+.dock-splitter::after {
+  content: '';
+  position: absolute;
+  border-radius: 2px;
+  background: hsl(var(--dock-splitter-grip));
+  pointer-events: none;
+  z-index: 2;
+}
+
+.dock-splitter[data-direction="horizontal"]::after {
+  width: 2px;
+  height: 48px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.dock-splitter[data-direction="vertical"]::after {
+  height: 2px;
+  width: 48px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 /* Wider invisible hit area for splitters */
@@ -413,12 +443,12 @@ dock-manager *,
 
 .dock-splitter[data-direction="horizontal"]::before {
   top: 0; bottom: 0;
-  left: -3px; right: -3px;
+  left: -2px; right: -2px;
 }
 
 .dock-splitter[data-direction="vertical"]::before {
   left: 0; right: 0;
-  top: -3px; bottom: -3px;
+  top: -2px; bottom: -2px;
 }
 
 .dock-floating-window {
