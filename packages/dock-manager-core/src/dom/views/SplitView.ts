@@ -124,7 +124,7 @@ export class SplitView {
     for (let i = 0; i < this.node.children.length; i++) {
       // Child container
       const childContainer = document.createElement('div');
-      childContainer.style.cssText = 'overflow:hidden;';
+      childContainer.style.cssText = 'position:relative;overflow:hidden;';
       if (isHorizontal) {
         childContainer.style.width = `${this.node.sizes[i]}%`;
         childContainer.style.minWidth = '40px';
@@ -161,7 +161,7 @@ export class SplitView {
 
     // Invisible wider hit area
     const hitArea = document.createElement('div');
-    hitArea.style.cssText = 'position:absolute;';
+    hitArea.style.cssText = `position:absolute;cursor:${isHorizontal ? 'col-resize' : 'row-resize'};`;
     if (isHorizontal) {
       hitArea.style.left = '-6px';
       hitArea.style.right = '-6px';

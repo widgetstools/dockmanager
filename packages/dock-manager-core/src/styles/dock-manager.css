@@ -26,7 +26,7 @@
   --dock-text-secondary: 0 0% 35%;
   --dock-text-muted: 0 0% 50%;
   --dock-border: 220 13% 50%;
-  --dock-splitter: 220 13% 38%;
+  --dock-splitter: var(--dock-border);
   --dock-splitter-hover: 217 91% 55%;
   --dock-hover: 220 14% 90%;
   --dock-primary: 217 91% 48%;
@@ -38,8 +38,6 @@
   --dock-scrollbar-thumb: 0 0% 55%;
   --dock-scrollbar-track: transparent;
   --dock-scrollbar-width: 6px;
-  --dock-splitter-bg: 220 14% 82%;
-  --dock-splitter-grip: 0 0% 100%;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -58,7 +56,7 @@
   --dock-text-secondary: 215 20% 70%;
   --dock-text-muted: 215 15% 50%;
   --dock-border: 217 30% 58%;
-  --dock-splitter: 217 30% 70%;
+  --dock-splitter: var(--dock-border);
   --dock-splitter-hover: 217 91% 60%;
   --dock-hover: 217 33% 18%;
   --dock-primary: 217 91% 72%;
@@ -69,8 +67,6 @@
   --dock-tab-overflow-hover: 222 47% 16%;
   --dock-scrollbar-thumb: 215 20% 40%;
   --dock-scrollbar-track: transparent;
-  --dock-splitter-bg: 222 47% 20%;
-  --dock-splitter-grip: 215 20% 40%;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -386,70 +382,54 @@ dock-manager *,
 
 .dock-splitter {
   flex-shrink: 0;
+  background: hsl(var(--dock-splitter));
   position: relative;
-  z-index: 1;
-  background: hsl(var(--dock-splitter-bg));
+  z-index: 2;
   transition: background-color 0.15s;
 }
 
 .dock-splitter:hover {
-  background: hsl(var(--dock-splitter-hover) / 0.5);
+  background: hsl(var(--dock-splitter-hover));
 }
 
 /* Horizontal splitter (between left/right panes) */
 .dock-splitter[data-direction="horizontal"] {
-  width: 5px;
+  width: 2px;
   cursor: col-resize;
 }
 
 /* Vertical splitter (between top/bottom panes) */
 .dock-splitter[data-direction="vertical"] {
-  height: 5px;
+  height: 2px;
   cursor: row-resize;
 }
 
-/* Grip handle pill in the center of the splitter */
+/* Contrasting grip pill centered on the splitter */
 .dock-splitter::after {
   content: '';
   position: absolute;
-  border-radius: 2px;
-  background: hsl(var(--dock-splitter-grip));
+  border-radius: 1px;
+  background: hsl(var(--dock-splitter-hover));
   pointer-events: none;
-  z-index: 2;
 }
 
 .dock-splitter[data-direction="horizontal"]::after {
   width: 2px;
-  height: 48px;
-  left: 50%;
+  height: 60px;
+  left: 0;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translateY(-50%);
 }
 
 .dock-splitter[data-direction="vertical"]::after {
   height: 2px;
-  width: 48px;
+  width: 60px;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  top: 0;
+  transform: translateX(-50%);
 }
 
-/* Wider invisible hit area for splitters */
-.dock-splitter::before {
-  content: '';
-  position: absolute;
-  z-index: 1;
-}
-
-.dock-splitter[data-direction="horizontal"]::before {
-  top: 0; bottom: 0;
-  left: -2px; right: -2px;
-}
-
-.dock-splitter[data-direction="vertical"]::before {
-  left: 0; right: 0;
-  top: -2px; bottom: -2px;
-}
+/* Wider invisible hit area for splitters (handled by JS child div) */
 
 .dock-floating-window {
   position: absolute;

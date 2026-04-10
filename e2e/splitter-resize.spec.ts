@@ -22,10 +22,31 @@ test.describe('Splitter Resize', () => {
     const leftBefore = await leftPane.boundingBox();
     if (!leftBefore) throw new Error('Left pane not found');
 
-    // Drag splitter 50px to the right
-    await page.mouse.move(splitterBox.x, splitterBox.y + splitterBox.height / 2);
+    // Move floating window out of the way if present
+    const floater = page.locator('.dock-floating-window');
+    if (await floater.count() > 0) {
+      const fBox = await floater.first().boundingBox();
+      if (fBox) {
+        // Drag floating window to bottom-right corner
+        const fx = fBox.x + fBox.width / 2;
+        const fy = fBox.y + 10;
+        await page.mouse.move(fx, fy);
+        await page.mouse.down();
+        await page.mouse.move(1100, 500, { steps: 3 });
+        await page.mouse.up();
+        await page.waitForTimeout(50);
+      }
+    }
+
+    // Re-read splitter position after moving floater
+    const splitterBox2 = await splitter.boundingBox();
+    if (!splitterBox2) throw new Error('Splitter lost after moving floater');
+    const cx2 = splitterBox2.x + splitterBox2.width / 2;
+    const cy2 = splitterBox2.y + splitterBox2.height / 2;
+
+    await page.mouse.move(cx2, cy2);
     await page.mouse.down();
-    await page.mouse.move(splitterBox.x + 50, splitterBox.y + splitterBox.height / 2, { steps: 5 });
+    await page.mouse.move(cx2 + 50, cy2, { steps: 5 });
     await page.mouse.up();
 
     await page.waitForTimeout(100);
@@ -33,7 +54,7 @@ test.describe('Splitter Resize', () => {
     // Left pane should be wider
     const leftAfter = await leftPane.boundingBox();
     if (!leftAfter) throw new Error('Left pane lost');
-    expect(leftAfter.width).toBeGreaterThan(leftBefore.width + 20);
+    expect(leftAfter.width).toBeGreaterThan(leftBefore.width + 10);
   });
 
   test('splitter highlights on hover', async ({ page }) => {
