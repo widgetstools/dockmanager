@@ -105,6 +105,12 @@ export function insertInGroup(
  * Insert a panel next to a specific tab group by splitting it.
  * Creates a new split with the existing group and a new tab group
  * at the given position (left/right/top/bottom).
+ *
+ * If the target group is empty (a safeEmptyGroup placeholder left over
+ * from a previous action that drained the layout), splitting would
+ * leave the empty sibling visible as a blank pane. Instead we collapse
+ * the insert into a plain insertInGroup on the empty target so the
+ * placeholder is reused for the new panel.
  */
 export function insertBySplit(
   root: LayoutNode,
@@ -116,6 +122,10 @@ export function insertBySplit(
 
   if (root.type === 'tabgroup') {
     if (root.id === targetGroupId) {
+      if (root.panels.length === 0) {
+        // Reuse the empty placeholder instead of creating a split.
+        return { ...root, panels: [panelId], activePanel: panelId };
+      }
       return splitGroup(root, panelId, position);
     }
     return root;
@@ -141,6 +151,12 @@ export function insertAtEdge(
   edge: DockEdge,
   sizePercent = 20,
 ): LayoutNode {
+  // If the root is an empty tabgroup placeholder, reuse it for the panel
+  // so we don't wrap it in a split with a blank sibling.
+  if (root.type === 'tabgroup' && root.panels.length === 0) {
+    return { ...root, panels: [panelId], activePanel: panelId };
+  }
+
   const newGroup: TabGroupNode = {
     type: 'tabgroup',
     id: genId('tg'),
