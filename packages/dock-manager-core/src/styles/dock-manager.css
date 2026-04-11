@@ -159,7 +159,7 @@ dock-manager *,
 .dock-panel-header {
   display: flex;
   align-items: center;
-  min-height: 36px;
+  min-height: 32px;
   padding: 0 8px;
   background: hsl(var(--dock-panel-header));
   border-bottom: 1px solid hsl(var(--dock-border));
@@ -174,7 +174,7 @@ dock-manager *,
   align-items: center;
   gap: 4px;
   padding: 0 12px;
-  height: 32px;
+  height: 28px;
   align-self: flex-end;
   cursor: pointer;
   user-select: none;
@@ -184,12 +184,16 @@ dock-manager *,
   flex: 0 0 auto;
   color: hsl(var(--dock-text));
   opacity: 0.7;
-  border-top: 2px solid transparent;
+  border-top: 2px solid hsl(var(--dock-border));
+  border-right: 1px solid hsl(var(--dock-border));
   border-bottom: 1px solid transparent;
   margin-bottom: -1px;
   transition: color 0.15s, background-color 0.15s;
   position: relative;
-  box-shadow: -1px 0 0 hsl(var(--dock-border) / 0.8), 1px 0 0 hsl(var(--dock-border) / 0.8), 0 -1px 0 hsl(var(--dock-border) / 0.8);
+}
+
+.dock-tab:first-child {
+  border-left: 1px solid hsl(var(--dock-border));
 }
 
 .dock-tab .dock-tab-label {
@@ -211,7 +215,6 @@ dock-manager *,
   border-top-color: hsl(var(--dock-surface));
   border-bottom-color: hsl(var(--dock-surface));
   margin-bottom: -2px;
-  box-shadow: -1px 0 0 hsl(var(--dock-border)), 1px 0 0 hsl(var(--dock-border)), 0 -1px 0 hsl(var(--dock-border));
   z-index: 1;
 }
 

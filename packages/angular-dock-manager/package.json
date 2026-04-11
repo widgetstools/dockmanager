@@ -1,12 +1,12 @@
 {
   "name": "@widgetstools/angular-dock-manager",
-  "version": "0.1.34",
+  "version": "0.1.35",
   "description": "Angular dock manager — thin wrapper around dock-manager-core",
   "peerDependencies": {
     "@angular/common": ">=21.0.0",
     "@angular/core": ">=21.0.0",
     "rxjs": "^7.8.0",
-    "@widgetstools/dock-manager-core": "^0.1.34"
+    "@widgetstools/dock-manager-core": "^0.1.35"
   },
   "dependencies": {},
   "devDependencies": {

@@ -122,7 +122,7 @@ export class TabGroupView {
     this.headerEl = document.createElement('div');
     this.headerEl.className = 'dock-panel-header';
     this.headerEl.style.cssText =
-      'display:flex;align-items:center;justify-content:space-between;min-height:38px;padding:0 12px;flex-shrink:0;';
+      'display:flex;align-items:center;justify-content:space-between;min-height:32px;padding:0 12px;flex-shrink:0;';
     this.element.appendChild(this.headerEl);
 
     // Create content area
