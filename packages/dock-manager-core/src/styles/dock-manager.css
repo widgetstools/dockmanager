@@ -184,16 +184,21 @@ dock-manager *,
   flex: 0 0 auto;
   color: hsl(var(--dock-text));
   opacity: 0.7;
-  border-top: 2px solid hsl(var(--dock-border));
-  border-right: 1px solid hsl(var(--dock-border));
+  border-top: 2px solid transparent;
   border-bottom: 1px solid transparent;
-  margin-bottom: -1px;
+  border-left: 1px solid hsl(var(--dock-border));
   transition: color 0.15s, background-color 0.15s;
   position: relative;
 }
 
-.dock-tab:first-child {
-  border-left: 1px solid hsl(var(--dock-border));
+.dock-tab:last-child {
+  border-right: 1px solid hsl(var(--dock-border));
+}
+
+/* Only-child (single-tab pane): suppress both side borders so no dangling lines. */
+.dock-tab:only-child {
+  border-left-color: transparent;
+  border-right-color: transparent;
 }
 
 .dock-tab .dock-tab-label {
@@ -214,7 +219,6 @@ dock-manager *,
   background: hsl(var(--dock-surface));
   border-top-color: hsl(var(--dock-surface));
   border-bottom-color: hsl(var(--dock-surface));
-  margin-bottom: -2px;
   z-index: 1;
 }
 
@@ -310,79 +314,6 @@ dock-manager *,
   opacity: 0.9;
 }
 
-/* ── Header hide/show arrow buttons (single-tab panes) ── */
-
-/* Up-arrow button shown in the header — hides the header on click */
-.dock-header-collapse-pill {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  border: 1px solid hsl(var(--dock-text) / 0.25);
-  background: hsl(var(--dock-surface) / 0.85);
-  color: hsl(var(--dock-text) / 0.9);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s, background-color 0.15s, color 0.15s, border-color 0.15s;
-  padding: 0;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.dock-panel-header:hover .dock-header-collapse-pill,
-.dock-header-collapse-pill:focus-visible {
-  opacity: 1;
-}
-
-.dock-header-collapse-pill:hover {
-  background: hsl(var(--dock-text) / 0.15);
-  color: hsl(var(--dock-text));
-  border-color: hsl(var(--dock-text) / 0.5);
-}
-
-/* Down-arrow hover zone at top edge — shows the header when clicked */
-.dock-header-hover-zone {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 20px;
-  z-index: 3;
-  cursor: pointer;
-  display: none;
-  pointer-events: none;
-  align-items: center;
-  justify-content: center;
-  color: hsl(var(--dock-text) / 0.9);
-  background: transparent;
-  transition: color 0.15s, background-color 0.15s;
-}
-
-/* Icon inside the hover zone is hidden until the user hovers it */
-.dock-header-hover-zone > svg {
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.dock-header-hover-zone:hover > svg {
-  opacity: 1;
-}
-
-.dock-tab-group[data-header-collapsed] > .dock-header-hover-zone {
-  display: flex;
-  pointer-events: auto;
-}
-
-.dock-header-hover-zone:hover {
-  background: hsl(var(--dock-text) / 0.08);
-  color: hsl(var(--dock-text));
-}
-
 .dock-splitter {
   flex-shrink: 0;
   background: hsl(var(--dock-splitter));
@@ -405,31 +336,6 @@ dock-manager *,
 .dock-splitter[data-direction="vertical"] {
   height: 2px;
   cursor: row-resize;
-}
-
-/* Contrasting grip pill centered on the splitter */
-.dock-splitter::after {
-  content: '';
-  position: absolute;
-  border-radius: 1px;
-  background: hsl(var(--dock-splitter-hover));
-  pointer-events: none;
-}
-
-.dock-splitter[data-direction="horizontal"]::after {
-  width: 2px;
-  height: 60px;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.dock-splitter[data-direction="vertical"]::after {
-  height: 2px;
-  width: 60px;
-  left: 50%;
-  top: 0;
-  transform: translateX(-50%);
 }
 
 /* Wider invisible hit area for splitters (handled by JS child div) */

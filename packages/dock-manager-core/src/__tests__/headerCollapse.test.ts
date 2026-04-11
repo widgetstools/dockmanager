@@ -395,31 +395,28 @@ describe('TabGroupView header collapse — data-dock-target', () => {
     view.dispose();
   });
 
-  it('keeps data-dock-target when pill is clicked to collapse', () => {
+  it('keeps data-dock-target when header is toggled via update()', () => {
     const callbacks = makeCallbacks();
     const node: TabGroupNode = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
     const panels = { p1: { id: 'p1', title: 'Panel 1' } };
     const view = new TabGroupView(node, panels, 'p1', undefined, callbacks);
     document.body.appendChild(view.element);
 
-    // Find and click the collapse pill
-    const pill = view.element.querySelector('.dock-header-collapse-pill') as HTMLButtonElement;
-    expect(pill).not.toBeNull();
-    pill.click();
+    // Collapse via layout update
+    const collapsed: TabGroupNode = {
+      type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1', headerCollapsed: true,
+    };
+    view.update(collapsed, panels, 'p1', undefined);
 
     expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
     expect(view.element.hasAttribute('data-header-collapsed')).toBe(true);
-    expect(callbacks.onSetHeaderCollapsed).toHaveBeenCalledWith('tg1', true);
 
-    // Click again to uncollapse
-    // The pill is on the header which is now hidden, so use the hover zone
-    const hoverZone = view.element.querySelector('.dock-header-hover-zone') as HTMLDivElement;
-    expect(hoverZone).not.toBeNull();
-    hoverZone.click();
+    // Uncollapse via layout update
+    const open: TabGroupNode = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
+    view.update(open, panels, 'p1', undefined);
 
     expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
     expect(view.element.hasAttribute('data-header-collapsed')).toBe(false);
-    expect(callbacks.onSetHeaderCollapsed).toHaveBeenCalledWith('tg1', false);
 
     document.body.removeChild(view.element);
     view.dispose();
@@ -477,32 +474,6 @@ describe('TabGroupView header collapse — header visibility', () => {
     view.dispose();
   });
 
-  it('shows collapse pill only for single-tab panes', () => {
-    // Single tab — pill should exist
-    const node1: TabGroupNode = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
-    const panels = { p1: { id: 'p1', title: 'P1' }, p2: { id: 'p2', title: 'P2' } };
-    const view1 = new TabGroupView(node1, panels, 'p1', undefined, makeCallbacks());
-    expect(view1.element.querySelector('.dock-header-collapse-pill')).not.toBeNull();
-    view1.dispose();
-
-    // Multi tab — pill should not exist
-    const node2: TabGroupNode = { type: 'tabgroup', id: 'tg2', panels: ['p1', 'p2'], activePanel: 'p1' };
-    const view2 = new TabGroupView(node2, panels, 'p1', undefined, makeCallbacks());
-    expect(view2.element.querySelector('.dock-header-collapse-pill')).toBeNull();
-    view2.dispose();
-  });
-
-  it('hover zone exists only when header is collapsed', () => {
-    const node: TabGroupNode = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
-    const panels = { p1: { id: 'p1', title: 'Panel 1' } };
-    const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
-
-    // Not collapsed — hover zone exists but only activates via CSS when collapsed
-    const hoverZone = view.element.querySelector('.dock-header-hover-zone');
-    expect(hoverZone).not.toBeNull();
-
-    view.dispose();
-  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -595,23 +566,20 @@ describe('TabGroupView — single/multi panel transitions', () => {
     // Uncollapsed
     expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
     expect(view.element.hasAttribute('data-header-collapsed')).toBe(false);
-    // Pill should be removed
-    expect(view.element.querySelector('.dock-header-collapse-pill')).toBeNull();
-    expect(view.element.querySelector('.dock-header-hover-zone')).toBeNull();
     // Reducer notified
     expect(callbacks.onSetHeaderCollapsed).toHaveBeenCalledWith('tg1', false);
 
     view.dispose();
   });
 
-  it('multi-tab → remove panel → collapse pill appears', () => {
+  it('multi-tab → remove panel → single-tab group retains dock target', () => {
     const node: TabGroupNode = {
       type: 'tabgroup', id: 'tg1', panels: ['p1', 'p2'], activePanel: 'p1',
     };
     const panels = { p1: { id: 'p1', title: 'P1' }, p2: { id: 'p2', title: 'P2' } };
     const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
 
-    expect(view.element.querySelector('.dock-header-collapse-pill')).toBeNull();
+    expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
 
     // Remove a panel
     const updated: TabGroupNode = {
@@ -620,8 +588,8 @@ describe('TabGroupView — single/multi panel transitions', () => {
     const remainingPanels = { p1: { id: 'p1', title: 'P1' } };
     view.update(updated, remainingPanels, 'p1', undefined);
 
-    expect(view.element.querySelector('.dock-header-collapse-pill')).not.toBeNull();
-    expect(view.element.querySelector('.dock-header-hover-zone')).not.toBeNull();
+    expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
+    expect(view.element.hasAttribute('data-header-collapsed')).toBe(false);
 
     view.dispose();
   });
