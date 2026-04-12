@@ -77,6 +77,8 @@ export class TabGroupView {
 
   // Header collapse for single-tab panes
   private headerCollapsed = false;
+  private headerCollapsePill: HTMLButtonElement | null = null;
+  private headerHoverZone: HTMLDivElement | null = null;
 
   // Resource strings for localization
   private resourceStrings: DockResourceStrings;
@@ -325,6 +327,12 @@ export class TabGroupView {
     // Close overflow menu if open
     this.hideOverflowMenu();
 
+    // Cleanup header collapse pill and hover zone
+    this.headerCollapsePill?.remove();
+    this.headerCollapsePill = null;
+    this.headerHoverZone?.remove();
+    this.headerHoverZone = null;
+
     if (this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
@@ -350,13 +358,45 @@ export class TabGroupView {
   private updateHeaderCollapse(): void {
     const isSingleTab = this.node.panels.length === 1;
 
-    // Collapsed state is only meaningful for single-tab groups. If we are
-    // now multi-tab but still flagged collapsed, force-uncollapse and notify
-    // the reducer so serialized state stays consistent.
-    if (!isSingleTab && this.headerCollapsed) {
-      this.headerCollapsed = false;
-      this.applyHeaderCollapsed();
-      this.callbacks.onSetHeaderCollapsed(this.node.id, false);
+    if (isSingleTab && !this.headerCollapsePill) {
+      // Create the up-arrow button (hides the header)
+      this.headerCollapsePill = document.createElement('button');
+      this.headerCollapsePill.className = 'dock-header-collapse-pill';
+      this.headerCollapsePill.setAttribute('aria-label', 'Hide header');
+      this.headerCollapsePill.title = 'Hide header';
+      this.headerCollapsePill.innerHTML =
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>';
+      this.headerCollapsePill.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleHeaderCollapsed();
+      });
+      this.headerEl.appendChild(this.headerCollapsePill);
+
+      // Create the hover zone (overlays top of content area when header is collapsed).
+      // It hosts a down-arrow affordance that reveals the header on click.
+      this.headerHoverZone = document.createElement('div');
+      this.headerHoverZone.className = 'dock-header-hover-zone';
+      this.headerHoverZone.setAttribute('role', 'button');
+      this.headerHoverZone.setAttribute('aria-label', 'Show header');
+      this.headerHoverZone.title = 'Show header';
+      this.headerHoverZone.innerHTML =
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+      this.headerHoverZone.addEventListener('click', () => {
+        this.toggleHeaderCollapsed();
+      });
+      this.element.appendChild(this.headerHoverZone);
+    } else if (!isSingleTab) {
+      // Remove pill and hover zone when multiple tabs
+      this.headerCollapsePill?.remove();
+      this.headerCollapsePill = null;
+      this.headerHoverZone?.remove();
+      this.headerHoverZone = null;
+      if (this.headerCollapsed) {
+        this.headerCollapsed = false;
+        this.applyHeaderCollapsed();
+        // Notify reducer to clear persisted collapsed state
+        this.callbacks.onSetHeaderCollapsed(this.node.id, false);
+      }
     }
   }
 

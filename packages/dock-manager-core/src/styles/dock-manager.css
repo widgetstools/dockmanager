@@ -314,6 +314,76 @@ dock-manager *,
   opacity: 0.9;
 }
 
+.dock-header-collapse-pill {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid hsl(var(--dock-text) / 0.25);
+  background: hsl(var(--dock-surface) / 0.85);
+  color: hsl(var(--dock-text) / 0.9);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background-color 0.15s, color 0.15s, border-color 0.15s;
+  padding: 0;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dock-panel-header:hover .dock-header-collapse-pill,
+.dock-header-collapse-pill:focus-visible {
+  opacity: 1;
+}
+
+.dock-header-collapse-pill:hover {
+  background: hsl(var(--dock-text) / 0.15);
+  color: hsl(var(--dock-text));
+  border-color: hsl(var(--dock-text) / 0.5);
+}
+
+/* Down-arrow hover zone at top edge — shows the header when clicked */
+.dock-header-hover-zone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  z-index: 3;
+  cursor: pointer;
+  display: none;
+  pointer-events: none;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--dock-text) / 0.9);
+  background: transparent;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+/* Icon inside the hover zone is hidden until the user hovers it */
+.dock-header-hover-zone > svg {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.dock-header-hover-zone:hover > svg {
+  opacity: 1;
+}
+
+.dock-tab-group[data-header-collapsed] > .dock-header-hover-zone {
+  display: flex;
+  pointer-events: auto;
+}
+
+.dock-header-hover-zone:hover {
+  background: hsl(var(--dock-text) / 0.08);
+  color: hsl(var(--dock-text));
+}
+
 .dock-splitter {
   flex-shrink: 0;
   background: hsl(var(--dock-splitter));
@@ -326,16 +396,46 @@ dock-manager *,
   background: hsl(var(--dock-splitter-hover));
 }
 
+/* Centered pill grip on every splitter */
+.dock-splitter::after {
+  content: '';
+  position: absolute;
+  border-radius: 2px;
+  background: rgba(128, 128, 128, 0.45);
+  pointer-events: none;
+  transition: background-color 0.15s;
+}
+
+.dock-splitter:hover::after {
+  background: rgba(128, 128, 128, 0.7);
+}
+
 /* Horizontal splitter (between left/right panes) */
 .dock-splitter[data-direction="horizontal"] {
   width: 2px;
   cursor: col-resize;
 }
 
+.dock-splitter[data-direction="horizontal"]::after {
+  width: 2px;
+  height: 60px;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+}
+
 /* Vertical splitter (between top/bottom panes) */
 .dock-splitter[data-direction="vertical"] {
   height: 2px;
   cursor: row-resize;
+}
+
+.dock-splitter[data-direction="vertical"]::after {
+  height: 2px;
+  width: 60px;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
 }
 
 /* Wider invisible hit area for splitters (handled by JS child div) */
