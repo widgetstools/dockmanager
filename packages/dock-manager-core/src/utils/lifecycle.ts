@@ -47,8 +47,9 @@ export class CompositeDisposable implements IDisposable {
       for (const d of items) {
         try {
           d.dispose();
-        } catch {
-          /* swallow — caller is already tearing down */
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('[CompositeDisposable] post-dispose add threw', err);
         }
       }
       return;
@@ -101,8 +102,9 @@ export class MutableDisposable implements IDisposable {
     if (this._value) {
       try {
         this._value.dispose();
-      } catch {
-        /* swallow */
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[MutableDisposable] previous value dispose threw', err);
       }
     }
     this._value = next;

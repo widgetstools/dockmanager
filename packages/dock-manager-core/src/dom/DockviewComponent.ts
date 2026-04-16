@@ -12,6 +12,7 @@ import type {
 import { createPreventableEvent } from '../types/dock';
 import { dockReducer, type DockAction } from '../reducer/dockReducer';
 import { findFirstTabGroup, findTabGroupForPanel } from '../layout/LayoutTree';
+import { checkLayoutInvariants, findLostPanels } from '../layout/layoutInvariants';
 import { PanelApi } from '../api/PanelApi';
 import { DockviewApi } from '../api/DockviewApi';
 import { DockDragManager } from './DockDragManager';
@@ -28,7 +29,7 @@ import { RenderContainerManager } from './RenderContainerManager';
 import type { DockTheme } from '../theme/DockTheme';
 import { applyTheme, vsCodeLight, vsCodeDark } from '../theme/DockTheme';
 import { ensureStyles, releaseStyles } from './styleInjector';
-import { debugLog, debugError } from '../utils/debug';
+import { debugLog, debugError, isDockManagerDebugEnabled } from '../utils/debug';
 
 // ─── Options ─────────────────────────────────────────────────────────
 
@@ -266,6 +267,8 @@ export class DockviewComponent {
         // Check if the source is a floating panel
         const isFloating = this.state.floatingPanels.some(fp => fp.panelId === sourceId);
 
+        debugLog('DOCK_DROP', { sourceId, targetId, position, isFloating });
+
         if (targetId === '__root__') {
           if (isFloating) {
             // Dock floating panel, then move to edge
@@ -282,6 +285,7 @@ export class DockviewComponent {
         }
       },
       onFloat: (sourceId, x, y) => {
+        debugLog('DOCK_DROP_FLOAT', { sourceId, x, y });
         this.dispatch({
           type: 'FLOAT_PANEL',
           payload: { panelId: sourceId, x, y, width: 400, height: 300 },
@@ -379,6 +383,10 @@ export class DockviewComponent {
   dispatch(action: DockAction): void {
     const prevState = this.state;
 
+    if (isDockManagerDebugEnabled()) {
+      debugLog('DOCK_ACTION', action.type, action);
+    }
+
     // Push state to history before mutation (for undo support)
     if (!DockviewComponent.NON_UNDOABLE_ACTIONS.has(action.type)) {
       this.historyManager.push(prevState);
@@ -387,22 +395,68 @@ export class DockviewComponent {
     try {
       this.state = dockReducer(this.state, action);
     } catch (err) {
-      console.error('[DockviewComponent] Reducer error for action', action.type, err);
+      console.error('[DockviewComponent] Reducer error for action', action.type, err, {
+        action,
+        prevState,
+      });
       // Don't update state if reducer threw — keep previous valid state
       return;
     }
 
     if (this.state !== prevState) {
+      // Always check for lost panels — panels that were registered before
+      // this action but are no longer in any placement AND still registered
+      // in state.panels. This indicates a reducer bug that silently dropped
+      // the panel somewhere between remove and insert.
+      const lost = findLostPanels(prevState, this.state);
+      if (lost.length > 0) {
+        console.error(
+          '[DockManager] PANEL LOST after action',
+          action.type,
+          'panels=',
+          lost,
+          {
+            action,
+            prevLayout: prevState.layout,
+            nextLayout: this.state.layout,
+          },
+        );
+      }
+
+      // Invariant checks (debug-gated — noisy if enabled on production)
+      if (isDockManagerDebugEnabled()) {
+        const violations = checkLayoutInvariants(this.state);
+        if (violations.length > 0) {
+          console.warn(
+            '[DockManager] Invariant violations after action',
+            action.type,
+            violations,
+            {
+              action,
+              layout: this.state.layout,
+              floating: this.state.floatingPanels.map(p => p.panelId),
+              unpinned: this.state.unpinnedPanels.map(p => p.panelId),
+              popout: (this.state.popoutPanels ?? []).map(p => p.panelId),
+            },
+          );
+        }
+      }
+
       try {
         this.render();
       } catch (renderErr) {
-        console.error('[DockviewComponent] Render error after action', action.type, renderErr);
+        console.error(
+          '[DockviewComponent] Render error after action',
+          action.type,
+          renderErr,
+          { action, layout: this.state.layout },
+        );
         // Don't freeze — existing DOM remains intact
       }
       try {
         this.options.onStateChange?.(this.state);
       } catch (cbErr) {
-        console.error('[DockviewComponent] onStateChange callback error:', cbErr);
+        console.error('[DockviewComponent] onStateChange callback error:', cbErr, { action });
       }
     }
   }

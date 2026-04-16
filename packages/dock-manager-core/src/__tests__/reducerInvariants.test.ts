@@ -17,90 +17,16 @@ import {
   createDefaultState,
   type DockAction,
 } from '../reducer/dockReducer';
-import {
-  findAllTabGroups,
-  collectLayoutPanelIds,
-} from '../layout/LayoutTree';
+import { findAllTabGroups } from '../layout/LayoutTree';
+import { checkLayoutInvariants, type InvariantViolation } from '../layout/layoutInvariants';
 import type {
   DockManagerState,
   DockPosition,
-  LayoutNode,
-  TabGroupNode,
-  SplitNode,
 } from '../types/dock';
 
-type Violation = { kind: string; detail: string };
+type Violation = InvariantViolation;
 
-function collectEmptyGroups(node: LayoutNode, parentType: 'root' | 'split'): TabGroupNode[] {
-  const out: TabGroupNode[] = [];
-  if (node.type === 'tabgroup') {
-    if (node.panels.length === 0 && parentType === 'split') out.push(node);
-    return out;
-  }
-  for (const child of node.children) {
-    out.push(...collectEmptyGroups(child, 'split'));
-  }
-  return out;
-}
-
-function isRootEmptyTabgroup(layout: LayoutNode): boolean {
-  return layout.type === 'tabgroup' && layout.panels.length === 0;
-}
-
-function checkInvariants(state: DockManagerState): Violation[] {
-  const out: Violation[] = [];
-
-  // 1. No empty tabgroups as children of splits
-  const emptyNested = collectEmptyGroups(state.layout, 'root');
-  for (const g of emptyNested) {
-    out.push({ kind: 'EMPTY_NESTED', detail: `empty tabgroup ${g.id} is a split child` });
-  }
-
-  // 1b. Root-level empty tabgroup is only allowed when no panels are docked.
-  // If state.panels has entries, but layout is the fallback empty group AND
-  // at least one of those panels is NOT floating/unpinned/popout, something
-  // was lost. That's an issue — but separate from EMPTY_NESTED.
-
-  // 2. activePanel must be in panels (or panels empty)
-  const groups = findAllTabGroups(state.layout);
-  for (const g of groups) {
-    if (g.panels.length > 0 && !g.panels.includes(g.activePanel)) {
-      out.push({
-        kind: 'ACTIVE_NOT_IN_PANELS',
-        detail: `group ${g.id} active=${g.activePanel} panels=[${g.panels.join(',')}]`,
-      });
-    }
-    for (const pid of g.panels) {
-      if (!state.panels[pid]) {
-        out.push({ kind: 'UNKNOWN_PANEL', detail: `group ${g.id} has unregistered panel ${pid}` });
-      }
-    }
-  }
-
-  // 3. Every panel in state.panels must be placed somewhere (layout OR
-  // floating OR unpinned OR popout). Panels removed via CLOSE_PANEL are
-  // no longer in state.panels so they are not flagged here.
-  const layoutIds = collectLayoutPanelIds(state.layout);
-  const floatIds = new Set(state.floatingPanels.map(p => p.panelId));
-  const unpinIds = new Set(state.unpinnedPanels.map(p => p.panelId));
-  const popoutIds = new Set((state.popoutPanels ?? []).map(p => p.panelId));
-  for (const id of Object.keys(state.panels)) {
-    if (!layoutIds.has(id) && !floatIds.has(id) && !unpinIds.has(id) && !popoutIds.has(id)) {
-      out.push({ kind: 'ORPHAN_PANEL', detail: `panel ${id} not in layout/floating/unpinned/popout` });
-    }
-  }
-
-  // 4. Duplicate group IDs
-  const seen = new Set<string>();
-  for (const g of groups) {
-    if (seen.has(g.id)) {
-      out.push({ kind: 'DUP_GROUP_ID', detail: `duplicate group id ${g.id}` });
-    }
-    seen.add(g.id);
-  }
-
-  return out;
-}
+const checkInvariants = checkLayoutInvariants;
 
 // ─── Deterministic PRNG ─────────────────────────────────────────────
 
@@ -227,7 +153,7 @@ function pickAction(
       payload: { panelId: id, windowName: `w_${id}`, x: 0, y: 0, width: 400, height: 300 },
     };
   }
-  // 4% DOCK_POPOUT
+  // 4% DOCK_POPOUT or DOCK_TO_EDGE or REORDER_TABS
   if (state.popoutPanels && state.popoutPanels.length > 0 && groups.length > 0) {
     return {
       type: 'DOCK_POPOUT',
@@ -235,6 +161,17 @@ function pickAction(
         panelId: state.popoutPanels[Math.floor(rand() * state.popoutPanels.length)].panelId,
         targetTabGroupId: groups[Math.floor(rand() * groups.length)].id,
         position: POSITIONS[Math.floor(rand() * POSITIONS.length)],
+      },
+    };
+  }
+  // Fallback: DOCK_TO_EDGE on a random in-layout panel
+  if (layoutPanels.length > 0) {
+    const edges: DockPosition[] = ['left', 'right', 'top', 'bottom'];
+    return {
+      type: 'DOCK_TO_EDGE',
+      payload: {
+        panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
+        edge: edges[Math.floor(rand() * edges.length)],
       },
     };
   }

@@ -147,3 +147,11 @@ export {
   setDockManagerDebug,
   isDockManagerDebugEnabled,
 } from './utils/debug';
+
+// ─── Layout invariant diagnostics ────────────────────────────────────
+
+export {
+  checkLayoutInvariants,
+  findLostPanels,
+  type InvariantViolation,
+} from './layout/layoutInvariants';
