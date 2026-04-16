@@ -255,10 +255,19 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
         ? targetTabGroupId
         : null;
 
-      // Reject explicit drops onto a header-collapsed group
+      // Validate explicit target: reject header-collapsed, drop stale IDs.
+      // A stale target can happen when localStorage or the caller refers
+      // to a group ID that no longer exists in the layout. Without this
+      // check, insertBySplit/insertInGroup silently no-op and the panel
+      // is removed from floatingPanels without being re-inserted anywhere,
+      // leaving it orphaned in state.panels.
       if (target) {
         const explicitTarget = findTabGroupById(state.layout, target);
-        if (explicitTarget?.headerCollapsed) return state;
+        if (!explicitTarget) {
+          target = null; // fall through to source/first-group fallbacks
+        } else if (explicitTarget.headerCollapsed) {
+          return state;
+        }
       }
 
       // If no explicit target, try to dock back to the original tab group

@@ -427,18 +427,25 @@ export class DockviewComponent {
       if (isDockManagerDebugEnabled()) {
         const violations = checkLayoutInvariants(this.state);
         if (violations.length > 0) {
+          // Print the violation details as plain text so a copy-pasted
+          // devtools log is self-contained and doesn't require expanding
+          // a collapsed object.
+          const summary = violations.map(v => `[${v.kind}] ${v.detail}`).join('\n  ');
           console.warn(
-            '[DockManager] Invariant violations after action',
-            action.type,
-            violations,
-            {
-              action,
-              layout: this.state.layout,
-              floating: this.state.floatingPanels.map(p => p.panelId),
-              unpinned: this.state.unpinnedPanels.map(p => p.panelId),
-              popout: (this.state.popoutPanels ?? []).map(p => p.panelId),
-            },
+            `[DockManager] ${violations.length} invariant violation(s) after action ${action.type}:\n  ${summary}`,
           );
+          console.warn('[DockManager] violation context', {
+            action,
+            violations,
+            prevLayout: prevState.layout,
+            nextLayout: this.state.layout,
+            prevFloating: prevState.floatingPanels.map(p => p.panelId),
+            nextFloating: this.state.floatingPanels.map(p => p.panelId),
+            prevUnpinned: prevState.unpinnedPanels.map(p => p.panelId),
+            nextUnpinned: this.state.unpinnedPanels.map(p => p.panelId),
+            prevPopout: (prevState.popoutPanels ?? []).map(p => p.panelId),
+            nextPopout: (this.state.popoutPanels ?? []).map(p => p.panelId),
+          });
         }
       }
 
