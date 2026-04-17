@@ -1,98 +1,93 @@
 /**
- * Dock Manager Reducer
+ * DockReducer — Pure reducer for DockManagerState with placement Map.
  *
- * Pure reducer function for immutable state management.
- * Uses LayoutTree module for all tree operations.
+ * All 16 primary actions plus backward-compat actions for the existing DOM layer.
+ * Uses LayoutTree class for immutable tree operations.
  */
 
 import type {
   DockManagerState,
   DockPosition,
+  DockEdge,
   PanelConfig,
   HeaderPosition,
-  PopoutPanel,
+  LayoutNode,
+  Placement,
 } from '../types/dock';
+
 import {
-  removePanel,
-  insertInGroup,
-  insertBySplit,
-  insertAtEdge,
-  movePanel,
-  findFirstTabGroup,
-  findTabGroupById,
+  LayoutTree,
   findTabGroupForPanel,
-  findTabGroupByEdge,
-  setActivePanel,
-  updateSizes,
-  updateTabGroup,
-  reorderPanelToFront,
-  detectPanelEdge,
+  findFirstTabGroup,
   collectAllPanelsOrdered,
   findNextPanel,
   findPreviousPanel,
+  detectPanelEdge,
+  insertAtEdge,
   genId,
-  syncIdCounter,
 } from '../layout/LayoutTree';
 
 // ─── Action types ────────────────────────────────────────────────────
 
 export type DockAction =
-  | { type: 'ADD_PANEL'; payload: { panelId: string; title: string; icon?: string; closable?: boolean; floatable?: boolean; dockable?: boolean; tabComponent?: string; widgetType?: string; widgetProps?: Record<string, unknown> } }
-  | { type: 'MOVE_PANEL'; payload: { panelId: string; targetTabGroupId: string; position: DockPosition } }
-  | { type: 'CLOSE_PANEL'; payload: { panelId: string } }
-  | { type: 'FLOAT_PANEL'; payload: { panelId: string; x: number; y: number; width: number; height: number } }
-  | { type: 'DOCK_FLOATING'; payload: { panelId: string; targetTabGroupId: string; position: DockPosition } }
-  | { type: 'UPDATE_FLOATING'; payload: { panelId: string; x?: number; y?: number; width?: number; height?: number } }
-  | { type: 'SET_ACTIVE_PANEL'; payload: { tabGroupId: string; panelId: string } }
-  | { type: 'RESIZE_SPLIT'; payload: { splitId: string; sizes: number[] } }
-  | { type: 'BRING_TO_FRONT'; payload: { panelId: string } }
-  | { type: 'UNPIN_PANEL'; payload: { panelId: string } }
-  | { type: 'PIN_PANEL'; payload: { panelId: string } }
-  | { type: 'RESIZE_UNPINNED'; payload: { panelId: string; size: number } }
-  | { type: 'LOAD_STATE'; payload: DockManagerState }
-  | { type: 'MAXIMIZE_PANEL'; payload: { panelId: string } }
-  | { type: 'RESTORE_PANEL'; payload: { panelId: string } }
-  | { type: 'SET_ACTIVE_PANE'; payload: { panelId: string } }
-  | { type: 'UPDATE_PANEL_CONFIG'; payload: { panelId: string; updates: Partial<PanelConfig> } }
-  | { type: 'POPOUT_PANEL'; payload: { panelId: string; windowName: string; x: number; y: number; width: number; height: number } }
-  | { type: 'DOCK_POPOUT'; payload: { panelId: string; targetTabGroupId: string; position: DockPosition } }
-  | { type: 'UPDATE_POPOUT'; payload: { panelId: string; x?: number; y?: number; width?: number; height?: number } }
-  | { type: 'SET_HEADER_POSITION'; payload: { tabGroupId: string; headerPosition: HeaderPosition | undefined } }
-  | { type: 'SET_HEADER_COLLAPSED'; payload: { tabGroupId: string; collapsed: boolean } }
-  | { type: 'SET_TAB_GROUP_LOCKED'; payload: { tabGroupId: string; locked: boolean } }
-  | { type: 'NAVIGATE'; payload: { direction: 'next' | 'previous' } }
-  | { type: 'ACTIVATE_OVERFLOW_TAB'; payload: { tabGroupId: string; panelId: string } }
-  | { type: 'DOCK_TO_EDGE'; payload: { panelId: string; edge: DockPosition } }
-  | { type: 'REORDER_TABS'; payload: { tabGroupId: string; panelId: string; newIndex: number } };
+  | { type: 'ADD_PANEL'; panelId: string; config: PanelConfig; target?: string; position?: DockPosition }
+  | { type: 'CLOSE_PANEL'; panelId: string }
+  | { type: 'MOVE_PANEL'; panelId: string; targetGroupId: string; position: DockPosition }
+  | { type: 'FLOAT_PANEL'; panelId: string; x: number; y: number; width: number; height: number }
+  | { type: 'DOCK_FLOATING'; panelId: string; targetGroupId: string; position: DockPosition }
+  | { type: 'UPDATE_FLOATING'; panelId: string; x?: number; y?: number; width?: number; height?: number }
+  | { type: 'UNPIN_PANEL'; panelId: string }
+  | { type: 'PIN_PANEL'; panelId: string }
+  | { type: 'POPOUT_PANEL'; panelId: string; windowName: string; x: number; y: number; width: number; height: number }
+  | { type: 'DOCK_POPOUT'; panelId: string; targetGroupId: string; position: DockPosition }
+  | { type: 'SET_ACTIVE_PANEL'; groupId: string; panelId: string }
+  | { type: 'MAXIMIZE_PANEL'; panelId: string }
+  | { type: 'RESTORE_PANEL'; panelId: string }
+  | { type: 'RESIZE_SPLIT'; splitId: string; sizes: number[] }
+  | { type: 'REORDER_TABS'; groupId: string; panels: string[] }
+  | { type: 'DOCK_TO_EDGE'; panelId: string; edge: DockEdge }
+  | { type: 'LOAD_STATE'; state: DockManagerState }
+  // Backward-compat actions dispatched by existing DOM layer
+  | { type: 'SET_ACTIVE_PANE'; panelId: string }
+  | { type: 'UPDATE_PANEL_CONFIG'; panelId: string; config: Partial<PanelConfig> }
+  | { type: 'SET_HEADER_POSITION'; groupId: string; position: HeaderPosition | undefined }
+  | { type: 'SET_HEADER_COLLAPSED'; groupId: string; collapsed: boolean }
+  | { type: 'SET_TAB_GROUP_LOCKED'; groupId: string; locked: boolean }
+  | { type: 'NAVIGATE'; direction: 'next' | 'previous' }
+  | { type: 'ACTIVATE_OVERFLOW_TAB'; groupId: string; panelId: string }
+  | { type: 'BRING_TO_FRONT'; panelId: string }
+  | { type: 'RESIZE_UNPINNED'; panelId: string; size: number }
+  | { type: 'UPDATE_POPOUT'; panelId: string; x?: number; y?: number; width?: number; height?: number };
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
-/** Create a safe empty tab group for when removePanel returns null */
-function safeEmptyGroup(): import('../types/dock').TabGroupNode {
-  return { type: 'tabgroup', id: genId('tg'), panels: [], activePanel: '' };
-}
-
-/** Pick fallback activePaneId when the current one is removed */
-function fallbackActive(
-  currentId: string,
+/** Pick a fallback activePaneId from the layout or placements */
+function pickActive(
   removedId: string,
-  layout: import('../types/dock').LayoutNode,
-  floating: { panelId: string }[],
+  currentId: string,
+  layout: LayoutNode,
+  placements: Map<string, Placement>,
 ): string {
   if (currentId !== removedId) return currentId;
-  const all = collectAllPanelsOrdered(layout);
-  if (all.length > 0) return all[0];
-  if (floating.length > 0) return floating[0].panelId;
+  const layoutPanels = collectAllPanelsOrdered(layout);
+  if (layoutPanels.length > 0) return layoutPanels[0];
+  for (const [pid, p] of placements) {
+    if (p.type === 'floating') return pid;
+  }
   return '';
 }
 
-/** Remove a panel from all placement arrays (floating, unpinned, popout) */
-function removeFromPlacements(state: DockManagerState, panelId: string) {
-  return {
-    floatingPanels: state.floatingPanels.filter(p => p.panelId !== panelId),
-    unpinnedPanels: state.unpinnedPanels.filter(p => p.panelId !== panelId),
-    popoutPanels: (state.popoutPanels || []).filter(p => p.panelId !== panelId),
-  };
+/** Clone placements map, removing a specific panel */
+function placementsWithout(placements: Map<string, Placement>, panelId: string): Map<string, Placement> {
+  const m = new Map(placements);
+  m.delete(panelId);
+  return m;
+}
+
+/** Remove a panel from layout, returning new root (or empty group if null) */
+function safeRemove(layout: LayoutNode, panelId: string): LayoutNode {
+  const tree = new LayoutTree(layout);
+  return tree.removePanel(panelId).root;
 }
 
 // ─── Reducer ─────────────────────────────────────────────────────────
@@ -103,468 +98,417 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
     // ── Panel lifecycle ──────────────────────────────────────────────
 
     case 'ADD_PANEL': {
-      const { panelId } = action.payload;
-      if (state.panels[panelId]) return state; // No duplicates
+      const { panelId, config, target, position } = action;
+      if (state.panels.has(panelId)) return state; // no duplicates
 
-      const panel: PanelConfig = {
-        id: panelId,
-        title: action.payload.title,
-        icon: action.payload.icon,
-        closable: action.payload.closable !== false,
-        floatable: action.payload.floatable !== false,
-        dockable: action.payload.dockable,
-        tabComponent: action.payload.tabComponent,
-        widgetType: action.payload.widgetType,
-        widgetProps: action.payload.widgetProps,
-      };
+      const panels = new Map(state.panels);
+      panels.set(panelId, config);
 
-      const targetGroupId = findFirstTabGroup(state.layout);
-      let layout = targetGroupId
-        ? insertInGroup(state.layout, targetGroupId, panelId)
-        : { type: 'tabgroup' as const, id: genId('tg'), panels: [panelId], activePanel: panelId };
+      const tree = new LayoutTree(state.layout);
+      let newTree: LayoutTree;
 
-      // Clear headerCollapsed on target group when adding a panel to it
-      if (targetGroupId) {
-        const targetGroup = findTabGroupById(state.layout, targetGroupId);
-        if (targetGroup?.headerCollapsed) {
-          layout = updateTabGroup(layout, targetGroupId, tg => ({
-            ...tg,
-            headerCollapsed: undefined,
-          }));
+      if (target) {
+        const targetGroup = tree.findGroup(target);
+        if (targetGroup) {
+          newTree = tree.insertPanel(targetGroup, panelId, position || 'center');
+        } else {
+          // target doesn't exist, fall back to first group
+          const firstId = findFirstTabGroup(state.layout);
+          if (firstId) {
+            const firstGroup = tree.findGroup(firstId)!;
+            newTree = tree.insertPanel(firstGroup, panelId, position || 'center');
+          } else {
+            newTree = new LayoutTree({ type: 'tabgroup', id: genId(), panels: [panelId], activePanel: panelId });
+          }
+        }
+      } else {
+        const firstId = findFirstTabGroup(state.layout);
+        if (firstId) {
+          const firstGroup = tree.findGroup(firstId)!;
+          newTree = tree.insertPanel(firstGroup, panelId, position || 'center');
+        } else {
+          newTree = new LayoutTree({ type: 'tabgroup', id: genId(), panels: [panelId], activePanel: panelId });
         }
       }
 
+      const placements = new Map(state.placements);
+      const groupForNew = new LayoutTree(newTree.root).groupForPanel(panelId);
+      placements.set(panelId, { type: 'docked', groupId: groupForNew?.id || '' });
+
       return {
         ...state,
-        panels: { ...state.panels, [panelId]: panel },
-        layout,
+        panels,
+        layout: newTree.root,
+        placements,
         activePaneId: panelId,
       };
     }
 
     case 'CLOSE_PANEL': {
-      const { panelId } = action.payload;
-      // Reject close if the panel belongs to a locked group
-      const srcGroupId = findTabGroupForPanel(state.layout, panelId);
-      if (srcGroupId) {
-        const src = findTabGroupById(state.layout, srcGroupId);
-        if (src?.locked) return state;
-      }
-      const layout = removePanel(state.layout, panelId) ?? safeEmptyGroup();
-      const panels = { ...state.panels };
-      delete panels[panelId];
-      const placements = removeFromPlacements(state, panelId);
+      const { panelId } = action;
+      if (!state.panels.has(panelId)) return state;
+
+      // Check if in a locked group
+      const srcGroup = new LayoutTree(state.layout).groupForPanel(panelId);
+      if (srcGroup?.locked) return state;
+
+      const layout = safeRemove(state.layout, panelId);
+      const panels = new Map(state.panels);
+      panels.delete(panelId);
+      const placements = placementsWithout(state.placements, panelId);
       const maximizedPanelId = state.maximizedPanelId === panelId ? undefined : state.maximizedPanelId;
-      const activePaneId = fallbackActive(state.activePaneId, panelId, layout, placements.floatingPanels);
+      const activePaneId = pickActive(panelId, state.activePaneId, layout, placements);
 
-      return { ...state, layout, panels, ...placements, maximizedPanelId, activePaneId };
-    }
-
-    case 'UPDATE_PANEL_CONFIG': {
-      const { panelId, updates } = action.payload;
-      if (!state.panels[panelId]) return state;
-      return {
-        ...state,
-        panels: { ...state.panels, [panelId]: { ...state.panels[panelId], ...updates } },
-      };
+      return { ...state, layout, panels, placements, maximizedPanelId, activePaneId };
     }
 
     // ── Move / Drag-drop ─────────────────────────────────────────────
 
     case 'MOVE_PANEL': {
-      const { panelId, targetTabGroupId, position } = action.payload;
-      if (!state.panels[panelId]) return state;
-      // Check no-op cases before mutating
-      const sourceGroup = findTabGroupForPanel(state.layout, panelId);
-      if (sourceGroup === targetTabGroupId && position === 'center') return state;
-      const targetGroup = findTabGroupById(state.layout, targetTabGroupId);
+      const { panelId, targetGroupId, position } = action;
+      if (!state.panels.has(panelId)) return state;
+
+      const tree = new LayoutTree(state.layout);
+      const targetGroup = tree.findGroup(targetGroupId);
       if (!targetGroup) return state;
-      if (sourceGroup === targetTabGroupId && targetGroup.panels.length === 1) return state;
-      // Reject drops onto a header-collapsed group
-      if (targetGroup.headerCollapsed && sourceGroup !== targetTabGroupId) return state;
-      // Reject drops into a locked group (external drops); intra-group reorder not handled here
-      if (targetGroup.locked && sourceGroup !== targetTabGroupId) return state;
-      // Reject dragging panels OUT of a locked source group
-      if (sourceGroup && sourceGroup !== targetTabGroupId) {
-        const src = findTabGroupById(state.layout, sourceGroup);
-        if (src?.locked) return state;
-      }
 
-      // Document host enforcement: documentOnly panels can only move to document host groups
-      const sourcePanel = state.panels[panelId];
-      if (sourcePanel?.documentOnly) {
-        const isDocHost = targetGroup.panels.some(pid => state.panels[pid]?.documentOnly) ||
-          targetTabGroupId === '__root__'; // root docking is always allowed
-        if (!isDocHost && position === 'center') {
-          return state; // Reject: not a document host group
-        }
-      }
+      const sourceGroup = tree.groupForPanel(panelId);
+      if (sourceGroup?.id === targetGroupId && position === 'center') return state;
+      if (sourceGroup?.id === targetGroupId && sourceGroup.panels.length === 1) return state;
 
-      let layout = movePanel(state.layout, panelId, targetTabGroupId, position);
-      // Clear headerCollapsed on target group whenever something is docked into/around it
-      if (targetGroup.headerCollapsed) {
-        layout = updateTabGroup(layout, targetTabGroupId, tg => ({
-          ...tg,
-          headerCollapsed: undefined,
-        }));
-      }
-      const placements = removeFromPlacements(state, panelId);
-      return { ...state, layout, ...placements, activePaneId: panelId };
+      // Reject locked target (external drops)
+      if (targetGroup.locked && sourceGroup?.id !== targetGroupId) return state;
+      // Reject dragging out of locked source
+      if (sourceGroup?.locked && sourceGroup.id !== targetGroupId) return state;
+
+      const newTree = tree.movePanel(panelId, targetGroup, position);
+
+      // Update placements: remove old, add docked
+      const placements = new Map(state.placements);
+      const newGroup = new LayoutTree(newTree.root).groupForPanel(panelId);
+      placements.set(panelId, { type: 'docked', groupId: newGroup?.id || targetGroupId });
+
+      return { ...state, layout: newTree.root, placements, activePaneId: panelId };
     }
 
     // ── Floating panels ──────────────────────────────────────────────
 
     case 'FLOAT_PANEL': {
-      const { panelId, width, height } = action.payload;
-      let { x, y } = action.payload;
-      // Reject float if the panel belongs to a locked group
-      const _srcGid = findTabGroupForPanel(state.layout, panelId);
-      if (_srcGid) {
-        const _src = findTabGroupById(state.layout, _srcGid);
-        if (_src?.locked) return state;
-      }
-      // Remember which tab group the panel came from so we can dock it back
-      const sourceTabGroupId = findTabGroupForPanel(state.layout, panelId) || undefined;
-      const layout = removePanel(state.layout, panelId) ?? safeEmptyGroup();
+      const { panelId, x, y, width, height } = action;
+      if (!state.panels.has(panelId)) return state;
 
-      // Cascade: offset each new floating window by 20px from the last
-      const existingFloating = state.floatingPanels.filter(p => p.panelId !== panelId);
-      if (existingFloating.length > 0) {
-        const last = existingFloating[existingFloating.length - 1];
-        const cascadeX = last.x + 20;
-        const cascadeY = last.y + 20;
-        // Only use cascade if the requested position matches the default
-        if (x === last.x || (Math.abs(x - last.x) < 5)) {
-          x = cascadeX;
-          y = cascadeY;
-        }
-      }
+      // Reject if in locked group
+      const srcGroup = new LayoutTree(state.layout).groupForPanel(panelId);
+      if (srcGroup?.locked) return state;
 
-      const floatingPanels = [
-        ...existingFloating,
-        { panelId, x, y, width, height, zIndex: state.nextZIndex, sourceTabGroupId },
-      ];
-      return { ...state, layout, floatingPanels, nextZIndex: state.nextZIndex + 1, activePaneId: panelId };
+      const sourceGroupId = srcGroup?.id;
+      const layout = safeRemove(state.layout, panelId);
+
+      const placements = new Map(state.placements);
+      placements.set(panelId, {
+        type: 'floating',
+        x, y, width, height,
+        zIndex: state.nextZIndex,
+        sourceGroupId,
+      });
+
+      return { ...state, layout, placements, nextZIndex: state.nextZIndex + 1, activePaneId: panelId };
     }
 
     case 'DOCK_FLOATING': {
-      const { panelId, targetTabGroupId, position } = action.payload;
-      if (state.panels[panelId]?.dockable === false) return state;
-      const floatingEntry = state.floatingPanels.find(p => p.panelId === panelId);
-      const floatingPanels = state.floatingPanels.filter(p => p.panelId !== panelId);
+      const { panelId, targetGroupId, position } = action;
+      const placement = state.placements.get(panelId);
+      if (!placement || placement.type !== 'floating') return state;
 
-      // Priority: explicit target > saved source > first available group
-      let target = (targetTabGroupId && targetTabGroupId !== 'default')
-        ? targetTabGroupId
-        : null;
+      // Check dockable
+      const panelConfig = state.panels.get(panelId);
+      if (panelConfig?.dockable === false) return state;
 
-      // Validate explicit target: reject header-collapsed, drop stale IDs.
-      // A stale target can happen when localStorage or the caller refers
-      // to a group ID that no longer exists in the layout. Without this
-      // check, insertBySplit/insertInGroup silently no-op and the panel
-      // is removed from floatingPanels without being re-inserted anywhere,
-      // leaving it orphaned in state.panels.
-      if (target) {
-        const explicitTarget = findTabGroupById(state.layout, target);
-        if (!explicitTarget) {
-          target = null; // fall through to source/first-group fallbacks
-        } else if (explicitTarget.headerCollapsed) {
-          return state;
-        }
+      const tree = new LayoutTree(state.layout);
+
+      // Fallback chain: target → sourceGroupId → firstGroup
+      let target = targetGroupId ? tree.findGroup(targetGroupId) : null;
+      if (!target && placement.sourceGroupId) {
+        target = tree.findGroup(placement.sourceGroupId);
       }
-
-      // If no explicit target, try to dock back to the original tab group
-      if (!target && floatingEntry?.sourceTabGroupId) {
-        // Verify the source group still exists in the layout
-        const sourceExists = findTabGroupById(state.layout, floatingEntry.sourceTabGroupId);
-        if (sourceExists) {
-          // Insert back into the original group as a tab (center position)
-          let layout = insertInGroup(state.layout, floatingEntry.sourceTabGroupId, panelId);
-          // Clear headerCollapsed since group now has multiple panels
-          if (sourceExists.headerCollapsed) {
-            layout = updateTabGroup(layout, floatingEntry.sourceTabGroupId, tg => ({
-              ...tg,
-              headerCollapsed: undefined,
-            }));
-          }
-          return { ...state, floatingPanels, layout, activePaneId: panelId };
-        }
-      }
-
-      // Fallback to first tab group
       if (!target) {
-        target = findFirstTabGroup(state.layout);
+        const firstId = findFirstTabGroup(state.layout);
+        target = firstId ? tree.findGroup(firstId) : null;
       }
 
-      let layout = target
-        ? (position === 'center'
-          ? insertInGroup(state.layout, target, panelId)
-          : insertBySplit(state.layout, target, panelId, position))
-        : { type: 'tabgroup' as const, id: genId('tg'), panels: [panelId], activePanel: panelId };
-
-      // Clear headerCollapsed when docking into/around a collapsed group
+      let newTree: LayoutTree;
       if (target) {
-        const targetGroup = findTabGroupById(state.layout, target);
-        if (targetGroup?.headerCollapsed) {
-          layout = updateTabGroup(layout, target, tg => ({
-            ...tg,
-            headerCollapsed: undefined,
-          }));
-        }
+        newTree = tree.insertPanel(target, panelId, position || 'center');
+      } else {
+        newTree = new LayoutTree({ type: 'tabgroup', id: genId(), panels: [panelId], activePanel: panelId });
       }
 
-      return { ...state, floatingPanels, layout, activePaneId: panelId };
+      const placements = new Map(state.placements);
+      const newGroup = new LayoutTree(newTree.root).groupForPanel(panelId);
+      placements.set(panelId, { type: 'docked', groupId: newGroup?.id || '' });
+
+      return { ...state, layout: newTree.root, placements, activePaneId: panelId };
     }
 
     case 'UPDATE_FLOATING': {
-      const { panelId, ...updates } = action.payload;
-      return {
-        ...state,
-        floatingPanels: state.floatingPanels.map(p => p.panelId === panelId ? { ...p, ...updates } : p),
-      };
-    }
+      const { panelId, ...updates } = action;
+      const placement = state.placements.get(panelId);
+      if (!placement || placement.type !== 'floating') return state;
 
-    case 'BRING_TO_FRONT': {
-      const { panelId } = action.payload;
-      return {
-        ...state,
-        floatingPanels: state.floatingPanels.map(p =>
-          p.panelId === panelId ? { ...p, zIndex: state.nextZIndex } : p,
-        ),
-        nextZIndex: state.nextZIndex + 1,
-        activePaneId: panelId,
-      };
+      const placements = new Map(state.placements);
+      placements.set(panelId, {
+        ...placement,
+        ...updates,
+        zIndex: state.nextZIndex,
+        type: 'floating', // ensure discriminator
+      });
+
+      return { ...state, placements, nextZIndex: state.nextZIndex + 1 };
     }
 
     // ── Pin / Unpin ──────────────────────────────────────────────────
 
     case 'UNPIN_PANEL': {
-      const { panelId } = action.payload;
-      const _unpinSrc = findTabGroupForPanel(state.layout, panelId);
-      if (_unpinSrc && findTabGroupById(state.layout, _unpinSrc)?.locked) return state;
+      const { panelId } = action;
+      if (!state.panels.has(panelId)) return state;
+
+      const tree = new LayoutTree(state.layout);
+      const srcGroup = tree.groupForPanel(panelId);
+      if (srcGroup?.locked) return state;
+
       const edge = detectPanelEdge(state.layout, panelId);
-      const sourceTabGroupId = findTabGroupForPanel(state.layout, panelId) || undefined;
-      const layout = removePanel(state.layout, panelId) ?? safeEmptyGroup();
-      const unpinnedPanels = [
-        ...state.unpinnedPanels.filter(p => p.panelId !== panelId),
-        { panelId, edge, size: 200, sourceTabGroupId },
-      ];
-      const activePaneId = fallbackActive(state.activePaneId, panelId, layout, state.floatingPanels);
-      return { ...state, layout, unpinnedPanels, activePaneId };
+      const sourceGroupId = srcGroup?.id;
+      const layout = safeRemove(state.layout, panelId);
+
+      const placements = new Map(state.placements);
+      placements.set(panelId, { type: 'unpinned', edge, size: 200, sourceGroupId });
+
+      const activePaneId = pickActive(panelId, state.activePaneId, layout, placements);
+      return { ...state, layout, placements, activePaneId };
     }
 
     case 'PIN_PANEL': {
-      const { panelId } = action.payload;
-      const entry = state.unpinnedPanels.find(p => p.panelId === panelId);
-      if (!entry) return state;
-      const unpinnedPanels = state.unpinnedPanels.filter(p => p.panelId !== panelId);
+      const { panelId } = action;
+      const placement = state.placements.get(panelId);
+      if (!placement || placement.type !== 'unpinned') return state;
 
-      // Remove from layout first (prevent duplicates)
-      let layout: import('../types/dock').LayoutNode = removePanel(state.layout, panelId) ?? safeEmptyGroup();
-      const edge = entry.edge || 'left';
-      const sourceId = entry.sourceTabGroupId;
+      const tree = new LayoutTree(state.layout);
+      const edge = placement.edge || 'left';
+      const sourceId = placement.sourceGroupId;
 
-      // Strategy 1: Restore to original tab group if it still exists
-      if (sourceId && findTabGroupById(layout, sourceId)) {
-        layout = insertInGroup(layout, sourceId, panelId);
-        // Clear headerCollapsed since group now has multiple panels
-        const sourceGroup = findTabGroupById(layout, sourceId);
-        if (sourceGroup?.headerCollapsed) {
-          layout = updateTabGroup(layout, sourceId, tg => ({
-            ...tg,
-            headerCollapsed: undefined,
-          }));
-        }
-      }
-      // Strategy 2: Insert at the stored root-level edge
-      else {
-        layout = insertAtEdge(layout, panelId, edge);
+      let newTree: LayoutTree;
+      // Try to restore to original group
+      if (sourceId && tree.findGroup(sourceId)) {
+        const sourceGroup = tree.findGroup(sourceId)!;
+        newTree = tree.insertPanel(sourceGroup, panelId, 'center');
+      } else {
+        // Insert at edge
+        newTree = new LayoutTree(insertAtEdge(state.layout, panelId, edge));
       }
 
-      return { ...state, unpinnedPanels, layout, activePaneId: panelId };
-    }
+      const placements = new Map(state.placements);
+      const newGroup = new LayoutTree(newTree.root).groupForPanel(panelId);
+      placements.set(panelId, { type: 'docked', groupId: newGroup?.id || '' });
 
-    case 'RESIZE_UNPINNED': {
-      const { panelId, size } = action.payload;
-      const unpinnedPanels = state.unpinnedPanels.map(p =>
-        p.panelId === panelId ? { ...p, size } : p,
-      );
-      return { ...state, unpinnedPanels };
+      return { ...state, layout: newTree.root, placements, activePaneId: panelId };
     }
 
     // ── Popout windows ───────────────────────────────────────────────
 
     case 'POPOUT_PANEL': {
-      const { panelId, windowName, x, y, width, height } = action.payload;
-      const layout = removePanel(state.layout, panelId) ?? safeEmptyGroup();
-      const floatingPanels = state.floatingPanels.filter(p => p.panelId !== panelId);
-      const popout: PopoutPanel = { panelId, windowName, x, y, width, height };
-      return {
-        ...state,
-        layout,
-        floatingPanels,
-        popoutPanels: [...(state.popoutPanels || []), popout],
-      };
+      const { panelId, windowName, x, y, width, height } = action;
+      if (!state.panels.has(panelId)) return state;
+
+      const layout = safeRemove(state.layout, panelId);
+      const placements = new Map(state.placements);
+      placements.set(panelId, { type: 'popout', windowName, x, y, width, height });
+
+      return { ...state, layout, placements };
     }
 
     case 'DOCK_POPOUT': {
-      const { panelId, targetTabGroupId, position } = action.payload;
-      const popoutPanels = (state.popoutPanels || []).filter(p => p.panelId !== panelId);
-      let target = (targetTabGroupId && targetTabGroupId !== 'default')
-        ? targetTabGroupId
-        : findFirstTabGroup(state.layout);
+      const { panelId, targetGroupId, position } = action;
+      const placement = state.placements.get(panelId);
+      if (!placement || placement.type !== 'popout') return state;
 
-      if (target && !findTabGroupById(state.layout, target)) {
-        target = findFirstTabGroup(state.layout);
+      const tree = new LayoutTree(state.layout);
+      let target = targetGroupId ? tree.findGroup(targetGroupId) : null;
+      if (!target) {
+        const firstId = findFirstTabGroup(state.layout);
+        target = firstId ? tree.findGroup(firstId) : null;
       }
 
-      const layout = target
-        ? insertBySplit(state.layout, target, panelId, position)
-        : { type: 'tabgroup' as const, id: genId('tg'), panels: [panelId], activePanel: panelId };
+      let newTree: LayoutTree;
+      if (target) {
+        newTree = tree.insertPanel(target, panelId, position || 'center');
+      } else {
+        newTree = new LayoutTree({ type: 'tabgroup', id: genId(), panels: [panelId], activePanel: panelId });
+      }
 
-      return { ...state, popoutPanels, layout, activePaneId: panelId };
-    }
+      const placements = new Map(state.placements);
+      const newGroup = new LayoutTree(newTree.root).groupForPanel(panelId);
+      placements.set(panelId, { type: 'docked', groupId: newGroup?.id || '' });
 
-    case 'UPDATE_POPOUT': {
-      const { panelId, ...updates } = action.payload;
-      return {
-        ...state,
-        popoutPanels: (state.popoutPanels || []).map(p =>
-          p.panelId === panelId ? { ...p, ...updates } : p,
-        ),
-      };
+      return { ...state, layout: newTree.root, placements, activePaneId: panelId };
     }
 
     // ── Layout operations ────────────────────────────────────────────
 
     case 'SET_ACTIVE_PANEL': {
-      const { tabGroupId, panelId } = action.payload;
-      return { ...state, layout: setActivePanel(state.layout, tabGroupId, panelId) };
+      const { groupId, panelId } = action;
+      const tree = new LayoutTree(state.layout);
+      const group = tree.findGroup(groupId);
+      if (!group || !group.panels.includes(panelId)) return state;
+      const newTree = tree.setActivePanel(groupId, panelId);
+      return { ...state, layout: newTree.root, activePaneId: panelId };
     }
-
-    case 'ACTIVATE_OVERFLOW_TAB': {
-      const { tabGroupId, panelId } = action.payload;
-      return {
-        ...state,
-        layout: reorderPanelToFront(state.layout, tabGroupId, panelId),
-        activePaneId: panelId,
-      };
-    }
-
-    case 'DOCK_TO_EDGE': {
-      const { panelId, edge } = action.payload;
-      if (!state.panels[panelId]) return state;
-      // 'center' edge doesn't make sense for root docking — treat as 'bottom'
-      const dockEdge: import('../types/dock').DockEdge = edge === 'center' ? 'bottom' : edge;
-      // Remove panel from current location (layout, floating, unpinned)
-      const afterRemove = removePanel(state.layout, panelId);
-      let floatingPanels = state.floatingPanels.filter(fp => fp.panelId !== panelId);
-      let unpinnedPanels = state.unpinnedPanels.filter(up => up.panelId !== panelId);
-      // Insert at root edge
-      let layout: import('../types/dock').LayoutNode;
-      if (afterRemove) {
-        layout = insertAtEdge(afterRemove, panelId, dockEdge);
-      } else {
-        layout = { type: 'tabgroup' as const, id: genId('tg'), panels: [panelId], activePanel: panelId };
-      }
-      return { ...state, layout, floatingPanels, unpinnedPanels, activePaneId: panelId };
-    }
-
-    case 'REORDER_TABS': {
-      const { tabGroupId, panelId, newIndex } = action.payload;
-      const group = findTabGroupById(state.layout, tabGroupId);
-      if (!group) return state;
-      const oldIndex = group.panels.indexOf(panelId);
-      if (oldIndex === -1 || oldIndex === newIndex) return state;
-      if (newIndex < 0 || newIndex >= group.panels.length) return state;
-      // Reorder: remove from old position, insert at new position
-      const newPanels = [...group.panels];
-      newPanels.splice(oldIndex, 1);
-      newPanels.splice(newIndex, 0, panelId);
-      const layout = updateTabGroup(state.layout, tabGroupId, (tg) => ({ ...tg, panels: newPanels }));
-      return { ...state, layout };
-    }
-
-    case 'RESIZE_SPLIT': {
-      const { splitId, sizes } = action.payload;
-      return { ...state, layout: updateSizes(state.layout, splitId, sizes) };
-    }
-
-    case 'SET_HEADER_POSITION': {
-      const { tabGroupId, headerPosition } = action.payload;
-      return {
-        ...state,
-        layout: updateTabGroup(state.layout, tabGroupId, tg => ({ ...tg, headerPosition })),
-      };
-    }
-
-    case 'SET_HEADER_COLLAPSED': {
-      const { tabGroupId, collapsed } = action.payload;
-      return {
-        ...state,
-        layout: updateTabGroup(state.layout, tabGroupId, tg => ({
-          ...tg,
-          headerCollapsed: collapsed || undefined,
-        })),
-      };
-    }
-
-    case 'SET_TAB_GROUP_LOCKED': {
-      const { tabGroupId, locked } = action.payload;
-      return {
-        ...state,
-        layout: updateTabGroup(state.layout, tabGroupId, tg => ({
-          ...tg,
-          locked: locked || undefined,
-        })),
-      };
-    }
-
-    // ── Maximize / Restore ───────────────────────────────────────────
 
     case 'MAXIMIZE_PANEL': {
-      const { panelId } = action.payload;
-      if (!state.panels[panelId]) return state;
-      const _maxSrc = findTabGroupForPanel(state.layout, panelId);
-      if (_maxSrc && findTabGroupById(state.layout, _maxSrc)?.locked) return state;
+      const { panelId } = action;
+      if (!state.panels.has(panelId)) return state;
       return { ...state, maximizedPanelId: panelId, activePaneId: panelId };
     }
 
-    case 'RESTORE_PANEL':
+    case 'RESTORE_PANEL': {
       return { ...state, maximizedPanelId: undefined };
-
-    // ── Active pane / Navigation ─────────────────────────────────────
-
-    case 'SET_ACTIVE_PANE': {
-      const { panelId } = action.payload;
-      if (!state.panels[panelId]) return state;
-      return { ...state, activePaneId: panelId };
     }
 
-    case 'NAVIGATE': {
-      const { direction } = action.payload;
-      if (!state.activePaneId) return state;
+    case 'RESIZE_SPLIT': {
+      const { splitId, sizes } = action;
+      const tree = new LayoutTree(state.layout);
+      const split = tree.findSplit(splitId);
+      if (!split) return state;
+      const newTree = tree.resizeSplit(split, sizes);
+      return { ...state, layout: newTree.root };
+    }
 
-      const nextId = direction === 'next'
-        ? findNextPanel(state.layout, state.activePaneId)
-        : findPreviousPanel(state.layout, state.activePaneId);
+    case 'REORDER_TABS': {
+      const { groupId, panels } = action;
+      const tree = new LayoutTree(state.layout);
+      const group = tree.findGroup(groupId);
+      if (!group) return state;
+      const newTree = tree.reorderTabs(group, panels);
+      return { ...state, layout: newTree.root };
+    }
 
-      if (!nextId || nextId === state.activePaneId) return state;
+    case 'DOCK_TO_EDGE': {
+      const { panelId, edge } = action;
+      if (!state.panels.has(panelId)) return state;
 
-      const tabGroupId = findTabGroupForPanel(state.layout, nextId);
-      if (!tabGroupId) return state;
+      // Remove from current location
+      const layout = safeRemove(state.layout, panelId);
+      const newLayout = insertAtEdge(layout, panelId, edge);
 
-      return {
-        ...state,
-        layout: setActivePanel(state.layout, tabGroupId, nextId),
-        activePaneId: nextId,
-      };
+      const placements = new Map(state.placements);
+      const newGroup = new LayoutTree(newLayout).groupForPanel(panelId);
+      placements.set(panelId, { type: 'docked', groupId: newGroup?.id || '' });
+
+      return { ...state, layout: newLayout, placements, activePaneId: panelId };
     }
 
     // ── State management ─────────────────────────────────────────────
 
-    case 'LOAD_STATE':
-      return validateState(action.payload);
+    case 'LOAD_STATE': {
+      return action.state;
+    }
+
+    // ── Backward-compat actions ──────────────────────────────────────
+
+    case 'SET_ACTIVE_PANE': {
+      const { panelId } = action;
+      if (!state.panels.has(panelId)) return state;
+
+      // Find the group containing this panel and set it active there too
+      const groupId = findTabGroupForPanel(state.layout, panelId);
+      if (groupId) {
+        const tree = new LayoutTree(state.layout);
+        const newTree = tree.setActivePanel(groupId, panelId);
+        return { ...state, layout: newTree.root, activePaneId: panelId };
+      }
+      return { ...state, activePaneId: panelId };
+    }
+
+    case 'UPDATE_PANEL_CONFIG': {
+      const { panelId, config } = action;
+      if (!state.panels.has(panelId)) return state;
+      const panels = new Map(state.panels);
+      panels.set(panelId, { ...panels.get(panelId)!, ...config });
+      return { ...state, panels };
+    }
+
+    case 'SET_HEADER_POSITION': {
+      const { groupId, position } = action;
+      const tree = new LayoutTree(state.layout);
+      if (!tree.findGroup(groupId)) return state;
+      const newTree = tree.updateGroup(groupId, { headerPosition: position });
+      return { ...state, layout: newTree.root };
+    }
+
+    case 'SET_HEADER_COLLAPSED': {
+      const { groupId, collapsed } = action;
+      const tree = new LayoutTree(state.layout);
+      if (!tree.findGroup(groupId)) return state;
+      const newTree = tree.updateGroup(groupId, { headerCollapsed: collapsed || undefined });
+      return { ...state, layout: newTree.root };
+    }
+
+    case 'SET_TAB_GROUP_LOCKED': {
+      const { groupId, locked } = action;
+      const tree = new LayoutTree(state.layout);
+      if (!tree.findGroup(groupId)) return state;
+      const newTree = tree.updateGroup(groupId, { locked: locked || undefined });
+      return { ...state, layout: newTree.root };
+    }
+
+    case 'NAVIGATE': {
+      const { direction } = action;
+      if (!state.activePaneId) return state;
+      const nextId = direction === 'next'
+        ? findNextPanel(state.layout, state.activePaneId)
+        : findPreviousPanel(state.layout, state.activePaneId);
+      if (!nextId || nextId === state.activePaneId) return state;
+      const groupId = findTabGroupForPanel(state.layout, nextId);
+      if (!groupId) return state;
+      const tree = new LayoutTree(state.layout);
+      const newTree = tree.setActivePanel(groupId, nextId);
+      return { ...state, layout: newTree.root, activePaneId: nextId };
+    }
+
+    case 'ACTIVATE_OVERFLOW_TAB': {
+      const { groupId, panelId } = action;
+      const tree = new LayoutTree(state.layout);
+      const group = tree.findGroup(groupId);
+      if (!group || !group.panels.includes(panelId)) return state;
+      const newTree = tree.setActivePanel(groupId, panelId);
+      return { ...state, layout: newTree.root, activePaneId: panelId };
+    }
+
+    case 'BRING_TO_FRONT': {
+      const { panelId } = action;
+      const placement = state.placements.get(panelId);
+      if (!placement || placement.type !== 'floating') return state;
+      const placements = new Map(state.placements);
+      placements.set(panelId, { ...placement, zIndex: state.nextZIndex });
+      return { ...state, placements, nextZIndex: state.nextZIndex + 1, activePaneId: panelId };
+    }
+
+    case 'RESIZE_UNPINNED': {
+      const { panelId, size } = action;
+      const placement = state.placements.get(panelId);
+      if (!placement || placement.type !== 'unpinned') return state;
+      const placements = new Map(state.placements);
+      placements.set(panelId, { ...placement, size });
+      return { ...state, placements };
+    }
+
+    case 'UPDATE_POPOUT': {
+      const { panelId, ...updates } = action;
+      const placement = state.placements.get(panelId);
+      if (!placement || placement.type !== 'popout') return state;
+      const placements = new Map(state.placements);
+      placements.set(panelId, { ...placement, ...updates, type: 'popout' });
+      return { ...state, placements };
+    }
 
     default:
       return state;
@@ -573,43 +517,69 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
 
 // ─── State validation ─────────────────────────────────────────────────
 
-export function validateState(state: DockManagerState): DockManagerState {
-  const s = { ...state };
+export function validateState(state: DockManagerState): Array<{ kind: string; detail: string }> {
+  const errors: Array<{ kind: string; detail: string }> = [];
 
-  if (!Array.isArray(s.floatingPanels)) s.floatingPanels = [];
-  if (!Array.isArray(s.unpinnedPanels)) s.unpinnedPanels = [];
-  if (!Array.isArray(s.popoutPanels)) s.popoutPanels = [];
-  if (typeof s.nextZIndex !== 'number' || s.nextZIndex < 1000) s.nextZIndex = 1000;
-  if (!s.panels || typeof s.panels !== 'object') s.panels = {};
-
-  if (!s.layout) {
-    s.layout = { type: 'tabgroup', id: genId('tg'), panels: [], activePanel: '' };
+  if (!state.layout) {
+    errors.push({ kind: 'missing_layout', detail: 'State has no layout tree' });
   }
 
-  syncIdCounter(s.layout);
-
-  if (s.activePaneId && !s.panels[s.activePaneId]) {
-    const allPanels = collectAllPanelsOrdered(s.layout);
-    s.activePaneId = allPanels[0] || '';
+  if (!(state.panels instanceof Map)) {
+    errors.push({ kind: 'invalid_panels', detail: 'panels must be a Map' });
   }
 
-  if (s.maximizedPanelId && !s.panels[s.maximizedPanelId]) {
-    s.maximizedPanelId = undefined;
+  if (!(state.placements instanceof Map)) {
+    errors.push({ kind: 'invalid_placements', detail: 'placements must be a Map' });
   }
 
-  return s;
+  if (typeof state.nextZIndex !== 'number' || state.nextZIndex < 0) {
+    errors.push({ kind: 'invalid_zindex', detail: `nextZIndex is ${state.nextZIndex}` });
+  }
+
+  // Check for orphan panels (in panels but not in placements)
+  if (state.panels instanceof Map && state.placements instanceof Map) {
+    for (const panelId of state.panels.keys()) {
+      if (!state.placements.has(panelId)) {
+        errors.push({ kind: 'orphan_panel', detail: `Panel "${panelId}" has no placement` });
+      }
+    }
+
+    // Check for stale placements (in placements but not in panels)
+    for (const panelId of state.placements.keys()) {
+      if (!state.panels.has(panelId)) {
+        errors.push({ kind: 'stale_placement', detail: `Placement for "${panelId}" has no panel config` });
+      }
+    }
+  }
+
+  // Check docked placements reference valid groups
+  if (state.layout && state.placements instanceof Map) {
+    for (const [panelId, placement] of state.placements) {
+      if (placement.type === 'docked') {
+        const inLayout = findTabGroupForPanel(state.layout, panelId);
+        if (!inLayout) {
+          errors.push({ kind: 'docked_not_in_layout', detail: `Panel "${panelId}" is docked but not in layout tree` });
+        }
+      }
+    }
+  }
+
+  // Check maximizedPanelId references a valid panel
+  if (state.maximizedPanelId && state.panels instanceof Map && !state.panels.has(state.maximizedPanelId)) {
+    errors.push({ kind: 'invalid_maximized', detail: `maximizedPanelId "${state.maximizedPanelId}" not in panels` });
+  }
+
+  return errors;
 }
 
 // ─── Default state factory ───────────────────────────────────────────
 
 export function createDefaultState(): DockManagerState {
   return {
-    layout: { type: 'tabgroup', id: genId('tg'), panels: [], activePanel: '' },
-    panels: {},
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
-    nextZIndex: 1000,
+    layout: { type: 'tabgroup', id: genId(), panels: [], activePanel: '' },
+    panels: new Map(),
+    placements: new Map(),
     activePaneId: '',
+    nextZIndex: 1,
   };
 }
