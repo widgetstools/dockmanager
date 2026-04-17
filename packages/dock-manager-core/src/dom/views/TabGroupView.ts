@@ -40,8 +40,8 @@ export class TabGroupView {
   readonly element: HTMLDivElement;
 
   private node: TabGroupNode;
-  private panels: Record<string, PanelConfig>;
-  private previousPanels: Record<string, PanelConfig> | null = null;
+  private panels: Map<string, PanelConfig>;
+  private previousPanels: Map<string, PanelConfig> | null = null;
   private activePaneId: string;
   private maximizedPanelId: string | undefined;
   private callbacks: TabGroupViewCallbacks;
@@ -86,7 +86,7 @@ export class TabGroupView {
 
   constructor(
     node: TabGroupNode,
-    panels: Record<string, PanelConfig>,
+    panels: Map<string, PanelConfig>,
     activePaneId: string,
     maximizedPanelId: string | undefined,
     callbacks: TabGroupViewCallbacks,
@@ -106,7 +106,7 @@ export class TabGroupView {
     this.element.setAttribute('data-dock-target', node.id);
     if (node.locked) this.element.setAttribute('data-locked-group', 'true');
     this.element.setAttribute('role', 'region');
-    this.element.setAttribute('aria-label', panels[node.activePanel]?.title || 'Panel');
+    this.element.setAttribute('aria-label', panels.get(node.activePanel)?.title || 'Panel');
     this.element.tabIndex = -1;
 
     this.applyHasTabsAttr();
@@ -176,7 +176,7 @@ export class TabGroupView {
 
   update(
     node: TabGroupNode,
-    panels: Record<string, PanelConfig>,
+    panels: Map<string, PanelConfig>,
     activePaneId: string,
     maximizedPanelId: string | undefined,
   ): void {
@@ -191,7 +191,7 @@ export class TabGroupView {
 
     // Update data attributes
     this.element.setAttribute('data-panel-id', node.activePanel);
-    this.element.setAttribute('aria-label', panels[node.activePanel]?.title || 'Panel');
+    this.element.setAttribute('aria-label', panels.get(node.activePanel)?.title || 'Panel');
     this.applyHasTabsAttr();
     if (node.locked) this.element.setAttribute('data-locked-group', 'true');
     else this.element.removeAttribute('data-locked-group');
@@ -211,8 +211,8 @@ export class TabGroupView {
     const prevPanels = this.previousPanels;
     this.previousPanels = panels;
     const configChanged = !panelsChanged && node.panels.some(id => {
-      const prev = prevPanels?.[id];
-      const curr = panels[id];
+      const prev = prevPanels?.get(id);
+      const curr = panels.get(id);
       if (!prev || !curr) return false;
       return prev.title !== curr.title || prev.icon !== curr.icon || prev.badge !== curr.badge;
     });
@@ -506,7 +506,7 @@ export class TabGroupView {
     this.tabContainerEl.style.cssText = 'display:flex;align-items:flex-end;align-self:stretch;gap:0;overflow-x:hidden;overflow-y:visible;flex:1;';
 
     for (const panelId of this.node.panels) {
-      const panel = this.panels[panelId];
+      const panel = this.panels.get(panelId);
       if (!panel) continue;
 
       const isSelected = panelId === this.node.activePanel;
@@ -586,7 +586,7 @@ export class TabGroupView {
 
   private buildSingleTitle(): void {
     const panelId = this.node.activePanel;
-    const activePanel = this.panels[panelId];
+    const activePanel = this.panels.get(panelId);
     this.titleEl = document.createElement('span');
     this.titleEl.className = 'dock-panel-title';
     this.titleEl.setAttribute('data-tab-id', panelId);
@@ -688,7 +688,7 @@ export class TabGroupView {
     if (this.node.panels.length > 1) {
       addItem(this.resourceStrings.closeOthers, () => {
         for (const pid of this.node.panels) {
-          if (pid !== panelId && this.panels[pid]?.closable !== false) {
+          if (pid !== panelId && this.panels.get(pid)?.closable !== false) {
             this.callbacks.onClosePanel(pid);
           }
         }
@@ -697,7 +697,7 @@ export class TabGroupView {
       // Close All
       addItem(this.resourceStrings.closeAll, () => {
         for (const pid of this.node.panels) {
-          if (this.panels[pid]?.closable !== false) {
+          if (this.panels.get(pid)?.closable !== false) {
             this.callbacks.onClosePanel(pid);
           }
         }
@@ -709,7 +709,7 @@ export class TabGroupView {
         addItem('Close to the Right', () => {
           for (let i = panelIndex + 1; i < this.node.panels.length; i++) {
             const pid = this.node.panels[i];
-            if (this.panels[pid]?.closable !== false) {
+            if (this.panels.get(pid)?.closable !== false) {
               this.callbacks.onClosePanel(pid);
             }
           }
@@ -789,7 +789,7 @@ export class TabGroupView {
 
   private buildActionButtons(): void {
     this.actionButtonsEl.innerHTML = '';
-    const activePanel = this.panels[this.node.activePanel];
+    const activePanel = this.panels.get(this.node.activePanel);
     const isMaximized = this.maximizedPanelId === this.node.activePanel;
     const allowMaximize = activePanel?.allowMaximize !== false;
     const allowPinning = activePanel?.allowPinning !== false;
@@ -866,7 +866,7 @@ export class TabGroupView {
 
     const activeId = this.node.activePanel;
     this.previousActiveId = activeId;
-    if (!activeId || !this.panels[activeId]) {
+    if (!activeId || !this.panels.get(activeId)) {
       // Empty group: render host-provided watermark if any, else fallback
       // placeholder. The watermark slot is cleared on the next content build.
       if (this.callbacks.createWatermark) {
@@ -935,17 +935,17 @@ export class TabGroupView {
 
   private updateTitleElement(): void {
     if (!this.titleEl) return;
-    const activePanel = this.panels[this.node.activePanel];
+    const activePanel = this.panels.get(this.node.activePanel);
     this.titleEl.textContent = activePanel?.title || 'Panel';
     this.titleEl.setAttribute('data-tab-id', this.node.activePanel);
   }
 
   /** Re-invoke createTab for tabs whose panel config changed (title/icon/badge) */
-  private updateCustomTabs(prevPanels: Record<string, PanelConfig> | null): void {
+  private updateCustomTabs(prevPanels: Map<string, PanelConfig> | null): void {
     if (!this.tabContainerEl || !this.callbacks.createTab) return;
     for (const panelId of this.node.panels) {
-      const prev = prevPanels?.[panelId];
-      const curr = this.panels[panelId];
+      const prev = prevPanels?.get(panelId);
+      const curr = this.panels.get(panelId);
       if (!prev || !curr) continue;
       if (prev.title === curr.title && prev.icon === curr.icon && prev.badge === curr.badge) continue;
       // This tab's config changed — dispose old content and re-render
@@ -969,7 +969,7 @@ export class TabGroupView {
     tabs.forEach(tabEl => {
       const panelId = tabEl.getAttribute('data-tab-id');
       if (!panelId) return;
-      const panel = this.panels[panelId];
+      const panel = this.panels.get(panelId);
       if (!panel) return;
 
       // Update label text
@@ -1038,7 +1038,7 @@ export class TabGroupView {
     menu.setAttribute('role', 'menu');
 
     for (const panelId of this.node.panels) {
-      const panel = this.panels[panelId];
+      const panel = this.panels.get(panelId);
       if (!panel) continue;
 
       const item = document.createElement('div');

@@ -75,7 +75,7 @@ export function checkLayoutInvariants(state: DockManagerState): InvariantViolati
       });
     }
     for (const pid of g.panels) {
-      if (!state.panels[pid]) {
+      if (!state.panels.has(pid)) {
         out.push({
           kind: 'UNKNOWN_PANEL',
           detail: `group ${g.id} contains unregistered panel ${pid}`,
@@ -86,10 +86,15 @@ export function checkLayoutInvariants(state: DockManagerState): InvariantViolati
 
   // 3. Every panel in state.panels must be placed somewhere
   const layoutIds = collectLayoutPanelIds(state.layout);
-  const floatIds = new Set(state.floatingPanels.map(p => p.panelId));
-  const unpinIds = new Set(state.unpinnedPanels.map(p => p.panelId));
-  const popoutIds = new Set((state.popoutPanels ?? []).map(p => p.panelId));
-  for (const id of Object.keys(state.panels)) {
+  const floatIds = new Set<string>();
+  const unpinIds = new Set<string>();
+  const popoutIds = new Set<string>();
+  for (const [panelId, placement] of state.placements) {
+    if (placement.type === 'floating') floatIds.add(panelId);
+    else if (placement.type === 'unpinned') unpinIds.add(panelId);
+    else if (placement.type === 'popout') popoutIds.add(panelId);
+  }
+  for (const id of state.panels.keys()) {
     if (
       !layoutIds.has(id) &&
       !floatIds.has(id) &&
@@ -159,14 +164,12 @@ export function findLostPanels(
   after: DockManagerState,
 ): string[] {
   const lost: string[] = [];
-  for (const id of Object.keys(before.panels)) {
-    if (!after.panels[id]) continue; // removed by CLOSE_PANEL — not lost
+  for (const id of before.panels.keys()) {
+    if (!after.panels.has(id)) continue; // removed by CLOSE_PANEL — not lost
     // Still registered in state.panels, but vanished from every placement
     const inLayout = collectLayoutPanelIds(after.layout).has(id);
-    const inFloat = after.floatingPanels.some(p => p.panelId === id);
-    const inUnpin = after.unpinnedPanels.some(p => p.panelId === id);
-    const inPopout = (after.popoutPanels ?? []).some(p => p.panelId === id);
-    if (!inLayout && !inFloat && !inUnpin && !inPopout) {
+    const inPlacement = after.placements.has(id);
+    if (!inLayout && !inPlacement) {
       lost.push(id);
     }
   }

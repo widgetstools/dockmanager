@@ -65,11 +65,11 @@ export class PanelFinder {
     const renderList = (filter: string) => {
       list.innerHTML = '';
       const state = this.options.getState();
-      const panelIds = Object.keys(state.panels);
+      const panelIds = Array.from(state.panels.keys());
       const lowerFilter = filter.toLowerCase();
 
       for (const pid of panelIds) {
-        const panel = state.panels[pid];
+        const panel = state.panels.get(pid);
         if (!panel) continue;
         if (lowerFilter && !panel.title.toLowerCase().includes(lowerFilter)) continue;
 
@@ -80,8 +80,9 @@ export class PanelFinder {
         item.setAttribute('data-panel-id', pid);
 
         // Indicate placement
-        const isFloating = state.floatingPanels.some(fp => fp.panelId === pid);
-        const isUnpinned = state.unpinnedPanels.some(up => up.panelId === pid);
+        const placement = state.placements.get(pid);
+        const isFloating = placement?.type === 'floating';
+        const isUnpinned = placement?.type === 'unpinned';
         if (isFloating || isUnpinned) {
           const badge = document.createElement('span');
           badge.style.cssText = 'margin-left:8px;font-size:10px;opacity:0.6;';

@@ -129,8 +129,8 @@ export class KeyboardManager {
     if (mod && !e.shiftKey && !e.altKey && e.key === 'w') {
       e.preventDefault();
       const panelId = state.activePaneId;
-      if (panelId && state.panels[panelId]?.closable !== false && !state.panels[panelId]?.disabled) {
-        this.options.dispatch({ type: 'CLOSE_PANEL', payload: { panelId } });
+      if (panelId && state.panels.get(panelId)?.closable !== false && !state.panels.get(panelId)?.disabled) {
+        this.options.dispatch({ type: 'CLOSE_PANEL', panelId });
       }
       return;
     }
@@ -142,9 +142,9 @@ export class KeyboardManager {
       if (result) {
         this.options.dispatch({
           type: 'SET_ACTIVE_PANEL',
-          payload: { tabGroupId: result.tabGroupId, panelId: result.panelId },
+          groupId: result.tabGroupId, panelId: result.panelId,
         });
-        this.options.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId: result.panelId } });
+        this.options.dispatch({ type: 'SET_ACTIVE_PANE', panelId: result.panelId });
       }
       return;
     }
@@ -156,9 +156,9 @@ export class KeyboardManager {
       if (result) {
         this.options.dispatch({
           type: 'SET_ACTIVE_PANEL',
-          payload: { tabGroupId: result.tabGroupId, panelId: result.panelId },
+          groupId: result.tabGroupId, panelId: result.panelId,
         });
-        this.options.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId: result.panelId } });
+        this.options.dispatch({ type: 'SET_ACTIVE_PANE', panelId: result.panelId });
       }
       return;
     }
@@ -166,14 +166,14 @@ export class KeyboardManager {
     // ── Alt+F6  →  Next pane (across groups) ─────────────────────
     if (!mod && !e.shiftKey && e.altKey && e.key === 'F6') {
       e.preventDefault();
-      this.options.dispatch({ type: 'NAVIGATE', payload: { direction: 'next' } });
+      this.options.dispatch({ type: 'NAVIGATE', direction: 'next' });
       return;
     }
 
     // ── Alt+Shift+F6  →  Previous pane (across groups) ──────────
     if (!mod && e.shiftKey && e.altKey && e.key === 'F6') {
       e.preventDefault();
-      this.options.dispatch({ type: 'NAVIGATE', payload: { direction: 'previous' } });
+      this.options.dispatch({ type: 'NAVIGATE', direction: 'previous' });
       return;
     }
 
@@ -186,11 +186,11 @@ export class KeyboardManager {
         ArrowDown: 'bottom',
       };
       const edge = edgeMap[e.key];
-      if (edge && state.activePaneId && !state.panels[state.activePaneId]?.disabled) {
+      if (edge && state.activePaneId && !state.panels.get(state.activePaneId)?.disabled) {
         e.preventDefault();
         this.options.dispatch({
           type: 'DOCK_TO_EDGE',
-          payload: { panelId: state.activePaneId, edge },
+          panelId: state.activePaneId, edge,
         });
         return;
       }
@@ -202,24 +202,20 @@ export class KeyboardManager {
         e.preventDefault();
         this.options.dispatch({
           type: 'RESTORE_PANEL',
-          payload: { panelId: state.maximizedPanelId },
+          panelId: state.maximizedPanelId,
         });
         return;
       }
       // Close floating panel if the active pane is floating
-      const isFloating = state.floatingPanels.some(
-        (fp) => fp.panelId === state.activePaneId,
-      );
+      const isFloating = state.placements.get(state.activePaneId)?.type === 'floating';
       if (isFloating && state.activePaneId) {
         e.preventDefault();
         // Dock the floating panel back rather than destroying it
         this.options.dispatch({
           type: 'DOCK_FLOATING',
-          payload: {
-            panelId: state.activePaneId,
-            targetTabGroupId: 'default',
-            position: 'center',
-          },
+          panelId: state.activePaneId,
+          targetGroupId: 'default',
+          position: 'center',
         });
         return;
       }
@@ -231,12 +227,12 @@ export class KeyboardManager {
       if (state.maximizedPanelId) {
         this.options.dispatch({
           type: 'RESTORE_PANEL',
-          payload: { panelId: state.maximizedPanelId },
+          panelId: state.maximizedPanelId,
         });
-      } else if (state.activePaneId && !state.panels[state.activePaneId]?.disabled) {
+      } else if (state.activePaneId && !state.panels.get(state.activePaneId)?.disabled) {
         this.options.dispatch({
           type: 'MAXIMIZE_PANEL',
-          payload: { panelId: state.activePaneId },
+          panelId: state.activePaneId,
         });
       }
       return;

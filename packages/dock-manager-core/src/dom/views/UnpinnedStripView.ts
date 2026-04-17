@@ -24,7 +24,7 @@ export class UnpinnedStripView {
 
   private edge: DockEdge;
   private unpinnedPanels: UnpinnedPanel[];
-  private panels: Record<string, PanelConfig>;
+  private panels: Map<string, PanelConfig>;
   private callbacks: UnpinnedStripViewCallbacks;
 
   // DOM references
@@ -48,7 +48,7 @@ export class UnpinnedStripView {
   constructor(
     edge: DockEdge,
     unpinnedPanels: UnpinnedPanel[],
-    panels: Record<string, PanelConfig>,
+    panels: Map<string, PanelConfig>,
     callbacks: UnpinnedStripViewCallbacks,
   ) {
     this.edge = edge;
@@ -82,7 +82,7 @@ export class UnpinnedStripView {
 
   // ── Public API ──────────────────────────────────────────────────
 
-  update(unpinnedPanels: UnpinnedPanel[], panels: Record<string, PanelConfig>): void {
+  update(unpinnedPanels: UnpinnedPanel[], panels: Map<string, PanelConfig>): void {
     this.unpinnedPanels = unpinnedPanels;
     this.panels = panels;
 
@@ -162,7 +162,7 @@ export class UnpinnedStripView {
     const isVertical = this.edge === 'left' || this.edge === 'right';
 
     for (const unpinned of this.unpinnedPanels) {
-      const panel = this.panels[unpinned.panelId];
+      const panel = this.panels.get(unpinned.panelId);
       if (!panel) continue;
 
       const tabBtn = document.createElement('button');
@@ -192,7 +192,7 @@ export class UnpinnedStripView {
     this.expandedPanelId = panelId;
 
     const unpinned = this.unpinnedPanels.find((p) => p.panelId === panelId);
-    const panel = this.panels[panelId];
+    const panel = this.panels.get(panelId);
     if (!unpinned || !panel) return;
 
     const isVertical = this.edge === 'left' || this.edge === 'right';

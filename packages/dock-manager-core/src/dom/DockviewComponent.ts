@@ -8,10 +8,11 @@ import type {
   DockPosition,
   PreventableDockEvent,
   DockEdge,
+  Placement,
 } from '../types/dock';
 import { createPreventableEvent } from '../types/dock';
 import { dockReducer, type DockAction } from '../reducer/dockReducer';
-import { findFirstTabGroup, findTabGroupForPanel, syncIdCounter } from '../layout/LayoutTree';
+import { findFirstTabGroup, findTabGroupForPanel, findTabGroupById, syncIdCounter } from '../layout/LayoutTree';
 import { checkLayoutInvariants, findLostPanels } from '../layout/layoutInvariants';
 import { PanelApi } from '../api/PanelApi';
 import { DockviewApi } from '../api/DockviewApi';
@@ -130,7 +131,7 @@ export interface DockviewComponentOptions {
  *     return { dispose: () => { container.textContent = ''; } };
  *   },
  * });
- * dock.dispatch({ type: 'ADD_PANEL', payload: { panelId: 'p1', title: 'Panel 1' } });
+ * dock.dispatch({ type: 'ADD_PANEL', panelId: 'p1', config: { id: 'p1', title: 'Panel 1' } });
  * // Later:
  * dock.dispose();
  * ```
@@ -268,41 +269,46 @@ export class DockviewComponent {
       containerElement: this.rootEl,
       onDrop: (sourceId, targetId, position) => {
         // Check if the source is a floating panel
-        const isFloating = this.state.floatingPanels.some(fp => fp.panelId === sourceId);
+        const isFloating = this.state.placements.get(sourceId)?.type === 'floating';
 
         debugLog('DOCK_DROP', { sourceId, targetId, position, isFloating });
 
         if (targetId === '__root__') {
           if (isFloating) {
             // Dock floating panel, then move to edge
-            this.dispatch({ type: 'DOCK_FLOATING', payload: { panelId: sourceId, targetTabGroupId: findFirstTabGroup(this.state.layout) || '', position: 'center' } });
-            this.dispatch({ type: 'DOCK_TO_EDGE', payload: { panelId: sourceId, edge: position } });
+            this.dispatch({ type: 'DOCK_FLOATING', panelId: sourceId, targetGroupId: findFirstTabGroup(this.state.layout) || '', position: 'center' });
+            this.dispatch({ type: 'DOCK_TO_EDGE', panelId: sourceId, edge: position as DockEdge });
           } else {
-            this.dispatch({ type: 'DOCK_TO_EDGE', payload: { panelId: sourceId, edge: position } });
+            this.dispatch({ type: 'DOCK_TO_EDGE', panelId: sourceId, edge: position as DockEdge });
           }
         } else if (isFloating) {
           // Dock floating panel to the specific target
-          this.dispatch({ type: 'DOCK_FLOATING', payload: { panelId: sourceId, targetTabGroupId: targetId, position } });
+          this.dispatch({ type: 'DOCK_FLOATING', panelId: sourceId, targetGroupId: targetId, position });
         } else {
-          this.dispatch({ type: 'MOVE_PANEL', payload: { panelId: sourceId, targetTabGroupId: targetId, position } });
+          this.dispatch({ type: 'MOVE_PANEL', panelId: sourceId, targetGroupId: targetId, position });
         }
       },
       onFloat: (sourceId, x, y) => {
         debugLog('DOCK_DROP_FLOAT', { sourceId, x, y });
         this.dispatch({
           type: 'FLOAT_PANEL',
-          payload: { panelId: sourceId, x, y, width: 400, height: 300 },
+          panelId: sourceId, x, y, width: 400, height: 300,
         });
       },
       onSelect: (sourceId) => {
         const tabGroupId = findTabGroupForPanel(this.state.layout, sourceId);
         if (tabGroupId) {
-          this.dispatch({ type: 'SET_ACTIVE_PANEL', payload: { tabGroupId, panelId: sourceId } });
+          this.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: tabGroupId, panelId: sourceId });
         }
-        this.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId: sourceId } });
+        this.dispatch({ type: 'SET_ACTIVE_PANE', panelId: sourceId });
       },
       onReorderTab: (tabGroupId, panelId, newIndex) => {
-        this.dispatch({ type: 'REORDER_TABS', payload: { tabGroupId, panelId, newIndex } });
+        const group = findTabGroupById(this.state.layout, tabGroupId);
+        if (group) {
+          const panels = group.panels.filter(p => p !== panelId);
+          panels.splice(newIndex, 0, panelId);
+          this.dispatch({ type: 'REORDER_TABS', groupId: tabGroupId, panels });
+        }
       },
       onWillDrop: this.options.onWillDrop
         ? (event, sourceId, targetId, position) => {
@@ -317,25 +323,25 @@ export class DockviewComponent {
       containerElement: this.rootEl,
       onFocusChanged: (panelId) => {
         if (panelId) {
-          this.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId } });
+          this.dispatch({ type: 'SET_ACTIVE_PANE', panelId });
         }
       },
       onNavigate: (direction) => {
-        this.dispatch({ type: 'NAVIGATE', payload: { direction } });
+        this.dispatch({ type: 'NAVIGATE', direction });
       },
       onCloseActivePanel: () => {
         const activePanelId = this.state.activePaneId;
-        if (activePanelId && this.state.panels[activePanelId]?.closable !== false) {
+        if (activePanelId && this.state.panels.get(activePanelId)?.closable !== false) {
           if (this.options.onWillClose) {
             const event = createPreventableEvent('willClose', activePanelId);
             this.options.onWillClose(event, activePanelId);
             if (event.defaultPrevented) return;
           }
-          this.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: activePanelId } });
+          this.dispatch({ type: 'CLOSE_PANEL', panelId: activePanelId });
         }
       },
       onNavigateTabGroup: (direction) => {
-        this.dispatch({ type: 'NAVIGATE', payload: { direction } });
+        this.dispatch({ type: 'NAVIGATE', direction });
       },
     });
 
@@ -357,9 +363,9 @@ export class DockviewComponent {
         // Activate the panel wherever it is
         const tabGroupId = findTabGroupForPanel(this.state.layout, panelId);
         if (tabGroupId) {
-          this.dispatch({ type: 'SET_ACTIVE_PANEL', payload: { tabGroupId, panelId } });
+          this.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: tabGroupId, panelId });
         }
-        this.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId } });
+        this.dispatch({ type: 'SET_ACTIVE_PANE', panelId });
       },
     });
 
@@ -442,12 +448,12 @@ export class DockviewComponent {
             violations,
             prevLayout: prevState.layout,
             nextLayout: this.state.layout,
-            prevFloating: prevState.floatingPanels.map(p => p.panelId),
-            nextFloating: this.state.floatingPanels.map(p => p.panelId),
-            prevUnpinned: prevState.unpinnedPanels.map(p => p.panelId),
-            nextUnpinned: this.state.unpinnedPanels.map(p => p.panelId),
-            prevPopout: (prevState.popoutPanels ?? []).map(p => p.panelId),
-            nextPopout: (this.state.popoutPanels ?? []).map(p => p.panelId),
+            prevFloating: [...prevState.placements.entries()].filter(([, p]) => p.type === 'floating').map(([id]) => id),
+            nextFloating: [...this.state.placements.entries()].filter(([, p]) => p.type === 'floating').map(([id]) => id),
+            prevUnpinned: [...prevState.placements.entries()].filter(([, p]) => p.type === 'unpinned').map(([id]) => id),
+            nextUnpinned: [...this.state.placements.entries()].filter(([, p]) => p.type === 'unpinned').map(([id]) => id),
+            prevPopout: [...prevState.placements.entries()].filter(([, p]) => p.type === 'popout').map(([id]) => id),
+            nextPopout: [...this.state.placements.entries()].filter(([, p]) => p.type === 'popout').map(([id]) => id),
           });
         }
       }
@@ -585,9 +591,9 @@ export class DockviewComponent {
     let api = this.panelApis.get(panelId);
     if (!api) {
       api = new PanelApi(panelId);
-      api._setConfigAccessor(() => this.state.panels[panelId]);
+      api._setConfigAccessor(() => this.state.panels.get(panelId));
       api._setUpdateHandler((id, updates) => {
-        this.dispatch({ type: 'UPDATE_PANEL_CONFIG', payload: { panelId: id, updates } });
+        this.dispatch({ type: 'UPDATE_PANEL_CONFIG', panelId: id, config: updates });
       });
       api._setAttentionHandler((id, attention) => {
         // Find the tab element and toggle attention CSS class
@@ -611,7 +617,7 @@ export class DockviewComponent {
     if (node.type === 'tabgroup') {
       let maxMin = 0;
       for (const pid of node.panels) {
-        const p = this.state.panels[pid];
+        const p = this.state.panels.get(pid);
         if (!p) continue;
         const m = axis === 'horizontal'
           ? (p.minimumWidth ?? p.minimumSize ?? 0)
@@ -636,7 +642,7 @@ export class DockviewComponent {
     if (node.type === 'tabgroup') {
       let minMax = Infinity;
       for (const pid of node.panels) {
-        const p = this.state.panels[pid];
+        const p = this.state.panels.get(pid);
         if (!p) continue;
         const m = axis === 'horizontal' ? p.maximumWidth : p.maximumHeight;
         if (m !== undefined && m < minMax) minMax = m;
@@ -666,8 +672,11 @@ export class DockviewComponent {
     };
     walk(this.state.layout);
     // Floating + popout panels count as visible.
-    for (const fp of this.state.floatingPanels) visible.add(fp.panelId);
-    for (const pp of (this.state.popoutPanels || [])) visible.add(pp.panelId);
+    for (const [panelId, placement] of this.state.placements) {
+      if (placement.type === 'floating' || placement.type === 'popout') {
+        visible.add(panelId);
+      }
+    }
 
     const activeId = this.state.activePaneId;
     for (const [panelId, api] of this.panelApis) {
@@ -681,7 +690,7 @@ export class DockviewComponent {
    */
   private cleanupPanelApis(): void {
     for (const [panelId, api] of this.panelApis) {
-      if (!this.state.panels[panelId]) {
+      if (!this.state.panels.has(panelId)) {
         api._dispose();
         this.panelApis.delete(panelId);
         this.destroyContent(panelId);
@@ -690,7 +699,7 @@ export class DockviewComponent {
     // Clean up any orphaned render containers (e.g. content created for a
     // panel that was removed without going through cleanupPanelApis above).
     for (const panelId of Array.from(this.renderManager.panelIds())) {
-      if (!this.state.panels[panelId]) {
+      if (!this.state.panels.has(panelId)) {
         this.destroyContent(panelId);
       }
     }
@@ -817,15 +826,15 @@ export class DockviewComponent {
           this.options.onWillClose(event, panelId);
           if (event.defaultPrevented) return;
         }
-        this.dispatch({ type: 'CLOSE_PANEL', payload: { panelId } });
+        this.dispatch({ type: 'CLOSE_PANEL', panelId });
         break;
       }
       case 'maximize': {
-        this.dispatch({ type: 'MAXIMIZE_PANEL', payload: { panelId } });
+        this.dispatch({ type: 'MAXIMIZE_PANEL', panelId });
         break;
       }
       case 'restore': {
-        this.dispatch({ type: 'RESTORE_PANEL', payload: { panelId } });
+        this.dispatch({ type: 'RESTORE_PANEL', panelId });
         break;
       }
       case 'float': {
@@ -842,27 +851,27 @@ export class DockviewComponent {
         fy -= rootRect.top;
         this.dispatch({
           type: 'FLOAT_PANEL',
-          payload: { panelId, x: fx, y: fy, width: fw, height: fh },
+          panelId, x: fx, y: fy, width: fw, height: fh,
         });
         break;
       }
       case 'unpin': {
-        this.dispatch({ type: 'UNPIN_PANEL', payload: { panelId } });
+        this.dispatch({ type: 'UNPIN_PANEL', panelId });
         break;
       }
       case 'dock-back': {
-        const panelConfig = this.state.panels[panelId];
+        const panelConfig = this.state.panels.get(panelId);
         if (panelConfig?.dockable === false) break;
-        // Pass 'default' as targetTabGroupId so the reducer uses the saved
-        // sourceTabGroupId from when the panel was originally floated
+        // Pass 'default' as targetGroupId so the reducer uses the saved
+        // sourceGroupId from when the panel was originally floated
         this.dispatch({
           type: 'DOCK_FLOATING',
-          payload: { panelId, targetTabGroupId: 'default', position: 'center' },
+          panelId, targetGroupId: 'default', position: 'center',
         });
         break;
       }
       case 'pin': {
-        this.dispatch({ type: 'PIN_PANEL', payload: { panelId } });
+        this.dispatch({ type: 'PIN_PANEL', panelId });
         break;
       }
     }
@@ -955,40 +964,40 @@ export class DockviewComponent {
           this.options.onWillClose(event, panelId);
           if (event.defaultPrevented) return;
         }
-        this.dispatch({ type: 'CLOSE_PANEL', payload: { panelId } });
+        this.dispatch({ type: 'CLOSE_PANEL', panelId });
       },
       onFloatPanel: (panelId) => {
         this.dispatch({
           type: 'FLOAT_PANEL',
-          payload: { panelId, x: 200, y: 200, width: 400, height: 300 },
+          panelId, x: 200, y: 200, width: 400, height: 300,
         });
       },
       onMaximizePanel: (panelId) => {
-        this.dispatch({ type: 'MAXIMIZE_PANEL', payload: { panelId } });
+        this.dispatch({ type: 'MAXIMIZE_PANEL', panelId });
       },
       onRestorePanel: (panelId) => {
-        this.dispatch({ type: 'RESTORE_PANEL', payload: { panelId } });
+        this.dispatch({ type: 'RESTORE_PANEL', panelId });
       },
       onUnpinPanel: (panelId) => {
-        this.dispatch({ type: 'UNPIN_PANEL', payload: { panelId } });
+        this.dispatch({ type: 'UNPIN_PANEL', panelId });
       },
       onSetActivePanel: (tabGroupId, panelId) => {
-        this.dispatch({ type: 'SET_ACTIVE_PANEL', payload: { tabGroupId, panelId } });
+        this.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: tabGroupId, panelId });
       },
       onSetActivePane: (panelId) => {
-        this.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId } });
+        this.dispatch({ type: 'SET_ACTIVE_PANE', panelId });
       },
       onSaveLayout: this.options.onSaveLayout
         ? () => this.options.onSaveLayout!(this.state)
         : undefined,
       onSetHeaderCollapsed: (tabGroupId, collapsed) => {
-        this.dispatch({ type: 'SET_HEADER_COLLAPSED', payload: { tabGroupId, collapsed } });
+        this.dispatch({ type: 'SET_HEADER_COLLAPSED', groupId: tabGroupId, collapsed });
       },
       onToggleMaximize: (panelId) => {
         if (this.state.maximizedPanelId === panelId) {
-          this.dispatch({ type: 'RESTORE_PANEL', payload: { panelId } });
+          this.dispatch({ type: 'RESTORE_PANEL', panelId });
         } else {
-          this.dispatch({ type: 'MAXIMIZE_PANEL', payload: { panelId } });
+          this.dispatch({ type: 'MAXIMIZE_PANEL', panelId });
         }
       },
       createContent: (panelId, container) => this.getOrCreateContent(panelId, container),
@@ -1061,7 +1070,7 @@ export class DockviewComponent {
 
     const view = new SplitView(node, {
       onResizeSplit: (splitId, sizes) => {
-        this.dispatch({ type: 'RESIZE_SPLIT', payload: { splitId, sizes } });
+        this.dispatch({ type: 'RESIZE_SPLIT', splitId, sizes });
       },
       createChildView: (childNode) => this.renderLayoutNode(childNode),
       getChildMinSize: (childNode, axis) => this.computeNodeMinSize(childNode, axis),
@@ -1074,16 +1083,22 @@ export class DockviewComponent {
   // ── Floating panels ─────────────────────────────────────────────
 
   private renderFloatingPanels(): void {
-    const currentIds = new Set(this.state.floatingPanels.map((fp) => fp.panelId));
+    // Collect current floating panel IDs from placements
+    const floatingPlacements = new Map<string, Placement & { type: 'floating' }>();
+    for (const [panelId, placement] of this.state.placements) {
+      if (placement.type === 'floating') {
+        floatingPlacements.set(panelId, placement as Placement & { type: 'floating' });
+      }
+    }
 
     // Remove stale floating views (panel was docked back or closed)
     for (const [id, view] of this.floatingViews) {
-      if (!currentIds.has(id)) {
+      if (!floatingPlacements.has(id)) {
         view.dispose();
         this.floatingViews.delete(id);
 
         // Reparent content back into the TabGroupView
-        if (this.state.panels[id]) {
+        if (this.state.panels.has(id)) {
           for (const [, tgView] of this.tabGroupViews) {
             if (tgView.containsPanel(id)) {
               tgView.invalidateContentSlot(id);
@@ -1095,11 +1110,21 @@ export class DockviewComponent {
     }
 
     // Create or update floating views
-    for (const fp of this.state.floatingPanels) {
-      const panel = this.state.panels[fp.panelId];
+    for (const [fpId, placement] of floatingPlacements) {
+      const panel = this.state.panels.get(fpId);
       if (!panel) continue;
 
-      const existing = this.floatingViews.get(fp.panelId);
+      // Build a FloatingPanel-compatible object from the placement
+      const fp: FloatingPanel = {
+        panelId: fpId,
+        x: placement.x,
+        y: placement.y,
+        width: placement.width,
+        height: placement.height,
+        zIndex: placement.zIndex,
+      };
+
+      const existing = this.floatingViews.get(fpId);
       if (existing) {
         existing.update(fp, panel, this.state.activePaneId);
       } else {
@@ -1107,18 +1132,18 @@ export class DockviewComponent {
           onUpdateFloating: (panelId, updates) => {
             this.dispatch({
               type: 'UPDATE_FLOATING',
-              payload: { panelId, ...updates },
+              panelId, ...updates,
             });
           },
           onBringToFront: (panelId) => {
-            this.dispatch({ type: 'BRING_TO_FRONT', payload: { panelId } });
+            this.dispatch({ type: 'BRING_TO_FRONT', panelId });
           },
           onDockBack: (panelId) => {
             const targetId = findFirstTabGroup(this.state.layout);
             if (targetId) {
               this.dispatch({
                 type: 'DOCK_FLOATING',
-                payload: { panelId, targetTabGroupId: targetId, position: 'center' },
+                panelId, targetGroupId: targetId, position: 'center',
               });
             }
           },
@@ -1128,15 +1153,15 @@ export class DockviewComponent {
               this.options.onWillClose(event, panelId);
               if (event.defaultPrevented) return;
             }
-            this.dispatch({ type: 'CLOSE_PANEL', payload: { panelId } });
+            this.dispatch({ type: 'CLOSE_PANEL', panelId });
           },
           onSetActivePane: (panelId) => {
-            this.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId } });
+            this.dispatch({ type: 'SET_ACTIVE_PANE', panelId });
           },
           onDockToTarget: (panelId, targetId, position) => {
             this.dispatch({
               type: 'DOCK_FLOATING',
-              payload: { panelId, targetTabGroupId: targetId, position },
+              panelId, targetGroupId: targetId, position,
             });
           },
           getDragManager: () => this.dragManager,
@@ -1144,7 +1169,7 @@ export class DockviewComponent {
         };
 
         const view = new FloatingWindowView(fp, panel, this.state.activePaneId, callbacks);
-        this.floatingViews.set(fp.panelId, view);
+        this.floatingViews.set(fpId, view);
         this.rootEl.appendChild(view.element);
       }
     }
@@ -1155,8 +1180,16 @@ export class DockviewComponent {
   private renderUnpinnedStrips(): void {
     const edges: DockEdge[] = ['left', 'right', 'top', 'bottom'];
 
+    // Collect unpinned panels from placements
+    const unpinnedPanels: import('../types/dock').UnpinnedPanel[] = [];
+    for (const [panelId, placement] of this.state.placements) {
+      if (placement.type === 'unpinned') {
+        unpinnedPanels.push({ panelId, edge: placement.edge, size: placement.size });
+      }
+    }
+
     for (const edge of edges) {
-      const edgePanels = this.state.unpinnedPanels.filter((p) => p.edge === edge);
+      const edgePanels = unpinnedPanels.filter((p) => p.edge === edge);
       const container =
         edge === 'left'
           ? this.leftStripContainer
@@ -1185,7 +1218,7 @@ export class DockviewComponent {
       } else {
         const view = new UnpinnedStripView(edge, edgePanels, this.state.panels, {
           onPinPanel: (panelId) => {
-            this.dispatch({ type: 'PIN_PANEL', payload: { panelId } });
+            this.dispatch({ type: 'PIN_PANEL', panelId });
           },
           onClosePanel: (panelId) => {
             if (this.options.onWillClose) {
@@ -1193,10 +1226,10 @@ export class DockviewComponent {
               this.options.onWillClose(event, panelId);
               if (event.defaultPrevented) return;
             }
-            this.dispatch({ type: 'CLOSE_PANEL', payload: { panelId } });
+            this.dispatch({ type: 'CLOSE_PANEL', panelId });
           },
           onResizeUnpinned: (panelId, size) => {
-            this.dispatch({ type: 'RESIZE_UNPINNED', payload: { panelId, size } });
+            this.dispatch({ type: 'RESIZE_UNPINNED', panelId, size });
           },
           createContent: (panelId, cont) => this.getOrCreateContent(panelId, cont),
         });
@@ -1210,7 +1243,7 @@ export class DockviewComponent {
 
   private renderMaximizeOverlay(): void {
     if (this.state.maximizedPanelId) {
-      const panel = this.state.panels[this.state.maximizedPanelId];
+      const panel = this.state.panels.get(this.state.maximizedPanelId);
       if (panel) {
         // If overlay exists but for a different panel, dispose and recreate
         if (this.maximizeOverlay && this.maximizeOverlayPanelId !== this.state.maximizedPanelId) {
@@ -1224,7 +1257,7 @@ export class DockviewComponent {
             panel,
             {
               onRestorePanel: (panelId) => {
-                this.dispatch({ type: 'RESTORE_PANEL', payload: { panelId } });
+                this.dispatch({ type: 'RESTORE_PANEL', panelId });
               },
               createContent: (panelId, container) => this.getOrCreateContent(panelId, container),
             },

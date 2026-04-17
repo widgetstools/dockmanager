@@ -82,7 +82,7 @@ export class ContextMenuManager {
     if (!panelId) return;
 
     const state = this.options.getState();
-    const panel = state.panels[panelId];
+    const panel = state.panels.get(panelId);
     if (!panel) return;
 
     // Don't show context menu for disabled panels
@@ -102,7 +102,7 @@ export class ContextMenuManager {
     entries.push({
       label: this.resourceStrings.close,
       action: () => {
-        this.options.dispatch({ type: 'CLOSE_PANEL', payload: { panelId } });
+        this.options.dispatch({ type: 'CLOSE_PANEL', panelId });
       },
       disabled: panel.closable === false,
     });
@@ -118,8 +118,8 @@ export class ContextMenuManager {
             const currentGroup = this.findTabGroup(currentState.layout, tabGroupId);
             if (currentGroup) {
               for (const pid of currentGroup.panels) {
-                if (pid !== panelId && currentState.panels[pid]?.closable !== false) {
-                  this.options.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: pid } });
+                if (pid !== panelId && currentState.panels.get(pid)?.closable !== false) {
+                  this.options.dispatch({ type: 'CLOSE_PANEL', panelId: pid });
                 }
               }
             }
@@ -135,8 +135,8 @@ export class ContextMenuManager {
             const currentGroup = this.findTabGroup(currentState.layout, tabGroupId);
             if (currentGroup) {
               for (const pid of currentGroup.panels) {
-                if (currentState.panels[pid]?.closable !== false) {
-                  this.options.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: pid } });
+                if (currentState.panels.get(pid)?.closable !== false) {
+                  this.options.dispatch({ type: 'CLOSE_PANEL', panelId: pid });
                 }
               }
             }
@@ -156,8 +156,8 @@ export class ContextMenuManager {
                 const idx = currentGroup.panels.indexOf(panelId);
                 for (let i = idx + 1; i < currentGroup.panels.length; i++) {
                   const pid = currentGroup.panels[i];
-                  if (currentState.panels[pid]?.closable !== false) {
-                    this.options.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: pid } });
+                  if (currentState.panels.get(pid)?.closable !== false) {
+                    this.options.dispatch({ type: 'CLOSE_PANEL', panelId: pid });
                   }
                 }
               }
@@ -177,7 +177,7 @@ export class ContextMenuManager {
       action: () => {
         this.options.dispatch({
           type: 'FLOAT_PANEL',
-          payload: { panelId, x: 200, y: 200, width: 400, height: 300 },
+          panelId, x: 200, y: 200, width: 400, height: 300,
         });
       },
       disabled: panel.floatable === false,
@@ -185,12 +185,12 @@ export class ContextMenuManager {
 
     // Pin/Unpin — check if panel is unpinned
     if (panel.allowPinning !== false) {
-      const isUnpinned = state.unpinnedPanels.some((up) => up.panelId === panelId);
+      const isUnpinned = state.placements.get(panelId)?.type === 'unpinned';
       if (isUnpinned) {
         entries.push({
           label: this.resourceStrings.pin,
           action: () => {
-            this.options.dispatch({ type: 'PIN_PANEL', payload: { panelId } });
+            this.options.dispatch({ type: 'PIN_PANEL', panelId });
           },
           disabled: false,
         });
@@ -198,7 +198,7 @@ export class ContextMenuManager {
         entries.push({
           label: this.resourceStrings.unpin,
           action: () => {
-            this.options.dispatch({ type: 'UNPIN_PANEL', payload: { panelId } });
+            this.options.dispatch({ type: 'UNPIN_PANEL', panelId });
           },
           disabled: false,
         });
@@ -212,7 +212,7 @@ export class ContextMenuManager {
     entries.push({
       label: this.resourceStrings.maximize,
       action: () => {
-        this.options.dispatch({ type: 'MAXIMIZE_PANEL', payload: { panelId } });
+        this.options.dispatch({ type: 'MAXIMIZE_PANEL', panelId });
       },
       disabled: false,
     });

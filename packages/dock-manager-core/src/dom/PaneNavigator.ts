@@ -114,12 +114,15 @@ export class PaneNavigator {
     const state = this.options.getState();
     const allPanelIds = collectAllPanelsOrdered(state.layout);
     // Also include floating panels
-    const floatingIds = state.floatingPanels.map(fp => fp.panelId);
+    const floatingIds: string[] = [];
+    for (const [panelId, placement] of state.placements) {
+      if (placement.type === 'floating') floatingIds.push(panelId);
+    }
     const allIds = [...allPanelIds, ...floatingIds];
 
     this.items = [];
     for (const pid of allIds) {
-      const panel = state.panels[pid];
+      const panel = state.panels.get(pid);
       if (!panel) continue;
       this.items.push({
         panelId: pid,
