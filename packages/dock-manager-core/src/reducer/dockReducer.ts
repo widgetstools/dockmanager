@@ -173,15 +173,17 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
 
     case 'MOVE_PANEL': {
       const { panelId, targetTabGroupId, position } = action.payload;
+      if (!state.panels[panelId]) return state;
       // Check no-op cases before mutating
       const sourceGroup = findTabGroupForPanel(state.layout, panelId);
       if (sourceGroup === targetTabGroupId && position === 'center') return state;
       const targetGroup = findTabGroupById(state.layout, targetTabGroupId);
-      if (sourceGroup === targetTabGroupId && targetGroup && targetGroup.panels.length === 1) return state;
+      if (!targetGroup) return state;
+      if (sourceGroup === targetTabGroupId && targetGroup.panels.length === 1) return state;
       // Reject drops onto a header-collapsed group
-      if (targetGroup?.headerCollapsed && sourceGroup !== targetTabGroupId) return state;
+      if (targetGroup.headerCollapsed && sourceGroup !== targetTabGroupId) return state;
       // Reject drops into a locked group (external drops); intra-group reorder not handled here
-      if (targetGroup?.locked && sourceGroup !== targetTabGroupId) return state;
+      if (targetGroup.locked && sourceGroup !== targetTabGroupId) return state;
       // Reject dragging panels OUT of a locked source group
       if (sourceGroup && sourceGroup !== targetTabGroupId) {
         const src = findTabGroupById(state.layout, sourceGroup);
@@ -190,7 +192,7 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
 
       // Document host enforcement: documentOnly panels can only move to document host groups
       const sourcePanel = state.panels[panelId];
-      if (sourcePanel?.documentOnly && targetGroup) {
+      if (sourcePanel?.documentOnly) {
         const isDocHost = targetGroup.panels.some(pid => state.panels[pid]?.documentOnly) ||
           targetTabGroupId === '__root__'; // root docking is always allowed
         if (!isDocHost && position === 'center') {
@@ -200,7 +202,7 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
 
       let layout = movePanel(state.layout, panelId, targetTabGroupId, position);
       // Clear headerCollapsed on target group whenever something is docked into/around it
-      if (targetGroup?.headerCollapsed) {
+      if (targetGroup.headerCollapsed) {
         layout = updateTabGroup(layout, targetTabGroupId, tg => ({
           ...tg,
           headerCollapsed: undefined,
@@ -354,12 +356,13 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
     case 'PIN_PANEL': {
       const { panelId } = action.payload;
       const entry = state.unpinnedPanels.find(p => p.panelId === panelId);
+      if (!entry) return state;
       const unpinnedPanels = state.unpinnedPanels.filter(p => p.panelId !== panelId);
 
       // Remove from layout first (prevent duplicates)
       let layout: import('../types/dock').LayoutNode = removePanel(state.layout, panelId) ?? safeEmptyGroup();
-      const edge = entry?.edge || 'left';
-      const sourceId = entry?.sourceTabGroupId;
+      const edge = entry.edge || 'left';
+      const sourceId = entry.sourceTabGroupId;
 
       // Strategy 1: Restore to original tab group if it still exists
       if (sourceId && findTabGroupById(layout, sourceId)) {
@@ -407,9 +410,13 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
     case 'DOCK_POPOUT': {
       const { panelId, targetTabGroupId, position } = action.payload;
       const popoutPanels = (state.popoutPanels || []).filter(p => p.panelId !== panelId);
-      const target = (targetTabGroupId && targetTabGroupId !== 'default')
+      let target = (targetTabGroupId && targetTabGroupId !== 'default')
         ? targetTabGroupId
         : findFirstTabGroup(state.layout);
+
+      if (target && !findTabGroupById(state.layout, target)) {
+        target = findFirstTabGroup(state.layout);
+      }
 
       const layout = target
         ? insertBySplit(state.layout, target, panelId, position)
@@ -446,6 +453,7 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
 
     case 'DOCK_TO_EDGE': {
       const { panelId, edge } = action.payload;
+      if (!state.panels[panelId]) return state;
       // 'center' edge doesn't make sense for root docking — treat as 'bottom'
       const dockEdge: import('../types/dock').DockEdge = edge === 'center' ? 'bottom' : edge;
       // Remove panel from current location (layout, floating, unpinned)
@@ -468,6 +476,7 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       if (!group) return state;
       const oldIndex = group.panels.indexOf(panelId);
       if (oldIndex === -1 || oldIndex === newIndex) return state;
+      if (newIndex < 0 || newIndex >= group.panels.length) return state;
       // Reorder: remove from old position, insert at new position
       const newPanels = [...group.panels];
       newPanels.splice(oldIndex, 1);

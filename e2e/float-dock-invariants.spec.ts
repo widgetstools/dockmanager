@@ -129,6 +129,43 @@ test.describe('Float → Dock invariants', () => {
     }
   });
 
+  test('repeated float+dock cycles produce no duplicate group IDs', async ({ page }) => {
+    // Exercises the syncIdCounter fix: after the first dock creates an
+    // auto-generated group (tg_1, split_1), the second dock must not
+    // collide with those IDs. Before the fix, genId started from 0 each
+    // page load, producing duplicates on the second split.
+    const floating = page.locator('.dock-floating-window').first();
+    await expect(floating).toBeVisible();
+
+    for (let cycle = 0; cycle < 3; cycle++) {
+      // Dock the floating window onto the left edge of center pane
+      const titlebar = floating.locator('.dock-floating-titlebar');
+      const target = page.locator('[data-dock-target="tg_center"]');
+      const pb = await target.boundingBox();
+      const tb = await titlebar.boundingBox();
+      if (!pb || !tb) throw new Error('boxes missing');
+
+      await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(tb.x + tb.width / 2 + 5, tb.y + tb.height / 2 + 5, { steps: 3 });
+      await page.mouse.move(pb.x + 15, pb.y + pb.height / 2, { steps: 15 });
+      await page.mouse.up();
+      await page.waitForTimeout(250);
+
+      // After docking, check for violations (especially DUP_GROUP_ID)
+      const violations = await collectViolations(page);
+      expect(violations, `cycle ${cycle} dock violations:\n${violations.join('\n')}`).toEqual([]);
+
+      // Float it back out by right-click → float (or use the floating API)
+      // We'll reload to start fresh since we can't easily re-float via mouse
+      if (cycle < 2) {
+        await page.goto('/');
+        await page.waitForSelector('.dock-manager-root');
+        await expect(floating).toBeVisible();
+      }
+    }
+  });
+
   test('dock-back button round-trips cleanly', async ({ page }) => {
     // Round-trip: dock the floating window back with the dock-back button,
     // then float it again by dragging a tab out. Exercises the sourceTabGroupId

@@ -407,3 +407,120 @@ describe('syncIdCounter prevents duplicate IDs on restored layouts', () => {
     expect(parseInt(newId.split('_')[1], 10)).toBeGreaterThan(6);
   });
 });
+
+// ── Defensive coding: edge-case guards ──────────────────────────────
+
+describe('defensive guards prevent silent panel loss', () => {
+  function makeState(): DockManagerState {
+    return tradingTerminalTradeLayout();
+  }
+
+  describe('DOCK_POPOUT with stale target', () => {
+    it('falls back to first group when targetTabGroupId no longer exists', () => {
+      let state = makeState();
+      state = dockReducer(state, {
+        type: 'POPOUT_PANEL',
+        payload: { panelId: 'chart', windowName: 'w1', x: 0, y: 0, width: 400, height: 300 },
+      });
+      expect(state.popoutPanels?.some(p => p.panelId === 'chart')).toBe(true);
+
+      const result = dockReducer(state, {
+        type: 'DOCK_POPOUT',
+        payload: { panelId: 'chart', targetTabGroupId: 'nonexistent_99', position: 'left' },
+      });
+      expectNoViolations(result, 'DOCK_POPOUT onto stale target');
+      expect(findTabGroupForPanel(result.layout, 'chart')).not.toBeNull();
+      expect(result.popoutPanels?.some(p => p.panelId === 'chart')).toBe(false);
+    });
+  });
+
+  describe('MOVE_PANEL with invalid inputs', () => {
+    it('returns state unchanged when target group does not exist', () => {
+      const state = makeState();
+      const result = dockReducer(state, {
+        type: 'MOVE_PANEL',
+        payload: { panelId: 'chart', targetTabGroupId: 'nonexistent_99', position: 'left' },
+      });
+      expect(result).toBe(state);
+    });
+
+    it('returns state unchanged when panel does not exist', () => {
+      const state = makeState();
+      const result = dockReducer(state, {
+        type: 'MOVE_PANEL',
+        payload: { panelId: 'ghost_panel', targetTabGroupId: 'tg-chart', position: 'center' },
+      });
+      expect(result).toBe(state);
+    });
+  });
+
+  describe('PIN_PANEL when not in unpinnedPanels', () => {
+    it('returns state unchanged if panel is not in the unpinned list', () => {
+      const state = makeState();
+      const result = dockReducer(state, {
+        type: 'PIN_PANEL',
+        payload: { panelId: 'chart' },
+      });
+      expect(result).toBe(state);
+    });
+  });
+
+  describe('REORDER_TABS bounds check', () => {
+    it('returns state unchanged when newIndex is out of bounds', () => {
+      const state = makeState();
+      const result = dockReducer(state, {
+        type: 'REORDER_TABS',
+        payload: { tabGroupId: 'tg-blotter', panelId: 'bondBlotter', newIndex: 999 },
+      });
+      expect(result).toBe(state);
+    });
+
+    it('returns state unchanged when newIndex is negative', () => {
+      const state = makeState();
+      const result = dockReducer(state, {
+        type: 'REORDER_TABS',
+        payload: { tabGroupId: 'tg-blotter', panelId: 'bondBlotter', newIndex: -1 },
+      });
+      expect(result).toBe(state);
+    });
+  });
+
+  describe('DOCK_TO_EDGE with nonexistent panel', () => {
+    it('returns state unchanged when panelId is not registered', () => {
+      const state = makeState();
+      const result = dockReducer(state, {
+        type: 'DOCK_TO_EDGE',
+        payload: { panelId: 'ghost_panel', edge: 'left' },
+      });
+      expect(result).toBe(state);
+    });
+  });
+
+  describe('DOCK_POPOUT chain replay keeps invariants', () => {
+    it('popout + dock-back at every position maintains invariants', () => {
+      const positions: DockPosition[] = ['left', 'right', 'top', 'bottom', 'center'];
+      for (const panelId of ['bondBlotter', 'chart', 'orderBook', 'blotter']) {
+        for (const position of positions) {
+          resetIdCounter();
+          let state = makeState();
+          state = dockReducer(state, {
+            type: 'POPOUT_PANEL',
+            payload: { panelId, windowName: `w_${panelId}`, x: 0, y: 0, width: 400, height: 300 },
+          });
+          expectNoViolations(state, `POPOUT(${panelId})`);
+
+          const groups = findAllTabGroups(state.layout);
+          const target = groups[0]?.id;
+          if (!target) continue;
+
+          state = dockReducer(state, {
+            type: 'DOCK_POPOUT',
+            payload: { panelId, targetTabGroupId: target, position },
+          });
+          expectNoViolations(state, `DOCK_POPOUT(${panelId}, ${target}, ${position})`);
+          expect(findTabGroupForPanel(state.layout, panelId)).not.toBeNull();
+        }
+      }
+    });
+  });
+});
