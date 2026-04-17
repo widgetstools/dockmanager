@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
+  LayoutTree,
   removePanel,
   insertInGroup,
   insertBySplit,
@@ -10,13 +11,15 @@ import {
   findTabGroupById,
   findAllTabGroups,
   collectLayoutPanelIds,
+  collectAllPanelsOrdered,
   countPanels,
   detectPanelEdge,
   findTabGroupByEdge,
   setActivePanel,
   updateSizes,
   resetIdCounter,
-  collectAllPanelsOrdered,
+  genId,
+  isPanelPlaced,
   findNextPanel,
   findPreviousPanel,
 } from '../layout/LayoutTree';
@@ -50,372 +53,486 @@ function createIDELayout(): SplitNode {
 
 beforeEach(() => resetIdCounter());
 
-// ─── removePanel ────────────────────────────────────────────────────
+// ─── LayoutTree class ──────────────────────────────────────────────
 
-describe('removePanel', () => {
-  it('removes a panel from a tab group', () => {
-    const layout = tg('tg1', ['a', 'b', 'c'], 'a');
-    const result = removePanel(layout, 'b');
-    expect(result.type).toBe('tabgroup');
-    expect((result as TabGroupNode).panels).toEqual(['a', 'c']);
+describe('LayoutTree class', () => {
+  describe('lookups', () => {
+    it('findGroup finds a tab group by ID', () => {
+      const tree = new LayoutTree(createIDELayout());
+      const group = tree.findGroup('tg_center');
+      expect(group).not.toBeNull();
+      expect(group!.panels).toEqual(['doc1', 'doc2', 'doc3']);
+    });
+
+    it('findGroup returns null for unknown ID', () => {
+      const tree = new LayoutTree(tg('tg1', ['a']));
+      expect(tree.findGroup('nonexistent')).toBeNull();
+    });
+
+    it('findSplit finds a split by ID', () => {
+      const tree = new LayoutTree(createIDELayout());
+      const s = tree.findSplit('center_v');
+      expect(s).not.toBeNull();
+      expect(s!.direction).toBe('vertical');
+    });
+
+    it('findSplit returns null for unknown ID', () => {
+      const tree = new LayoutTree(tg('tg1', ['a']));
+      expect(tree.findSplit('nonexistent')).toBeNull();
+    });
+
+    it('groupForPanel finds the group containing a panel', () => {
+      const tree = new LayoutTree(createIDELayout());
+      const group = tree.groupForPanel('doc2');
+      expect(group).not.toBeNull();
+      expect(group!.id).toBe('tg_center');
+    });
+
+    it('groupForPanel returns null for unknown panel', () => {
+      const tree = new LayoutTree(tg('tg1', ['a']));
+      expect(tree.groupForPanel('nonexistent')).toBeNull();
+    });
+
+    it('allGroups returns all tab groups in DFS order', () => {
+      const tree = new LayoutTree(createIDELayout());
+      const groups = tree.allGroups();
+      expect(groups.map(g => g.id)).toEqual(['tg_left', 'tg_center', 'tg_bottom', 'tg_right']);
+    });
+
+    it('allPanelIds returns all panel IDs in DFS order', () => {
+      const tree = new LayoutTree(createIDELayout());
+      const ids = tree.allPanelIds();
+      expect(ids).toEqual(['explorer', 'search', 'doc1', 'doc2', 'doc3', 'terminal', 'problems', 'outline']);
+    });
   });
 
-  it('updates activePanel when active is removed', () => {
-    const layout = tg('tg1', ['a', 'b'], 'a');
-    const result = removePanel(layout, 'a') as TabGroupNode;
-    expect(result.activePanel).toBe('b');
+  describe('insertPanel', () => {
+    it('center adds panel to group', () => {
+      const root = tg('tg1', ['a', 'b']);
+      const tree = new LayoutTree(root);
+      const target = tree.findGroup('tg1')!;
+      const newTree = tree.insertPanel(target, 'c', 'center');
+      const group = newTree.findGroup('tg1')!;
+      expect(group.panels).toEqual(['a', 'b', 'c']);
+      expect(group.activePanel).toBe('c');
+    });
+
+    it('edge position creates a split', () => {
+      const root = tg('tg1', ['a']);
+      const tree = new LayoutTree(root);
+      const target = tree.findGroup('tg1')!;
+      const newTree = tree.insertPanel(target, 'b', 'right');
+      expect(newTree.root.type).toBe('split');
+      const s = newTree.root as SplitNode;
+      expect(s.direction).toBe('horizontal');
+      expect(s.children.length).toBe(2);
+    });
+
+    it('insertion is immutable — original tree unchanged', () => {
+      const root = tg('tg1', ['a']);
+      const tree = new LayoutTree(root);
+      const target = tree.findGroup('tg1')!;
+      tree.insertPanel(target, 'b', 'center');
+      // Original tree should be unchanged
+      expect((tree.root as TabGroupNode).panels).toEqual(['a']);
+    });
   });
 
-  it('returns null when last panel is removed', () => {
-    const layout = tg('tg1', ['a']);
-    const result = removePanel(layout, 'a');
-    expect(result).toBeNull();
+  describe('removePanel', () => {
+    it('removes panel from multi-panel group', () => {
+      const tree = new LayoutTree(tg('tg1', ['a', 'b', 'c']));
+      const newTree = tree.removePanel('b');
+      const group = newTree.findGroup('tg1')!;
+      expect(group.panels).toEqual(['a', 'c']);
+    });
+
+    it('last panel removal promotes sibling', () => {
+      const root = split('s1', 'horizontal', [
+        tg('tg1', ['a']),
+        tg('tg2', ['b', 'c']),
+      ]);
+      const tree = new LayoutTree(root);
+      const newTree = tree.removePanel('a');
+      // tg1 removed, split collapsed to tg2
+      expect(newTree.root.type).toBe('tabgroup');
+      expect((newTree.root as TabGroupNode).id).toBe('tg2');
+    });
+
+    it('nonexistent panel returns equivalent tree', () => {
+      const root = tg('tg1', ['a', 'b']);
+      const tree = new LayoutTree(root);
+      const newTree = tree.removePanel('nonexistent');
+      expect((newTree.root as TabGroupNode).panels).toEqual(['a', 'b']);
+    });
   });
 
-  it('collapses split when a child becomes empty', () => {
-    const layout = split('s1', 'horizontal', [
-      tg('tg1', ['a']),
-      tg('tg2', ['b', 'c']),
-    ]);
-    const result = removePanel(layout, 'a');
-    // tg1 is removed, split collapses to just tg2
-    expect(result.type).toBe('tabgroup');
-    expect((result as TabGroupNode).id).toBe('tg2');
+  describe('movePanel', () => {
+    it('moves panel between groups', () => {
+      const root = split('s1', 'horizontal', [
+        tg('tg1', ['a', 'b']),
+        tg('tg2', ['c']),
+      ]);
+      const tree = new LayoutTree(root);
+      const target = tree.findGroup('tg2')!;
+      const newTree = tree.movePanel('b', target, 'center');
+      const g1 = newTree.findGroup('tg1')!;
+      const g2 = newTree.findGroup('tg2')!;
+      expect(g1.panels).toEqual(['a']);
+      expect(g2.panels).toContain('b');
+      expect(g2.panels).toContain('c');
+    });
   });
 
-  it('normalizes sizes after child removal from split', () => {
-    const layout = split('s1', 'horizontal', [
-      tg('tg1', ['a']),
-      tg('tg2', ['b']),
-      tg('tg3', ['c']),
-    ], [30, 40, 30]);
-    const result = removePanel(layout, 'b');
-    // tg2 removed, remaining sizes should normalize to 100
-    expect(result.type).toBe('split');
-    const s = result as SplitNode;
-    expect(s.children.length).toBe(2);
-    const total = s.sizes.reduce((a, b) => a + b, 0);
-    expect(Math.abs(total - 100)).toBeLessThan(0.1);
+  describe('resizeSplit', () => {
+    it('updates sizes immutably', () => {
+      const root = split('s1', 'horizontal', [
+        tg('tg1', ['a']),
+        tg('tg2', ['b']),
+      ], [50, 50]);
+      const tree = new LayoutTree(root);
+      const s = tree.findSplit('s1')!;
+      const newTree = tree.resizeSplit(s, [30, 70]);
+      const newSplit = newTree.root as SplitNode;
+      expect(newSplit.sizes).toEqual([30, 70]);
+      // Original unchanged
+      expect((tree.root as SplitNode).sizes).toEqual([50, 50]);
+    });
   });
 
-  it('promotes single child when split has only one child left', () => {
-    const layout = split('s1', 'horizontal', [
-      tg('tg1', ['a']),
-      tg('tg2', ['b']),
-    ]);
-    const result = removePanel(layout, 'a');
-    expect(result.type).toBe('tabgroup');
-    expect((result as TabGroupNode).id).toBe('tg2');
+  describe('reorderTabs', () => {
+    it('reorders panels in group', () => {
+      const root = tg('tg1', ['a', 'b', 'c'], 'a');
+      const tree = new LayoutTree(root);
+      const group = tree.findGroup('tg1')!;
+      const newTree = tree.reorderTabs(group, ['c', 'a', 'b']);
+      const newGroup = newTree.findGroup('tg1')!;
+      expect(newGroup.panels).toEqual(['c', 'a', 'b']);
+      expect(newGroup.activePanel).toBe('a'); // preserved
+    });
   });
 
-  it('handles nested splits correctly', () => {
+  describe('setActivePanel', () => {
+    it('sets active panel in group', () => {
+      const root = tg('tg1', ['a', 'b', 'c'], 'a');
+      const tree = new LayoutTree(root);
+      const newTree = tree.setActivePanel('tg1', 'c');
+      const group = newTree.findGroup('tg1')!;
+      expect(group.activePanel).toBe('c');
+    });
+  });
+});
+
+// ─── Compat functions ──────────────────────────────────────────────
+
+describe('compat functions', () => {
+  describe('findTabGroupForPanel', () => {
+    it('finds correct group', () => {
+      const layout = createIDELayout();
+      expect(findTabGroupForPanel(layout, 'doc1')).toBe('tg_center');
+      expect(findTabGroupForPanel(layout, 'explorer')).toBe('tg_left');
+      expect(findTabGroupForPanel(layout, 'nonexistent')).toBeNull();
+    });
+  });
+
+  describe('findFirstTabGroup', () => {
+    it('returns DFS first', () => {
+      expect(findFirstTabGroup(createIDELayout())).toBe('tg_left');
+    });
+  });
+
+  describe('findTabGroupById', () => {
+    it('finds group', () => {
+      const g = findTabGroupById(createIDELayout(), 'tg_center');
+      expect(g).not.toBeNull();
+      expect(g!.panels).toEqual(['doc1', 'doc2', 'doc3']);
+    });
+  });
+
+  describe('findAllTabGroups', () => {
+    it('returns all groups', () => {
+      const groups = findAllTabGroups(createIDELayout());
+      expect(groups.map(g => g.id)).toEqual(['tg_left', 'tg_center', 'tg_bottom', 'tg_right']);
+    });
+  });
+
+  describe('collectAllPanelsOrdered', () => {
+    it('returns DFS order', () => {
+      const panels = collectAllPanelsOrdered(createIDELayout());
+      expect(panels[0]).toBe('explorer');
+      expect(panels[panels.length - 1]).toBe('outline');
+    });
+  });
+
+  describe('collectLayoutPanelIds', () => {
+    it('returns all panel IDs as Set', () => {
+      const ids = collectLayoutPanelIds(createIDELayout());
+      expect(ids.size).toBe(8);
+      expect(ids.has('doc1')).toBe(true);
+      expect(ids.has('outline')).toBe(true);
+    });
+  });
+
+  describe('isPanelPlaced', () => {
+    it('finds panel in layout', () => {
+      const state = {
+        layout: tg('tg1', ['a']),
+        floatingPanels: [] as { panelId: string }[],
+        unpinnedPanels: [] as { panelId: string }[],
+      };
+      expect(isPanelPlaced(state, 'a')).toBe(true);
+      expect(isPanelPlaced(state, 'b')).toBe(false);
+    });
+
+    it('finds panel in floating', () => {
+      const state = {
+        layout: tg('tg1', ['a']),
+        floatingPanels: [{ panelId: 'f1' }],
+        unpinnedPanels: [] as { panelId: string }[],
+      };
+      expect(isPanelPlaced(state, 'f1')).toBe(true);
+    });
+  });
+
+  describe('countPanels', () => {
+    it('returns total', () => {
+      expect(countPanels(createIDELayout())).toBe(8);
+    });
+  });
+
+  describe('genId', () => {
+    it('returns a UUID string', () => {
+      const id = genId();
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    });
+
+    it('returns unique IDs', () => {
+      const ids = new Set(Array.from({ length: 10 }, () => genId()));
+      expect(ids.size).toBe(10);
+    });
+  });
+
+  describe('removePanel (compat)', () => {
+    it('removes a panel from a tab group', () => {
+      const layout = tg('tg1', ['a', 'b', 'c'], 'a');
+      const result = removePanel(layout, 'b');
+      expect(result!.type).toBe('tabgroup');
+      expect((result as TabGroupNode).panels).toEqual(['a', 'c']);
+    });
+
+    it('updates activePanel when active is removed', () => {
+      const layout = tg('tg1', ['a', 'b'], 'a');
+      const result = removePanel(layout, 'a') as TabGroupNode;
+      expect(result.activePanel).toBe('b');
+    });
+
+    it('returns null when last panel is removed', () => {
+      const layout = tg('tg1', ['a']);
+      const result = removePanel(layout, 'a');
+      expect(result).toBeNull();
+    });
+
+    it('collapses split when a child becomes empty', () => {
+      const layout = split('s1', 'horizontal', [
+        tg('tg1', ['a']),
+        tg('tg2', ['b', 'c']),
+      ]);
+      const result = removePanel(layout, 'a');
+      expect(result!.type).toBe('tabgroup');
+      expect((result as TabGroupNode).id).toBe('tg2');
+    });
+
+    it('normalizes sizes after child removal from split', () => {
+      const layout = split('s1', 'horizontal', [
+        tg('tg1', ['a']),
+        tg('tg2', ['b']),
+        tg('tg3', ['c']),
+      ], [30, 40, 30]);
+      const result = removePanel(layout, 'b');
+      expect(result!.type).toBe('split');
+      const s = result as SplitNode;
+      expect(s.children.length).toBe(2);
+      const total = s.sizes.reduce((a, b) => a + b, 0);
+      expect(Math.abs(total - 100)).toBeLessThan(0.1);
+    });
+
+    it('returns unchanged tree when panel not found', () => {
+      const layout = tg('tg1', ['a', 'b']);
+      const result = removePanel(layout, 'nonexistent');
+      expect(result).toEqual(layout);
+    });
+  });
+
+  describe('insertInGroup (compat)', () => {
+    it('adds panel to target group', () => {
+      const layout = tg('tg1', ['a', 'b']);
+      const result = insertInGroup(layout, 'tg1', 'c') as TabGroupNode;
+      expect(result.panels).toEqual(['a', 'b', 'c']);
+      expect(result.activePanel).toBe('c');
+    });
+
+    it('finds target in nested structure', () => {
+      const layout = createIDELayout();
+      const result = insertInGroup(layout, 'tg_center', 'newdoc');
+      const center = findTabGroupById(result, 'tg_center')!;
+      expect(center.panels).toContain('newdoc');
+    });
+
+    it('returns unchanged tree when target not found', () => {
+      const layout = tg('tg1', ['a']);
+      const result = insertInGroup(layout, 'nonexistent', 'b');
+      expect(result).toEqual(layout);
+    });
+  });
+
+  describe('insertBySplit (compat)', () => {
+    it('splits right creating horizontal split', () => {
+      const layout = tg('tg1', ['a']);
+      const result = insertBySplit(layout, 'tg1', 'b', 'right');
+      expect(result.type).toBe('split');
+      const s = result as SplitNode;
+      expect(s.direction).toBe('horizontal');
+      expect((s.children[0] as TabGroupNode).panels).toEqual(['a']);
+      expect((s.children[1] as TabGroupNode).panels).toEqual(['b']);
+    });
+
+    it('center acts as insertInGroup', () => {
+      const layout = tg('tg1', ['a']);
+      const result = insertBySplit(layout, 'tg1', 'b', 'center') as TabGroupNode;
+      expect(result.panels).toEqual(['a', 'b']);
+    });
+  });
+
+  describe('insertAtEdge (compat)', () => {
+    it('inserts at right edge of horizontal split', () => {
+      const layout = split('s1', 'horizontal', [
+        tg('tg1', ['a']),
+        tg('tg2', ['b']),
+      ], [60, 40]);
+      const result = insertAtEdge(layout, 'c', 'right') as SplitNode;
+      expect(result.children.length).toBe(3);
+      expect((result.children[2] as TabGroupNode).panels).toEqual(['c']);
+      expect(Math.abs(result.sizes.reduce((a, b) => a + b, 0) - 100)).toBeLessThan(0.1);
+    });
+
+    it('wraps in new split when direction doesnt match', () => {
+      const layout = split('s1', 'vertical', [
+        tg('tg1', ['a']),
+        tg('tg2', ['b']),
+      ]);
+      const result = insertAtEdge(layout, 'c', 'right');
+      expect(result.type).toBe('split');
+      const s = result as SplitNode;
+      expect(s.direction).toBe('horizontal');
+      expect(s.children[0].type).toBe('split');
+      expect((s.children[1] as TabGroupNode).panels).toEqual(['c']);
+    });
+
+    it('wraps single tab group in new split', () => {
+      const layout = tg('tg1', ['a']);
+      const result = insertAtEdge(layout, 'b', 'bottom') as SplitNode;
+      expect(result.direction).toBe('vertical');
+      expect(result.children.length).toBe(2);
+    });
+  });
+
+  describe('movePanel (compat)', () => {
+    it('moves panel from one group to another (center)', () => {
+      const layout = split('s1', 'horizontal', [
+        tg('tg1', ['a', 'b']),
+        tg('tg2', ['c']),
+      ]);
+      const result = movePanel(layout, 'b', 'tg2', 'center');
+      const g1 = findTabGroupById(result, 'tg1')!;
+      const g2 = findTabGroupById(result, 'tg2')!;
+      expect(g1.panels).toEqual(['a']);
+      expect(g2.panels).toContain('b');
+      expect(g2.panels).toContain('c');
+    });
+
+    it('no-op for same group center drop', () => {
+      const layout = tg('tg1', ['a', 'b']);
+      const result = movePanel(layout, 'a', 'tg1', 'center');
+      expect(result).toEqual(layout);
+    });
+
+    it('no-op for single panel edge drop on same group', () => {
+      const layout = tg('tg1', ['a']);
+      const result = movePanel(layout, 'a', 'tg1', 'right');
+      expect(result).toEqual(layout);
+    });
+
+    it('collapses source when last panel is moved', () => {
+      const layout = split('s1', 'horizontal', [
+        tg('tg1', ['a']),
+        tg('tg2', ['b']),
+      ]);
+      const result = movePanel(layout, 'a', 'tg2', 'center');
+      expect(result.type).toBe('tabgroup');
+      const r = result as TabGroupNode;
+      expect(r.panels).toContain('a');
+      expect(r.panels).toContain('b');
+    });
+  });
+
+  describe('detectPanelEdge (compat)', () => {
     const layout = createIDELayout();
-    const result = removePanel(layout, 'outline');
-    // tg_right removed, root split should collapse from 3 to 2 children
-    expect(result.type).toBe('split');
-    const s = result as SplitNode;
-    expect(s.children.length).toBe(2);
-    // Sizes should be normalized
-    expect(Math.abs(s.sizes.reduce((a, b) => a + b, 0) - 100)).toBeLessThan(0.1);
+
+    it('left panel returns left', () => {
+      expect(detectPanelEdge(layout, 'explorer')).toBe('left');
+    });
+
+    it('right panel returns right', () => {
+      expect(detectPanelEdge(layout, 'outline')).toBe('right');
+    });
+
+    it('bottom panel returns bottom', () => {
+      expect(detectPanelEdge(layout, 'terminal')).toBe('bottom');
+    });
   });
 
-  it('returns unchanged tree when panel not found', () => {
-    const layout = tg('tg1', ['a', 'b']);
-    const result = removePanel(layout, 'nonexistent');
-    expect(result).toEqual(layout);
-  });
-});
+  describe('findTabGroupByEdge (compat)', () => {
+    it('finds left edge group', () => {
+      expect(findTabGroupByEdge(createIDELayout(), 'left')).toBe('tg_left');
+    });
 
-// ─── insertInGroup ──────────────────────────────────────────────────
+    it('finds right edge group', () => {
+      expect(findTabGroupByEdge(createIDELayout(), 'right')).toBe('tg_right');
+    });
 
-describe('insertInGroup', () => {
-  it('adds panel to target group', () => {
-    const layout = tg('tg1', ['a', 'b']);
-    const result = insertInGroup(layout, 'tg1', 'c') as TabGroupNode;
-    expect(result.panels).toEqual(['a', 'b', 'c']);
-    expect(result.activePanel).toBe('c');
-  });
+    it('returns null when edge doesnt match direction', () => {
+      const layout = split('s1', 'horizontal', [tg('tg1', ['a']), tg('tg2', ['b'])]);
+      expect(findTabGroupByEdge(layout, 'bottom')).toBeNull();
+    });
 
-  it('finds target in nested structure', () => {
-    const layout = createIDELayout();
-    const result = insertInGroup(layout, 'tg_center', 'newdoc');
-    const center = findTabGroupById(result, 'tg_center')!;
-    expect(center.panels).toContain('newdoc');
-    expect(center.activePanel).toBe('newdoc');
+    it('returns null for single tab group', () => {
+      expect(findTabGroupByEdge(tg('tg1', ['a']), 'left')).toBeNull();
+    });
   });
 
-  it('returns unchanged tree when target not found', () => {
-    const layout = tg('tg1', ['a']);
-    const result = insertInGroup(layout, 'nonexistent', 'b');
-    expect(result).toEqual(layout);
-  });
-});
+  describe('tree updates (compat)', () => {
+    it('setActivePanel updates active panel', () => {
+      const layout = tg('tg1', ['a', 'b', 'c'], 'a');
+      const result = setActivePanel(layout, 'tg1', 'c') as TabGroupNode;
+      expect(result.activePanel).toBe('c');
+    });
 
-// ─── insertBySplit ──────────────────────────────────────────────────
+    it('updateSizes updates split sizes', () => {
+      const layout = split('s1', 'horizontal', [tg('tg1', ['a']), tg('tg2', ['b'])], [50, 50]);
+      const result = updateSizes(layout, 's1', [30, 70]) as SplitNode;
+      expect(result.sizes).toEqual([30, 70]);
+    });
 
-describe('insertBySplit', () => {
-  it('splits right creating horizontal split', () => {
-    const layout = tg('tg1', ['a']);
-    const result = insertBySplit(layout, 'tg1', 'b', 'right');
-    expect(result.type).toBe('split');
-    const s = result as SplitNode;
-    expect(s.direction).toBe('horizontal');
-    expect(s.children.length).toBe(2);
-    expect((s.children[0] as TabGroupNode).panels).toEqual(['a']);
-    expect((s.children[1] as TabGroupNode).panels).toEqual(['b']);
-  });
+    it('findNextPanel wraps around', () => {
+      const layout = tg('tg1', ['a', 'b', 'c']);
+      expect(findNextPanel(layout, 'c')).toBe('a');
+      expect(findNextPanel(layout, 'a')).toBe('b');
+    });
 
-  it('splits bottom creating vertical split', () => {
-    const layout = tg('tg1', ['a']);
-    const result = insertBySplit(layout, 'tg1', 'b', 'bottom');
-    expect(result.type).toBe('split');
-    const s = result as SplitNode;
-    expect(s.direction).toBe('vertical');
-    expect((s.children[1] as TabGroupNode).panels).toEqual(['b']);
-  });
-
-  it('splits left puts new panel first', () => {
-    const layout = tg('tg1', ['a']);
-    const result = insertBySplit(layout, 'tg1', 'b', 'left') as SplitNode;
-    expect((result.children[0] as TabGroupNode).panels).toEqual(['b']);
-    expect((result.children[1] as TabGroupNode).panels).toEqual(['a']);
-  });
-
-  it('center acts as insertInGroup', () => {
-    const layout = tg('tg1', ['a']);
-    const result = insertBySplit(layout, 'tg1', 'b', 'center') as TabGroupNode;
-    expect(result.panels).toEqual(['a', 'b']);
-  });
-});
-
-// ─── insertAtEdge ───────────────────────────────────────────────────
-
-describe('insertAtEdge', () => {
-  it('inserts at right edge of horizontal split', () => {
-    const layout = split('s1', 'horizontal', [
-      tg('tg1', ['a']),
-      tg('tg2', ['b']),
-    ], [60, 40]);
-    const result = insertAtEdge(layout, 'c', 'right') as SplitNode;
-    expect(result.children.length).toBe(3);
-    expect((result.children[2] as TabGroupNode).panels).toEqual(['c']);
-    expect(Math.abs(result.sizes.reduce((a, b) => a + b, 0) - 100)).toBeLessThan(0.1);
-  });
-
-  it('inserts at left edge prepending', () => {
-    const layout = split('s1', 'horizontal', [
-      tg('tg1', ['a']),
-      tg('tg2', ['b']),
-    ], [60, 40]);
-    const result = insertAtEdge(layout, 'c', 'left') as SplitNode;
-    expect(result.children.length).toBe(3);
-    expect((result.children[0] as TabGroupNode).panels).toEqual(['c']);
-  });
-
-  it('wraps in new split when direction doesnt match', () => {
-    const layout = split('s1', 'vertical', [
-      tg('tg1', ['a']),
-      tg('tg2', ['b']),
-    ]);
-    const result = insertAtEdge(layout, 'c', 'right');
-    expect(result.type).toBe('split');
-    const s = result as SplitNode;
-    expect(s.direction).toBe('horizontal');
-    expect(s.children.length).toBe(2);
-    // First child is the original vertical split, second is new group
-    expect(s.children[0].type).toBe('split');
-    expect((s.children[1] as TabGroupNode).panels).toEqual(['c']);
-  });
-
-  it('wraps single tab group in new split', () => {
-    const layout = tg('tg1', ['a']);
-    const result = insertAtEdge(layout, 'b', 'bottom') as SplitNode;
-    expect(result.direction).toBe('vertical');
-    expect(result.children.length).toBe(2);
-    expect((result.children[0] as TabGroupNode).panels).toEqual(['a']);
-    expect((result.children[1] as TabGroupNode).panels).toEqual(['b']);
-  });
-
-  it('sizes sum to 100', () => {
-    const layout = createIDELayout();
-    const result = insertAtEdge(layout, 'newpanel', 'right') as SplitNode;
-    const total = result.sizes.reduce((a, b) => a + b, 0);
-    expect(Math.abs(total - 100)).toBeLessThan(0.1);
-  });
-});
-
-// ─── movePanel ──────────────────────────────────────────────────────
-
-describe('movePanel', () => {
-  it('moves panel from one group to another (center)', () => {
-    const layout = split('s1', 'horizontal', [
-      tg('tg1', ['a', 'b']),
-      tg('tg2', ['c']),
-    ]);
-    const result = movePanel(layout, 'b', 'tg2', 'center');
-    const tg1 = findTabGroupById(result, 'tg1')!;
-    const tg2 = findTabGroupById(result, 'tg2')!;
-    expect(tg1.panels).toEqual(['a']);
-    expect(tg2.panels).toContain('b');
-    expect(tg2.panels).toContain('c');
-  });
-
-  it('no-op for same group center drop', () => {
-    const layout = tg('tg1', ['a', 'b']);
-    const result = movePanel(layout, 'a', 'tg1', 'center');
-    expect(result).toEqual(layout);
-  });
-
-  it('no-op for single panel edge drop on same group', () => {
-    const layout = tg('tg1', ['a']);
-    const result = movePanel(layout, 'a', 'tg1', 'right');
-    expect(result).toEqual(layout);
-  });
-
-  it('moves panel to edge split', () => {
-    const layout = split('s1', 'horizontal', [
-      tg('tg1', ['a', 'b']),
-      tg('tg2', ['c']),
-    ]);
-    const result = movePanel(layout, 'a', 'tg2', 'bottom');
-    // a should be in a new group below tg2
-    expect(findTabGroupForPanel(result, 'a')).not.toBeNull();
-    expect(findTabGroupForPanel(result, 'a')).not.toBe('tg1');
-    expect(findTabGroupForPanel(result, 'a')).not.toBe('tg2');
-  });
-
-  it('collapses source when last panel is moved', () => {
-    const layout = split('s1', 'horizontal', [
-      tg('tg1', ['a']),
-      tg('tg2', ['b']),
-    ]);
-    const result = movePanel(layout, 'a', 'tg2', 'center');
-    // tg1 should be gone, split collapsed
-    expect(result.type).toBe('tabgroup');
-    expect((result as TabGroupNode).panels).toContain('a');
-    expect((result as TabGroupNode).panels).toContain('b');
-  });
-});
-
-// ─── Query operations ───────────────────────────────────────────────
-
-describe('queries', () => {
-  const layout = createIDELayout();
-
-  it('findTabGroupForPanel finds correct group', () => {
-    expect(findTabGroupForPanel(layout, 'doc1')).toBe('tg_center');
-    expect(findTabGroupForPanel(layout, 'explorer')).toBe('tg_left');
-    expect(findTabGroupForPanel(layout, 'outline')).toBe('tg_right');
-    expect(findTabGroupForPanel(layout, 'nonexistent')).toBeNull();
-  });
-
-  it('findFirstTabGroup returns DFS first', () => {
-    expect(findFirstTabGroup(layout)).toBe('tg_left');
-  });
-
-  it('findTabGroupById finds group', () => {
-    const tg = findTabGroupById(layout, 'tg_center');
-    expect(tg).not.toBeNull();
-    expect(tg!.panels).toEqual(['doc1', 'doc2', 'doc3']);
-  });
-
-  it('findAllTabGroups returns all groups', () => {
-    const groups = findAllTabGroups(layout);
-    expect(groups.map(g => g.id)).toEqual(['tg_left', 'tg_center', 'tg_bottom', 'tg_right']);
-  });
-
-  it('collectLayoutPanelIds returns all panel IDs', () => {
-    const ids = collectLayoutPanelIds(layout);
-    expect(ids.size).toBe(8);
-    expect(ids.has('doc1')).toBe(true);
-    expect(ids.has('outline')).toBe(true);
-  });
-
-  it('countPanels returns total', () => {
-    expect(countPanels(layout)).toBe(8);
-  });
-
-  it('collectAllPanelsOrdered returns DFS order', () => {
-    const panels = collectAllPanelsOrdered(layout);
-    expect(panels[0]).toBe('explorer');
-    expect(panels[panels.length - 1]).toBe('outline');
-  });
-});
-
-// ─── detectPanelEdge ────────────────────────────────────────────────
-
-describe('detectPanelEdge', () => {
-  const layout = createIDELayout();
-
-  it('left panel returns left', () => {
-    expect(detectPanelEdge(layout, 'explorer')).toBe('left');
-  });
-
-  it('right panel returns right', () => {
-    expect(detectPanelEdge(layout, 'outline')).toBe('right');
-  });
-
-  it('bottom panel returns bottom', () => {
-    expect(detectPanelEdge(layout, 'terminal')).toBe('bottom');
-  });
-
-  it('center panel returns left (not on any specific edge)', () => {
-    // Center is neither left, right, top, nor bottom — defaults to left
-    const edge = detectPanelEdge(layout, 'doc1');
-    // It's in the middle horizontal split child, so its path doesn't include 'left' explicitly
-    // but doesn't include 'right' or 'bottom' either
-    expect(['left', 'top']).toContain(edge);
-  });
-});
-
-// ─── findTabGroupByEdge ─────────────────────────────────────────────
-
-describe('findTabGroupByEdge', () => {
-  it('finds left edge group', () => {
-    const layout = createIDELayout();
-    expect(findTabGroupByEdge(layout, 'left')).toBe('tg_left');
-  });
-
-  it('finds right edge group', () => {
-    const layout = createIDELayout();
-    expect(findTabGroupByEdge(layout, 'right')).toBe('tg_right');
-  });
-
-  it('returns null when edge doesnt match direction', () => {
-    const layout = split('s1', 'horizontal', [tg('tg1', ['a']), tg('tg2', ['b'])]);
-    expect(findTabGroupByEdge(layout, 'bottom')).toBeNull();
-  });
-
-  it('returns null for single tab group', () => {
-    expect(findTabGroupByEdge(tg('tg1', ['a']), 'left')).toBeNull();
-  });
-});
-
-// ─── Tree updates ───────────────────────────────────────────────────
-
-describe('tree updates', () => {
-  it('setActivePanel updates active panel', () => {
-    const layout = tg('tg1', ['a', 'b', 'c'], 'a');
-    const result = setActivePanel(layout, 'tg1', 'c') as TabGroupNode;
-    expect(result.activePanel).toBe('c');
-  });
-
-  it('updateSizes updates split sizes', () => {
-    const layout = split('s1', 'horizontal', [tg('tg1', ['a']), tg('tg2', ['b'])], [50, 50]);
-    const result = updateSizes(layout, 's1', [30, 70]) as SplitNode;
-    expect(result.sizes).toEqual([30, 70]);
-  });
-
-  it('findNextPanel wraps around', () => {
-    const layout = tg('tg1', ['a', 'b', 'c']);
-    expect(findNextPanel(layout, 'c')).toBe('a');
-    expect(findNextPanel(layout, 'a')).toBe('b');
-  });
-
-  it('findPreviousPanel wraps around', () => {
-    const layout = tg('tg1', ['a', 'b', 'c']);
-    expect(findPreviousPanel(layout, 'a')).toBe('c');
-    expect(findPreviousPanel(layout, 'b')).toBe('a');
+    it('findPreviousPanel wraps around', () => {
+      const layout = tg('tg1', ['a', 'b', 'c']);
+      expect(findPreviousPanel(layout, 'a')).toBe('c');
+      expect(findPreviousPanel(layout, 'b')).toBe('a');
+    });
   });
 });
 
@@ -434,9 +551,8 @@ describe('edge cases', () => {
       tg('tg4', ['d']),
     ]);
     const result = removePanel(layout, 'a');
-    // tg1 removed → s3 collapses to tg2 → s2 has [tg2, tg3]
-    expect(countPanels(result)).toBe(3);
-    expect(findTabGroupForPanel(result, 'b')).not.toBeNull();
+    expect(countPanels(result!)).toBe(3);
+    expect(findTabGroupForPanel(result!, 'b')).not.toBeNull();
   });
 
   it('insertAtEdge with custom size', () => {
@@ -447,8 +563,6 @@ describe('edge cases', () => {
   });
 
   it('movePanel handles target group that gets collapsed after remove', () => {
-    // a is in tg1 which is sibling of tg2 in a split
-    // Moving a from tg1 to tg2 center when tg1 has only a
     const layout = split('s1', 'horizontal', [
       tg('tg1', ['a']),
       tg('tg2', ['b']),

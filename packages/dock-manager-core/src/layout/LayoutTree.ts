@@ -1,17 +1,11 @@
 /**
- * LayoutTree — Clean, immutable layout tree operations.
+ * LayoutTree — Immutable layout tree class with backward-compatible wrapper functions.
  *
- * Replaces the scattered helpers in layoutHelpers.ts with a cohesive module
- * that handles all tree mutations correctly:
+ * The LayoutTree class wraps a LayoutNode root and provides immutable operations:
+ * every mutation returns a new LayoutTree instance with structural sharing.
+ * New node IDs use crypto.randomUUID().
  *
- * 1. removePanel — always returns a valid tree (never null), auto-collapses
- * 2. insertAtEdge — inserts at the correct root-level edge (left/right/top/bottom)
- * 3. insertInGroup — adds panel to existing tab group (center drop)
- * 4. movePanel — combines remove + insert atomically
- * 5. normalizeSizes — ensures sizes always sum to 100
- * 6. collapseTree — removes empty groups and single-child splits
- *
- * All functions are pure (no side effects) and return new objects (immutable).
+ * Backward-compatible free functions are exported to keep existing imports working.
  */
 
 import type {
@@ -24,60 +18,151 @@ import type {
 
 // ─── ID generation ──────────────────────────────────────────────────
 
-let _idCounter = 0;
-
-export function genId(prefix: string): string {
-  return `${prefix}_${++_idCounter}`;
+export function genId(_prefix?: string): string {
+  return crypto.randomUUID();
 }
 
+/** @deprecated No-op. Kept for backward compatibility. */
 export function resetIdCounter(): void {
-  _idCounter = 0;
+  // no-op — UUIDs don't need a counter
 }
 
-/**
- * Scan a layout tree for auto-generated IDs (prefix_N) and advance the
- * counter past the highest N found. Call this after restoring a layout
- * from localStorage or any external source so that subsequent genId()
- * calls never collide with existing IDs.
- */
-export function syncIdCounter(root: LayoutNode | null): void {
-  if (!root) return;
-  let max = _idCounter;
-  const walk = (node: LayoutNode) => {
-    const m = node.id.match(/_(\d+)$/);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (n > max) max = n;
-    }
-    if (node.type === 'split') {
-      node.children.forEach(walk);
-    }
-  };
-  walk(root);
-  _idCounter = max;
+/** @deprecated No-op. Kept for backward compatibility. */
+export function syncIdCounter(_root: LayoutNode | null): void {
+  // no-op — UUIDs don't need syncing
 }
 
-// ─── Core operations ────────────────────────────────────────────────
+// ─── LayoutTree class ──────────────────────────────────────────────
 
-/**
- * Remove a panel from the layout tree.
- * Returns null if the tree becomes completely empty (no panels remain).
- *
- * Automatically:
- * - Removes the panel from its tab group
- * - Collapses empty tab groups
- * - Promotes single-child splits (removes unnecessary nesting)
- * - Normalizes sizes after child removal
- */
-export function removePanel(root: LayoutNode, panelId: string): LayoutNode | null {
-  return removePanelInner(root, panelId);
+export class LayoutTree {
+  readonly root: LayoutNode;
+
+  constructor(root: LayoutNode) {
+    this.root = root;
+  }
+
+  // ── Lookups ────────────────────────────────────────────────────────
+
+  findGroup(id: string): TabGroupNode | null {
+    return findGroupInner(this.root, id);
+  }
+
+  findSplit(id: string): SplitNode | null {
+    return findSplitInner(this.root, id);
+  }
+
+  groupForPanel(panelId: string): TabGroupNode | null {
+    return groupForPanelInner(this.root, panelId);
+  }
+
+  allGroups(): TabGroupNode[] {
+    return allGroupsInner(this.root);
+  }
+
+  allPanelIds(): string[] {
+    return allPanelIdsInner(this.root);
+  }
+
+  // ── Mutations (return new LayoutTree) ─────────────────────────────
+
+  insertPanel(target: TabGroupNode, panelId: string, position: DockPosition): LayoutTree {
+    if (position === 'center') {
+      const newRoot = insertInGroupInner(this.root, target.id, panelId);
+      return new LayoutTree(newRoot);
+    }
+    const newRoot = insertBySplitInner(this.root, target.id, panelId, position);
+    return new LayoutTree(newRoot);
+  }
+
+  removePanel(panelId: string): LayoutTree {
+    const result = removePanelInner(this.root, panelId);
+    if (result === null) {
+      // Tree became empty — return a fresh empty group
+      return new LayoutTree({
+        type: 'tabgroup',
+        id: genId(),
+        panels: [],
+        activePanel: '',
+      });
+    }
+    return new LayoutTree(result);
+  }
+
+  movePanel(panelId: string, target: TabGroupNode, position: DockPosition): LayoutTree {
+    const newRoot = movePanelInner(this.root, panelId, target.id, position);
+    return new LayoutTree(newRoot);
+  }
+
+  resizeSplit(split: SplitNode, sizes: number[]): LayoutTree {
+    const newRoot = updateSizesInner(this.root, split.id, sizes);
+    return new LayoutTree(newRoot);
+  }
+
+  reorderTabs(group: TabGroupNode, panels: string[]): LayoutTree {
+    const newRoot = updateTabGroupInner(this.root, group.id, tg => ({
+      ...tg,
+      panels,
+      activePanel: panels.includes(tg.activePanel) ? tg.activePanel : panels[0] || '',
+    }));
+    return new LayoutTree(newRoot);
+  }
+
+  setActivePanel(groupId: string, panelId: string): LayoutTree {
+    const newRoot = setActivePanelInner(this.root, groupId, panelId);
+    return new LayoutTree(newRoot);
+  }
+
+  updateGroup(groupId: string, updates: Partial<TabGroupNode>): LayoutTree {
+    const newRoot = updateTabGroupInner(this.root, groupId, tg => ({ ...tg, ...updates }));
+    return new LayoutTree(newRoot);
+  }
+}
+
+// ─── Internal tree operations ──────────────────────────────────────
+
+function findGroupInner(node: LayoutNode, id: string): TabGroupNode | null {
+  if (node.type === 'tabgroup') return node.id === id ? node : null;
+  for (const child of node.children) {
+    const result = findGroupInner(child, id);
+    if (result) return result;
+  }
+  return null;
+}
+
+function findSplitInner(node: LayoutNode, id: string): SplitNode | null {
+  if (node.type === 'tabgroup') return null;
+  if (node.id === id) return node;
+  for (const child of node.children) {
+    const result = findSplitInner(child, id);
+    if (result) return result;
+  }
+  return null;
+}
+
+function groupForPanelInner(node: LayoutNode, panelId: string): TabGroupNode | null {
+  if (node.type === 'tabgroup') return node.panels.includes(panelId) ? node : null;
+  for (const child of node.children) {
+    const result = groupForPanelInner(child, panelId);
+    if (result) return result;
+  }
+  return null;
+}
+
+function allGroupsInner(node: LayoutNode): TabGroupNode[] {
+  if (node.type === 'tabgroup') return [node];
+  return node.children.flatMap(child => allGroupsInner(child));
+}
+
+function allPanelIdsInner(node: LayoutNode): string[] {
+  if (node.type === 'tabgroup') return [...node.panels];
+  return node.children.flatMap(child => allPanelIdsInner(child));
 }
 
 function removePanelInner(node: LayoutNode, panelId: string): LayoutNode | null {
   if (node.type === 'tabgroup') {
-    if (!node.panels.includes(panelId)) return node; // Not here
+    if (!node.panels.includes(panelId)) return node;
     const remaining = node.panels.filter(p => p !== panelId);
-    if (remaining.length === 0) return null; // Empty group — remove
+    if (remaining.length === 0) return null;
     return {
       ...node,
       panels: remaining,
@@ -85,7 +170,6 @@ function removePanelInner(node: LayoutNode, panelId: string): LayoutNode | null 
     };
   }
 
-  // Split node — recurse into children
   const newChildren: LayoutNode[] = [];
   const newSizes: number[] = [];
 
@@ -98,16 +182,12 @@ function removePanelInner(node: LayoutNode, panelId: string): LayoutNode | null 
   }
 
   if (newChildren.length === 0) return null;
-  if (newChildren.length === 1) return newChildren[0]; // Promote single child
+  if (newChildren.length === 1) return newChildren[0];
 
   return { ...node, children: newChildren, sizes: normalizeSizes(newSizes) };
 }
 
-/**
- * Insert a panel into a specific tab group (center/tab drop).
- * If the group doesn't exist, the tree is returned unchanged.
- */
-export function insertInGroup(
+function insertInGroupInner(
   root: LayoutNode,
   targetGroupId: string,
   panelId: string,
@@ -120,33 +200,21 @@ export function insertInGroup(
   }
   return {
     ...root,
-    children: root.children.map(child => insertInGroup(child, targetGroupId, panelId)),
+    children: root.children.map(child => insertInGroupInner(child, targetGroupId, panelId)),
   };
 }
 
-/**
- * Insert a panel next to a specific tab group by splitting it.
- * Creates a new split with the existing group and a new tab group
- * at the given position (left/right/top/bottom).
- *
- * If the target group is empty (a safeEmptyGroup placeholder left over
- * from a previous action that drained the layout), splitting would
- * leave the empty sibling visible as a blank pane. Instead we collapse
- * the insert into a plain insertInGroup on the empty target so the
- * placeholder is reused for the new panel.
- */
-export function insertBySplit(
+function insertBySplitInner(
   root: LayoutNode,
   targetGroupId: string,
   panelId: string,
   position: DockPosition,
 ): LayoutNode {
-  if (position === 'center') return insertInGroup(root, targetGroupId, panelId);
+  if (position === 'center') return insertInGroupInner(root, targetGroupId, panelId);
 
   if (root.type === 'tabgroup') {
     if (root.id === targetGroupId) {
       if (root.panels.length === 0) {
-        // Reuse the empty placeholder instead of creating a split.
         return { ...root, panels: [panelId], activePanel: panelId };
       }
       return splitGroup(root, panelId, position);
@@ -155,34 +223,25 @@ export function insertBySplit(
   }
   return {
     ...root,
-    children: root.children.map(child => insertBySplit(child, targetGroupId, panelId, position)),
+    children: root.children.map(child =>
+      insertBySplitInner(child, targetGroupId, panelId, position),
+    ),
   };
 }
 
-/**
- * Insert a panel at a root-level edge of the layout.
- * This adds a new tab group flush against the left/right/top/bottom
- * edge of the entire layout, not nested inside any existing split.
- *
- * If the root split direction matches the edge axis, the new group is
- * appended/prepended as a direct child. Otherwise, the layout is
- * wrapped in a new split.
- */
-export function insertAtEdge(
+function insertAtEdgeInner(
   root: LayoutNode,
   panelId: string,
   edge: DockEdge,
   sizePercent = 20,
 ): LayoutNode {
-  // If the root is an empty tabgroup placeholder, reuse it for the panel
-  // so we don't wrap it in a split with a blank sibling.
   if (root.type === 'tabgroup' && root.panels.length === 0) {
     return { ...root, panels: [panelId], activePanel: panelId };
   }
 
   const newGroup: TabGroupNode = {
     type: 'tabgroup',
-    id: genId('tg'),
+    id: genId(),
     panels: [panelId],
     activePanel: panelId,
   };
@@ -190,7 +249,6 @@ export function insertAtEdge(
   const isHorizontal = edge === 'left' || edge === 'right';
   const isAfter = edge === 'right' || edge === 'bottom';
 
-  // If root is a split with matching direction, add as direct child
   if (root.type === 'split') {
     const dirMatch =
       (isHorizontal && root.direction === 'horizontal') ||
@@ -209,219 +267,99 @@ export function insertAtEdge(
     }
   }
 
-  // Otherwise, wrap in a new split
   const children = isAfter ? [root, newGroup] : [newGroup, root];
   return {
     type: 'split',
-    id: genId('split'),
+    id: genId(),
     direction: isHorizontal ? 'horizontal' : 'vertical',
     children,
     sizes: isAfter ? [100 - sizePercent, sizePercent] : [sizePercent, 100 - sizePercent],
   };
 }
 
-/**
- * Move a panel from its current location to a new target.
- * Combines remove + insert atomically. Handles all drop positions:
- * - center: add as tab in target group
- * - left/right/top/bottom: split target group
- *
- * Returns unchanged tree if:
- * - Dropping on same group as center (no-op)
- * - Panel doesn't exist in tree
- */
-export function movePanel(
+function movePanelInner(
   root: LayoutNode,
   panelId: string,
   targetGroupId: string,
   position: DockPosition,
 ): LayoutNode {
-  // Same-group center drop = no-op (already in that group)
-  const sourceGroup = findTabGroupForPanel(root, panelId);
-  if (sourceGroup === targetGroupId && position === 'center') return root;
-  // Same-group edge drop with single panel = no-op
-  if (sourceGroup === targetGroupId && position !== 'center') {
-    const group = findTabGroupById(root, sourceGroup);
+  const sourceGroupId = findTabGroupForPanelInner(root, panelId);
+  if (sourceGroupId === targetGroupId && position === 'center') return root;
+  if (sourceGroupId === targetGroupId && position !== 'center') {
+    const group = findGroupInner(root, sourceGroupId!);
     if (group && group.panels.length === 1) return root;
   }
 
-  // Remove from current location
-  const afterRemove = removePanel(root, panelId);
+  const afterRemove = removePanelInner(root, panelId);
 
-  // If tree is now empty, create a fresh group for the panel at its new location
   if (!afterRemove) {
-    return { type: 'tabgroup', id: genId('tg'), panels: [panelId], activePanel: panelId };
+    return { type: 'tabgroup', id: genId(), panels: [panelId], activePanel: panelId };
   }
 
-  // Insert at new location
   if (position === 'center') {
-    // Target group might have been collapsed if it was in the same split
-    if (findTabGroupById(afterRemove, targetGroupId)) {
-      return insertInGroup(afterRemove, targetGroupId, panelId);
+    if (findGroupInner(afterRemove, targetGroupId)) {
+      return insertInGroupInner(afterRemove, targetGroupId, panelId);
     }
-    // Target group gone — insert into first available group
-    const firstGroup = findFirstTabGroup(afterRemove);
-    if (firstGroup) return insertInGroup(afterRemove, firstGroup, panelId);
+    const firstGroup = findFirstTabGroupInner(afterRemove);
+    if (firstGroup) return insertInGroupInner(afterRemove, firstGroup, panelId);
     return afterRemove;
   }
 
-  // Edge drop — check if target still exists after remove
-  if (findTabGroupById(afterRemove, targetGroupId)) {
-    return insertBySplit(afterRemove, targetGroupId, panelId, position);
+  if (findGroupInner(afterRemove, targetGroupId)) {
+    return insertBySplitInner(afterRemove, targetGroupId, panelId, position);
   }
-  // Target collapsed — insert at layout edge
   const edge = positionToEdge(position);
-  return insertAtEdge(afterRemove, panelId, edge);
+  return insertAtEdgeInner(afterRemove, panelId, edge);
 }
 
-// ─── Query operations ───────────────────────────────────────────────
-
-/** Find which tab group contains a panel */
-export function findTabGroupForPanel(node: LayoutNode, panelId: string): string | null {
-  if (node.type === 'tabgroup') return node.panels.includes(panelId) ? node.id : null;
-  for (const child of node.children) {
-    const result = findTabGroupForPanel(child, panelId);
-    if (result) return result;
-  }
-  return null;
-}
-
-/** Find the first tab group (DFS) */
-export function findFirstTabGroup(node: LayoutNode): string | null {
-  if (node.type === 'tabgroup') return node.id;
-  for (const child of node.children) {
-    const result = findFirstTabGroup(child);
-    if (result) return result;
-  }
-  return null;
-}
-
-/** Find a tab group by ID */
-export function findTabGroupById(node: LayoutNode, id: string): TabGroupNode | null {
-  if (node.type === 'tabgroup') return node.id === id ? node : null;
-  for (const child of node.children) {
-    const result = findTabGroupById(child, id);
-    if (result) return result;
-  }
-  return null;
-}
-
-/** Find all tab groups in DFS order */
-export function findAllTabGroups(node: LayoutNode): TabGroupNode[] {
-  if (node.type === 'tabgroup') return [node];
-  return node.children.flatMap(child => findAllTabGroups(child));
-}
-
-/** Collect all panel IDs in the layout tree */
-export function collectLayoutPanelIds(node: LayoutNode): Set<string> {
-  if (node.type === 'tabgroup') return new Set(node.panels);
-  const ids = new Set<string>();
-  for (const child of node.children) {
-    for (const id of collectLayoutPanelIds(child)) ids.add(id);
-  }
-  return ids;
-}
-
-/** Collect all panels in DFS order (for keyboard navigation) */
-export function collectAllPanelsOrdered(node: LayoutNode): string[] {
-  if (node.type === 'tabgroup') return [...node.panels];
-  return node.children.flatMap(child => collectAllPanelsOrdered(child));
-}
-
-/** Count total panels */
-export function countPanels(node: LayoutNode): number {
-  if (node.type === 'tabgroup') return node.panels.length;
-  return node.children.reduce((sum, child) => sum + countPanels(child), 0);
-}
-
-/**
- * Detect which edge a panel is closest to in the layout.
- * Used by UNPIN_PANEL to determine which edge strip to place the panel on.
- */
-export function detectPanelEdge(node: LayoutNode, panelId: string): DockEdge {
-  return detectEdgeInner(node, panelId, []);
-}
-
-/**
- * Find the tab group at a specific edge of the layout.
- * Only matches tab groups at the outermost level on the correct axis.
- */
-export function findTabGroupByEdge(node: LayoutNode, edge: DockEdge): string | null {
-  if (node.type === 'tabgroup') return null;
-
-  const isHorizontal = edge === 'left' || edge === 'right';
-  if (isHorizontal && node.direction !== 'horizontal') return null;
-  if (!isHorizontal && node.direction !== 'vertical') return null;
-
-  const idx = (edge === 'left' || edge === 'top') ? 0 : node.children.length - 1;
-  const child = node.children[idx];
-  if (!child) return null;
-  if (child.type === 'tabgroup') return child.id;
-  return findTabGroupByEdge(child, edge);
-}
-
-// ─── Tree update operations ─────────────────────────────────────────
-
-/** Set active panel in a tab group */
-export function setActivePanel(node: LayoutNode, tabGroupId: string, panelId: string): LayoutNode {
+function setActivePanelInner(node: LayoutNode, tabGroupId: string, panelId: string): LayoutNode {
   if (node.type === 'tabgroup') {
     return (node.id === tabGroupId && node.panels.includes(panelId))
       ? { ...node, activePanel: panelId }
       : node;
   }
-  return { ...node, children: node.children.map(c => setActivePanel(c, tabGroupId, panelId)) };
+  return { ...node, children: node.children.map(c => setActivePanelInner(c, tabGroupId, panelId)) };
 }
 
-/** Update sizes of a specific split node */
-export function updateSizes(node: LayoutNode, splitId: string, sizes: number[]): LayoutNode {
+function updateSizesInner(node: LayoutNode, splitId: string, sizes: number[]): LayoutNode {
   if (node.type === 'tabgroup') return node;
   if (node.id === splitId) return { ...node, sizes };
-  return { ...node, children: node.children.map(c => updateSizes(c, splitId, sizes)) };
+  return { ...node, children: node.children.map(c => updateSizesInner(c, splitId, sizes)) };
 }
 
-/** Update a tab group by ID using an updater function */
-export function updateTabGroup(
+function updateTabGroupInner(
   node: LayoutNode,
   tabGroupId: string,
   updater: (tg: TabGroupNode) => TabGroupNode,
 ): LayoutNode {
   if (node.type === 'tabgroup') return node.id === tabGroupId ? updater(node) : node;
-  return { ...node, children: node.children.map(c => updateTabGroup(c, tabGroupId, updater)) };
+  return { ...node, children: node.children.map(c => updateTabGroupInner(c, tabGroupId, updater)) };
 }
 
-/** Move a panel to position 0 in its tab group */
-export function reorderPanelToFront(node: LayoutNode, tabGroupId: string, panelId: string): LayoutNode {
-  return updateTabGroup(node, tabGroupId, tg => {
-    if (!tg.panels.includes(panelId)) return tg;
-    return { ...tg, panels: [panelId, ...tg.panels.filter(p => p !== panelId)], activePanel: panelId };
-  });
+function findTabGroupForPanelInner(node: LayoutNode, panelId: string): string | null {
+  if (node.type === 'tabgroup') return node.panels.includes(panelId) ? node.id : null;
+  for (const child of node.children) {
+    const result = findTabGroupForPanelInner(child, panelId);
+    if (result) return result;
+  }
+  return null;
 }
 
-/** Find next/previous panel in DFS order (for Ctrl+Tab navigation) */
-export function findNextPanel(node: LayoutNode, currentPanelId: string): string | null {
-  const all = collectAllPanelsOrdered(node);
-  const idx = all.indexOf(currentPanelId);
-  if (idx === -1) return all[0] || null;
-  return all[(idx + 1) % all.length] || null;
-}
-
-export function findPreviousPanel(node: LayoutNode, currentPanelId: string): string | null {
-  const all = collectAllPanelsOrdered(node);
-  const idx = all.indexOf(currentPanelId);
-  if (idx === -1) return all[all.length - 1] || null;
-  return all[(idx - 1 + all.length) % all.length] || null;
+function findFirstTabGroupInner(node: LayoutNode): string | null {
+  if (node.type === 'tabgroup') return node.id;
+  for (const child of node.children) {
+    const result = findFirstTabGroupInner(child);
+    if (result) return result;
+  }
+  return null;
 }
 
 // ─── Internal helpers ───────────────────────────────────────────────
 
-function createEmptyGroup(): TabGroupNode {
-  return { type: 'tabgroup', id: genId('tg'), panels: [], activePanel: '' };
-}
-
 function splitGroup(group: TabGroupNode, panelId: string, position: DockPosition): SplitNode {
   const newGroup: TabGroupNode = {
     type: 'tabgroup',
-    id: genId('tg'),
+    id: genId(),
     panels: [panelId],
     activePanel: panelId,
   };
@@ -432,7 +370,7 @@ function splitGroup(group: TabGroupNode, panelId: string, position: DockPosition
 
   return {
     type: 'split',
-    id: genId('split'),
+    id: genId(),
     direction: isHorizontal ? 'horizontal' : 'vertical',
     children,
     sizes: [50, 50],
@@ -454,7 +392,7 @@ function detectEdgeInner(node: LayoutNode, panelId: string, path: string[]): Doc
     return 'left';
   }
   for (let i = 0; i < node.children.length; i++) {
-    if (!findTabGroupForPanel(node.children[i], panelId)) continue;
+    if (!findTabGroupForPanelInner(node.children[i], panelId)) continue;
     let pos = '';
     if (node.direction === 'horizontal') {
       pos = i === 0 ? 'left' : i === node.children.length - 1 ? 'right' : '';
@@ -473,7 +411,165 @@ function positionToEdge(position: DockPosition): DockEdge {
   return 'bottom';
 }
 
-// ─── State-level helpers ────────────────────────────────────────────
+// ─── Compat wrapper functions ──────────────────────────────────────
+
+/** Find which tab group contains a panel */
+export function findTabGroupForPanel(node: LayoutNode, panelId: string): string | null {
+  return findTabGroupForPanelInner(node, panelId);
+}
+
+/** Find the first tab group (DFS) */
+export function findFirstTabGroup(node: LayoutNode): string | null {
+  return findFirstTabGroupInner(node);
+}
+
+/** Find a tab group by ID */
+export function findTabGroupById(node: LayoutNode, id: string): TabGroupNode | null {
+  return findGroupInner(node, id);
+}
+
+/** Find all tab groups in DFS order */
+export function findAllTabGroups(node: LayoutNode): TabGroupNode[] {
+  return allGroupsInner(node);
+}
+
+/** Collect all panels in DFS order (for keyboard navigation) */
+export function collectAllPanelsOrdered(node: LayoutNode): string[] {
+  return allPanelIdsInner(node);
+}
+
+/** Collect all panel IDs in the layout tree */
+export function collectLayoutPanelIds(node: LayoutNode): Set<string> {
+  return new Set(allPanelIdsInner(node));
+}
+
+/** Count total panels */
+export function countPanels(node: LayoutNode): number {
+  if (node.type === 'tabgroup') return node.panels.length;
+  return node.children.reduce((sum, child) => sum + countPanels(child), 0);
+}
+
+/**
+ * Remove a panel from the layout tree.
+ * Returns null if the tree becomes completely empty.
+ */
+export function removePanel(root: LayoutNode, panelId: string): LayoutNode | null {
+  return removePanelInner(root, panelId);
+}
+
+/**
+ * Insert a panel into a specific tab group (center/tab drop).
+ */
+export function insertInGroup(
+  root: LayoutNode,
+  targetGroupId: string,
+  panelId: string,
+): LayoutNode {
+  return insertInGroupInner(root, targetGroupId, panelId);
+}
+
+/**
+ * Insert a panel next to a specific tab group by splitting it.
+ */
+export function insertBySplit(
+  root: LayoutNode,
+  targetGroupId: string,
+  panelId: string,
+  position: DockPosition,
+): LayoutNode {
+  return insertBySplitInner(root, targetGroupId, panelId, position);
+}
+
+/**
+ * Insert a panel at a root-level edge of the layout.
+ */
+export function insertAtEdge(
+  root: LayoutNode,
+  panelId: string,
+  edge: DockEdge,
+  sizePercent = 20,
+): LayoutNode {
+  return insertAtEdgeInner(root, panelId, edge, sizePercent);
+}
+
+/**
+ * Move a panel from its current location to a new target.
+ */
+export function movePanel(
+  root: LayoutNode,
+  panelId: string,
+  targetGroupId: string,
+  position: DockPosition,
+): LayoutNode {
+  return movePanelInner(root, panelId, targetGroupId, position);
+}
+
+/**
+ * Detect which edge a panel is closest to in the layout.
+ */
+export function detectPanelEdge(node: LayoutNode, panelId: string): DockEdge {
+  return detectEdgeInner(node, panelId, []);
+}
+
+/**
+ * Find the tab group at a specific edge of the layout.
+ */
+export function findTabGroupByEdge(node: LayoutNode, edge: DockEdge): string | null {
+  if (node.type === 'tabgroup') return null;
+
+  const isHorizontal = edge === 'left' || edge === 'right';
+  if (isHorizontal && node.direction !== 'horizontal') return null;
+  if (!isHorizontal && node.direction !== 'vertical') return null;
+
+  const idx = (edge === 'left' || edge === 'top') ? 0 : node.children.length - 1;
+  const child = node.children[idx];
+  if (!child) return null;
+  if (child.type === 'tabgroup') return child.id;
+  return findTabGroupByEdge(child, edge);
+}
+
+/** Set active panel in a tab group */
+export function setActivePanel(node: LayoutNode, tabGroupId: string, panelId: string): LayoutNode {
+  return setActivePanelInner(node, tabGroupId, panelId);
+}
+
+/** Update sizes of a specific split node */
+export function updateSizes(node: LayoutNode, splitId: string, sizes: number[]): LayoutNode {
+  return updateSizesInner(node, splitId, sizes);
+}
+
+/** Update a tab group by ID using an updater function */
+export function updateTabGroup(
+  node: LayoutNode,
+  tabGroupId: string,
+  updater: (tg: TabGroupNode) => TabGroupNode,
+): LayoutNode {
+  return updateTabGroupInner(node, tabGroupId, updater);
+}
+
+/** Move a panel to position 0 in its tab group */
+export function reorderPanelToFront(node: LayoutNode, tabGroupId: string, panelId: string): LayoutNode {
+  return updateTabGroupInner(node, tabGroupId, tg => {
+    if (!tg.panels.includes(panelId)) return tg;
+    return { ...tg, panels: [panelId, ...tg.panels.filter(p => p !== panelId)], activePanel: panelId };
+  });
+}
+
+/** Find next panel in DFS order (for Ctrl+Tab navigation) */
+export function findNextPanel(node: LayoutNode, currentPanelId: string): string | null {
+  const all = allPanelIdsInner(node);
+  const idx = all.indexOf(currentPanelId);
+  if (idx === -1) return all[0] || null;
+  return all[(idx + 1) % all.length] || null;
+}
+
+/** Find previous panel in DFS order */
+export function findPreviousPanel(node: LayoutNode, currentPanelId: string): string | null {
+  const all = allPanelIdsInner(node);
+  const idx = all.indexOf(currentPanelId);
+  if (idx === -1) return all[all.length - 1] || null;
+  return all[(idx - 1 + all.length) % all.length] || null;
+}
 
 /** Check if a panel exists anywhere in the state */
 export function isPanelPlaced(
