@@ -31,6 +31,7 @@ import {
   findNextPanel,
   findPreviousPanel,
   genId,
+  syncIdCounter,
 } from '../layout/LayoutTree';
 
 // ─── Action types ────────────────────────────────────────────────────
@@ -575,6 +576,8 @@ export function validateState(state: DockManagerState): DockManagerState {
   if (!s.layout) {
     s.layout = { type: 'tabgroup', id: genId('tg'), panels: [], activePanel: '' };
   }
+
+  syncIdCounter(s.layout);
 
   if (s.activePaneId && !s.panels[s.activePaneId]) {
     const allPanels = collectAllPanelsOrdered(s.layout);

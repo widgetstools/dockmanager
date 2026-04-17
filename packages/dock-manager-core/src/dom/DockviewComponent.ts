@@ -11,7 +11,7 @@ import type {
 } from '../types/dock';
 import { createPreventableEvent } from '../types/dock';
 import { dockReducer, type DockAction } from '../reducer/dockReducer';
-import { findFirstTabGroup, findTabGroupForPanel } from '../layout/LayoutTree';
+import { findFirstTabGroup, findTabGroupForPanel, syncIdCounter } from '../layout/LayoutTree';
 import { checkLayoutInvariants, findLostPanels } from '../layout/layoutInvariants';
 import { PanelApi } from '../api/PanelApi';
 import { DockviewApi } from '../api/DockviewApi';
@@ -184,6 +184,7 @@ export class DockviewComponent {
     this.container = element;
     this.options = options;
     this.state = options.initialState;
+    syncIdCounter(this.state.layout);
     this.historyManager = new StateHistoryManager();
 
     // Build root DOM structure matching DockManager.tsx

@@ -130,7 +130,7 @@ export type { PanelFinderOptions } from './dom/PanelFinder';
 // the primary public API. Use DockviewApi for programmatic control.
 
 /** @internal */
-export { genId, resetIdCounter } from './layout/LayoutTree';
+export { genId, resetIdCounter, syncIdCounter } from './layout/LayoutTree';
 
 // ─── Lifecycle utilities ─────────────────────────────────────────────
 

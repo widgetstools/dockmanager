@@ -17,12 +17,14 @@
  * can take, so the failing one is flushed out deterministically.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { dockReducer, createDefaultState, type DockAction } from '../reducer/dockReducer';
+import { dockReducer, createDefaultState, validateState, type DockAction } from '../reducer/dockReducer';
 import type { DockManagerState, DockPosition, LayoutNode } from '../types/dock';
 import {
   resetIdCounter,
+  syncIdCounter,
   findAllTabGroups,
   findTabGroupForPanel,
+  genId,
 } from '../layout/LayoutTree';
 import { checkLayoutInvariants } from '../layout/layoutInvariants';
 
@@ -340,5 +342,68 @@ describe('fuzz starting from trading-terminal layout', () => {
       console.error('final layout:', JSON.stringify(fail.layout, null, 2));
       throw new Error(`fuzz violation at seed=${fail.seedNum} step=${fail.step}`);
     }
+  });
+});
+
+// ── syncIdCounter prevents DUP_GROUP_ID after restoring saved layouts ──
+
+describe('syncIdCounter prevents duplicate IDs on restored layouts', () => {
+  it('genId produces unique IDs after syncIdCounter scans a restored layout', () => {
+    resetIdCounter();
+    const restored = sp('root', 'horizontal', [50, 50], [
+      tg('tg_5', ['a']),
+      tg('tg_10', ['b']),
+    ]);
+    syncIdCounter(restored);
+    const newId = genId('tg');
+    expect(newId).toBe('tg_11');
+  });
+
+  it('float+dock on a restored layout with high IDs does not produce DUP_GROUP_ID', () => {
+    resetIdCounter();
+    const state = base(
+      sp('split_8', 'horizontal', [50, 50], [
+        tg('tg_5', ['bondBlotter', 'chart']),
+        tg('tg_7', ['orderBook', 'blotter']),
+      ]),
+      {
+        bondBlotter: p('bondBlotter', 'Bond Blotter'),
+        chart: p('chart', 'Chart'),
+        orderBook: p('orderBook', 'Order Book'),
+        blotter: p('blotter', 'Orders'),
+      },
+      'bondBlotter',
+    );
+    syncIdCounter(state.layout);
+
+    const floated = dockReducer(state, {
+      type: 'FLOAT_PANEL',
+      payload: { panelId: 'chart', x: 100, y: 100, width: 400, height: 300 },
+    });
+    const docked = dockReducer(floated, {
+      type: 'DOCK_FLOATING',
+      payload: { panelId: 'chart', targetTabGroupId: 'tg_5', position: 'left' },
+    });
+    const violations = checkLayoutInvariants(docked);
+    expect(violations).toEqual([]);
+  });
+
+  it('validateState calls syncIdCounter so consumers get protection automatically', () => {
+    resetIdCounter();
+    const restored: DockManagerState = {
+      layout: sp('split_3', 'horizontal', [50, 50], [
+        tg('tg_4', ['a']),
+        tg('tg_6', ['b']),
+      ]),
+      panels: { a: p('a', 'A'), b: p('b', 'B') },
+      floatingPanels: [],
+      popoutPanels: [],
+      unpinnedPanels: [],
+      nextZIndex: 1000,
+      activePaneId: 'a',
+    };
+    validateState(restored);
+    const newId = genId('tg');
+    expect(parseInt(newId.split('_')[1], 10)).toBeGreaterThan(6);
   });
 });

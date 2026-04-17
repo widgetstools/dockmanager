@@ -34,6 +34,29 @@ export function resetIdCounter(): void {
   _idCounter = 0;
 }
 
+/**
+ * Scan a layout tree for auto-generated IDs (prefix_N) and advance the
+ * counter past the highest N found. Call this after restoring a layout
+ * from localStorage or any external source so that subsequent genId()
+ * calls never collide with existing IDs.
+ */
+export function syncIdCounter(root: LayoutNode | null): void {
+  if (!root) return;
+  let max = _idCounter;
+  const walk = (node: LayoutNode) => {
+    const m = node.id.match(/_(\d+)$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > max) max = n;
+    }
+    if (node.type === 'split') {
+      node.children.forEach(walk);
+    }
+  };
+  walk(root);
+  _idCounter = max;
+}
+
 // ─── Core operations ────────────────────────────────────────────────
 
 /**
