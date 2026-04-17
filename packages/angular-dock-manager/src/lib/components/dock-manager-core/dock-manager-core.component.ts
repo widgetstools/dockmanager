@@ -105,6 +105,9 @@ export class DockManagerCoreComponent implements AfterViewInit, OnDestroy, OnCha
     position: DockPosition;
   }>();
 
+  /** Emits when the user explicitly saves the layout via context menu */
+  @Output() saveLayout = new EventEmitter<DockManagerState>();
+
   @ViewChild('container', { static: true }) containerRef!: ElementRef<HTMLDivElement>;
 
   private dock: DockviewComponent | null = null;
@@ -180,6 +183,11 @@ export class DockManagerCoreComponent implements AfterViewInit, OnDestroy, OnCha
 
       onWillDrop: (event, sourceId, targetId, position) => {
         this.willDrop.emit({ event, sourceId, targetId, position });
+        this.cdr.markForCheck();
+      },
+
+      onSaveLayout: (state: DockManagerState) => {
+        this.saveLayout.emit(state);
         this.cdr.markForCheck();
       },
     };

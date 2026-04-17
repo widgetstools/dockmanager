@@ -338,6 +338,7 @@ function App() {
           widgets={WIDGETS}
           onReady={setApi}
           onStateChange={state => { latestStateRef.current = state; }}
+          onSaveLayout={state => { console.log('[Demo] Layout saved by user', state); }}
           renderTab={renderTab}
           renderHeaderActions={renderHeaderActions}
           renderWatermark={() => (

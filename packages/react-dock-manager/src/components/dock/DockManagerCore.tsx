@@ -76,6 +76,8 @@ export interface DockManagerCoreProps {
   onWillClose?: (event: PreventableDockEvent, panelId: string) => void;
   /** Called before a drop (preventable) */
   onWillDrop?: (event: PreventableDockEvent, sourceId: string, targetId: string, position: DockPosition) => void;
+  /** Called when the user explicitly saves the layout via context menu */
+  onSaveLayout?: (state: DockManagerState) => void;
   /** Theme: 'light', 'dark', or a DockTheme object */
   theme?: 'light' | 'dark' | DockTheme;
   /** Whether to show edge dock indicators. Defaults to true. */
@@ -124,6 +126,7 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
       onStateChange,
       onWillClose,
       onWillDrop,
+      onSaveLayout,
       theme = 'light',
       allowRootDock,
       resourceStrings,
@@ -136,8 +139,8 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
     const [, forceUpdate] = useState(0);
 
     // Keep refs to latest callbacks so core doesn't need to be re-created
-    const callbackRefs = useRef({ renderPanel, renderTab, renderHeaderActions, renderWatermark, onStateChange, onWillClose, onWillDrop, onReady, widgets });
-    callbackRefs.current = { renderPanel, renderTab, renderHeaderActions, renderWatermark, onStateChange, onWillClose, onWillDrop, onReady, widgets };
+    const callbackRefs = useRef({ renderPanel, renderTab, renderHeaderActions, renderWatermark, onStateChange, onWillClose, onWillDrop, onSaveLayout, onReady, widgets });
+    callbackRefs.current = { renderPanel, renderTab, renderHeaderActions, renderWatermark, onStateChange, onWillClose, onWillDrop, onSaveLayout, onReady, widgets };
 
     // Initialize DockviewComponent
     useEffect(() => {
@@ -204,6 +207,10 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
 
         onWillDrop: (event, sourceId, targetId, position) => {
           callbackRefs.current.onWillDrop?.(event, sourceId, targetId, position);
+        },
+
+        onSaveLayout: (state) => {
+          callbackRefs.current.onSaveLayout?.(state);
         },
       };
 

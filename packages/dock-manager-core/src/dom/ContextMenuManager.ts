@@ -25,6 +25,8 @@ export interface ContextMenuManagerOptions {
   theme?: 'light' | 'dark';
   /** Custom resource strings for localization. */
   resourceStrings?: Partial<DockResourceStrings>;
+  /** Called when the user requests an explicit layout save via context menu. */
+  onSaveLayout?: (state: DockManagerState) => void;
 }
 
 interface MenuItem {
@@ -214,6 +216,18 @@ export class ContextMenuManager {
       },
       disabled: false,
     });
+
+    // Save Layout — always enabled
+    if (this.options.onSaveLayout) {
+      entries.push({ separator: true });
+      entries.push({
+        label: this.resourceStrings.saveLayout,
+        action: () => {
+          this.options.onSaveLayout!(this.options.getState());
+        },
+        disabled: false,
+      });
+    }
 
     return entries;
   }

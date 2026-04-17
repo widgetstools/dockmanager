@@ -90,6 +90,8 @@ export interface DockviewComponentOptions {
   onWillClose?: (event: PreventableDockEvent, panelId: string) => void;
   /** Called before a drag-and-drop completes. Call `event.preventDefault()` to cancel. */
   onWillDrop?: (event: PreventableDockEvent, sourceId: string, targetId: string, position: DockPosition) => void;
+  /** Called when the user explicitly requests a layout save via context menu. */
+  onSaveLayout?: (state: DockManagerState) => void;
   /**
    * Color theme. Can be:
    *   - `'light'` / `'dark'` — uses the default VS Code-style theme
@@ -976,6 +978,9 @@ export class DockviewComponent {
       onSetActivePane: (panelId) => {
         this.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId } });
       },
+      onSaveLayout: this.options.onSaveLayout
+        ? () => this.options.onSaveLayout!(this.state)
+        : undefined,
       onSetHeaderCollapsed: (tabGroupId, collapsed) => {
         this.dispatch({ type: 'SET_HEADER_COLLAPSED', payload: { tabGroupId, collapsed } });
       },

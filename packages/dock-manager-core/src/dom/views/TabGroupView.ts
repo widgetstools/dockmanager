@@ -28,6 +28,7 @@ export interface TabGroupViewCallbacks {
   onToggleMaximize?: (panelId: string) => void;
   createContent: (panelId: string, container: HTMLElement) => IDisposable;
   createTab?: (panelId: string, container: HTMLElement, isActive: boolean) => IDisposable;
+  onSaveLayout?: () => void;
   onSetHeaderCollapsed: (tabGroupId: string, collapsed: boolean) => void;
   createHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string, container: HTMLElement) => IDisposable;
   createWatermark?: (container: HTMLElement) => IDisposable;
@@ -730,6 +731,12 @@ export class TabGroupView {
 
     // Maximize
     addItem(this.resourceStrings.maximize, () => this.callbacks.onMaximizePanel(panelId), locked);
+
+    // Save Layout — always enabled
+    if (this.callbacks.onSaveLayout) {
+      addSeparator();
+      addItem(this.resourceStrings.saveLayout, () => this.callbacks.onSaveLayout!());
+    }
 
     // Propagate dark-mode class so CSS vars resolve correctly when the menu is
     // portaled to document.body (outside the dock root's `.dark` ancestor).
