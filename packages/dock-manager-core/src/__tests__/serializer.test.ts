@@ -1,19 +1,44 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { DockManagerState } from '../types/dock';
+import type { DockManagerState, PanelConfig, Placement } from '../types/dock';
 import {
   serialize,
   deserialize,
   saveToLocalStorage,
   loadFromLocalStorage,
   clearLocalStorage,
+  exportToFile,
+  importFromFile,
   exportAsUrl,
   importFromUrl,
   validateIntegrity,
+  SerializedDockLayout,
 } from '../serialization/serializer';
 
+// ─── Test helpers ───────────────────────────────────────────────────
+
 function makeState(panelIds: string[] = ['p1', 'p2']): DockManagerState {
+  const panels = new Map<string, PanelConfig>();
+  for (const id of panelIds) {
+    panels.set(id, { id, title: `Panel ${id}`, closable: true });
+  }
+
+  const placements = new Map<string, Placement>();
+  for (const id of panelIds) {
+    placements.set(id, { type: 'docked', groupId: 'tg1' });
+  }
+
   return {
     layout: { type: 'tabgroup' as const, id: 'tg1', panels: panelIds, activePanel: panelIds[0] || '' },
+    panels,
+    placements,
+    activePaneId: panelIds[0] || '',
+    nextZIndex: 1000,
+  };
+}
+
+function makeV1V2State(panelIds: string[] = ['p1', 'p2']): any {
+  return {
+    layout: { type: 'tabgroup', id: 'tg1', panels: panelIds, activePanel: panelIds[0] || '' },
     panels: Object.fromEntries(panelIds.map(id => [id, { id, title: `Panel ${id}`, closable: true }])),
     floatingPanels: [],
     popoutPanels: [],
@@ -23,17 +48,23 @@ function makeState(panelIds: string[] = ['p1', 'p2']): DockManagerState {
   };
 }
 
-describe('serialize / deserialize round-trip', () => {
+// ─── v3 round-trip ──────────────────────────────────────────────────
+
+describe('v3 serialize / deserialize round-trip', () => {
   it('returns equivalent state after round-trip', () => {
     const state = makeState();
-    const { state: restored } = deserialize(serialize(state));
+    const serialized = serialize(state);
+    const restored = deserialize(serialized);
     expect(restored.layout).toEqual(state.layout);
-    expect(restored.panels).toEqual(state.panels);
+    expect([...restored.panels.entries()]).toEqual([...state.panels.entries()]);
+    expect([...restored.placements.entries()]).toEqual([...state.placements.entries()]);
+    expect(restored.activePaneId).toBe(state.activePaneId);
+    expect(restored.nextZIndex).toBe(state.nextZIndex);
   });
 
   it('preserves layout structure (tabgroup)', () => {
     const state = makeState(['a', 'b', 'c']);
-    const { state: restored } = deserialize(serialize(state));
+    const restored = deserialize(serialize(state));
     expect(restored.layout.type).toBe('tabgroup');
     if (restored.layout.type === 'tabgroup') {
       expect(restored.layout.panels).toEqual(['a', 'b', 'c']);
@@ -41,147 +72,72 @@ describe('serialize / deserialize round-trip', () => {
     }
   });
 
-  it('preserves panel configs', () => {
+  it('preserves panel configs with extra fields', () => {
     const state = makeState(['x']);
-    state.panels['x'].icon = 'star';
-    state.panels['x'].closable = false;
-    const { state: restored } = deserialize(serialize(state));
-    expect(restored.panels['x']).toEqual(state.panels['x']);
+    const config = state.panels.get('x')!;
+    config.icon = 'star';
+    config.closable = false;
+    config.widgetType = 'chart';
+    config.widgetProps = { symbol: 'AAPL' };
+    const restored = deserialize(serialize(state));
+    expect(restored.panels.get('x')).toEqual(config);
   });
 
-  it('preserves floating panels', () => {
+  it('preserves floating placements', () => {
     const state = makeState(['p1']);
-    state.floatingPanels = [{ panelId: 'p1', x: 10, y: 20, width: 300, height: 200, zIndex: 5 }];
+    state.placements.set('p1', {
+      type: 'floating', x: 10, y: 20, width: 300, height: 200, zIndex: 5,
+    });
     state.layout = { type: 'tabgroup', id: 'tg1', panels: [], activePanel: '' };
-    const { state: restored } = deserialize(serialize(state));
-    expect(restored.floatingPanels).toEqual(state.floatingPanels);
+    const restored = deserialize(serialize(state));
+    expect(restored.placements.get('p1')).toEqual({
+      type: 'floating', x: 10, y: 20, width: 300, height: 200, zIndex: 5,
+    });
   });
 
-  it('preserves unpinned panels', () => {
+  it('preserves unpinned placements', () => {
     const state = makeState(['p1']);
-    state.unpinnedPanels = [{ panelId: 'p1', edge: 'left', size: 250 }];
+    state.placements.set('p1', { type: 'unpinned', edge: 'left', size: 250 });
     state.layout = { type: 'tabgroup', id: 'tg1', panels: [], activePanel: '' };
-    const { state: restored } = deserialize(serialize(state));
-    expect(restored.unpinnedPanels).toEqual(state.unpinnedPanels);
+    const restored = deserialize(serialize(state));
+    expect(restored.placements.get('p1')).toEqual({ type: 'unpinned', edge: 'left', size: 250 });
   });
 
-  it('accepts all four unpinned edges including top (regression)', () => {
-    // Regression: validator whitelist was missing 'top', so any layout with
-    // a top-edge unpinned panel failed to deserialize.
-    const state = makeState(['p1', 'p2', 'p3', 'p4']);
+  it('preserves popout placements', () => {
+    const state = makeState(['p1']);
+    state.placements.set('p1', {
+      type: 'popout', windowName: 'win1', x: 100, y: 200, width: 400, height: 300,
+    });
     state.layout = { type: 'tabgroup', id: 'tg1', panels: [], activePanel: '' };
-    state.unpinnedPanels = [
-      { panelId: 'p1', edge: 'left', size: 200 },
-      { panelId: 'p2', edge: 'right', size: 200 },
-      { panelId: 'p3', edge: 'top', size: 150 },
-      { panelId: 'p4', edge: 'bottom', size: 150 },
-    ];
-    const { state: restored } = deserialize(serialize(state));
-    expect(restored.unpinnedPanels).toEqual(state.unpinnedPanels);
+    const restored = deserialize(serialize(state));
+    expect(restored.placements.get('p1')).toEqual({
+      type: 'popout', windowName: 'win1', x: 100, y: 200, width: 400, height: 300,
+    });
   });
 
   it('preserves maximizedPanelId when set', () => {
     const state = makeState(['p1', 'p2']);
     state.maximizedPanelId = 'p1';
-    const { state: restored } = deserialize(serialize(state));
+    const restored = deserialize(serialize(state));
     expect(restored.maximizedPanelId).toBe('p1');
   });
-});
 
-describe('serialize format', () => {
-  it('output is valid JSON', () => {
-    const json = serialize(makeState());
-    expect(() => JSON.parse(json)).not.toThrow();
+  it('serialize sets version to 3', () => {
+    const serialized = serialize(makeState());
+    expect(serialized.version).toBe(3);
   });
 
-  it('contains version field set to 2', () => {
-    const parsed = JSON.parse(serialize(makeState()));
-    expect(parsed.version).toBe(2);
+  it('serialize converts Maps to Records', () => {
+    const serialized = serialize(makeState(['p1']));
+    expect(typeof serialized.panels).toBe('object');
+    expect(serialized.panels).not.toBeInstanceOf(Map);
+    expect(serialized.panels['p1']).toBeDefined();
+    expect(typeof serialized.placements).toBe('object');
+    expect(serialized.placements).not.toBeInstanceOf(Map);
+    expect(serialized.placements['p1']).toBeDefined();
   });
 
-  it('contains a timestamp', () => {
-    const before = Date.now();
-    const parsed = JSON.parse(serialize(makeState()));
-    const after = Date.now();
-    expect(parsed.timestamp).toBeGreaterThanOrEqual(before);
-    expect(parsed.timestamp).toBeLessThanOrEqual(after);
-  });
-
-  it('contains state', () => {
-    const parsed = JSON.parse(serialize(makeState()));
-    expect(parsed.state).toBeDefined();
-    expect(parsed.state.layout).toBeDefined();
-    expect(parsed.state.panels).toBeDefined();
-  });
-});
-
-describe('deserialize validation', () => {
-  it('throws on invalid JSON', () => {
-    expect(() => deserialize('not json {')).toThrow('Invalid JSON');
-  });
-
-  it('throws on missing layout', () => {
-    const json = JSON.stringify({ version: 2, timestamp: 0, state: { panels: {} } });
-    expect(() => deserialize(json)).toThrow();
-  });
-
-  it('throws on missing panels', () => {
-    const json = JSON.stringify({
-      version: 2,
-      timestamp: 0,
-      state: { layout: { type: 'tabgroup', id: 'tg1', panels: [], activePanel: '' } },
-    });
-    expect(() => deserialize(json)).toThrow();
-  });
-
-  it('handles legacy format (no version wrapper, raw layout+panels)', () => {
-    const state = makeState();
-    const legacyJson = JSON.stringify(state);
-    const { state: restored } = deserialize(legacyJson);
-    expect(restored.layout).toEqual(state.layout);
-    expect(restored.panels).toEqual(state.panels);
-  });
-});
-
-describe('deserialize normalization', () => {
-  it('adds missing popoutPanels array', () => {
-    const state = makeState();
-    const raw: any = { ...state };
-    delete raw.popoutPanels;
-    const json = JSON.stringify({ version: 2, timestamp: 0, state: raw });
-    const { state: restored } = deserialize(json);
-    expect(restored.popoutPanels).toEqual([]);
-  });
-
-  it('adds missing activePaneId', () => {
-    const state = makeState();
-    const raw: any = { ...state };
-    delete raw.activePaneId;
-    const json = JSON.stringify({ version: 2, timestamp: 0, state: raw });
-    const { state: restored } = deserialize(json);
-    expect(restored.activePaneId).toBe('');
-  });
-
-  it('converts popout panels to floating on deserialize', () => {
-    const state = makeState(['p1', 'p2', 'p3']);
-    state.popoutPanels = [
-      { panelId: 'p3', windowName: 'win1', x: 100, y: 200, width: 400, height: 300 },
-    ];
-    state.layout = { type: 'tabgroup', id: 'tg1', panels: ['p1', 'p2'], activePanel: 'p1' };
-    const json = JSON.stringify({ version: 2, timestamp: 0, state });
-    const { state: restored } = deserialize(json);
-    expect(restored.popoutPanels).toEqual([]);
-    expect(restored.floatingPanels).toHaveLength(1);
-    expect(restored.floatingPanels[0].panelId).toBe('p3');
-    expect(restored.floatingPanels[0].x).toBe(100);
-    expect(restored.floatingPanels[0].y).toBe(200);
-    expect(restored.floatingPanels[0].width).toBe(400);
-    expect(restored.floatingPanels[0].height).toBe(300);
-  });
-});
-
-describe('complex state round-trip', () => {
-  it('split layout with nested tab groups survives round-trip', () => {
+  it('complex split layout survives round-trip', () => {
     const state: DockManagerState = {
       layout: {
         type: 'split',
@@ -202,54 +158,165 @@ describe('complex state round-trip', () => {
         ],
         sizes: [30, 70],
       },
-      panels: {
-        p1: { id: 'p1', title: 'Panel 1' },
-        p2: { id: 'p2', title: 'Panel 2' },
-        p3: { id: 'p3', title: 'Panel 3' },
-        p4: { id: 'p4', title: 'Panel 4' },
-      },
-      floatingPanels: [],
-      popoutPanels: [],
-      unpinnedPanels: [],
-      nextZIndex: 1,
+      panels: new Map([
+        ['p1', { id: 'p1', title: 'Panel 1' }],
+        ['p2', { id: 'p2', title: 'Panel 2' }],
+        ['p3', { id: 'p3', title: 'Panel 3' }],
+        ['p4', { id: 'p4', title: 'Panel 4' }],
+      ]),
+      placements: new Map([
+        ['p1', { type: 'docked', groupId: 'tg1' }],
+        ['p2', { type: 'docked', groupId: 'tg2' }],
+        ['p3', { type: 'docked', groupId: 'tg3' }],
+        ['p4', { type: 'docked', groupId: 'tg3' }],
+      ]),
       activePaneId: 'p1',
+      nextZIndex: 1,
     };
-    const { state: restored } = deserialize(serialize(state));
+    const restored = deserialize(serialize(state));
     expect(restored.layout).toEqual(state.layout);
-    expect(Object.keys(restored.panels)).toHaveLength(4);
+    expect(restored.panels.size).toBe(4);
+    expect(restored.placements.size).toBe(4);
+  });
+});
+
+// ─── v1/v2 deserialization ──────────────────────────────────────────
+
+describe('v1/v2 deserialization (migration)', () => {
+  it('deserializes v2 wrapped format with separate arrays', () => {
+    const v2Data = {
+      version: 2,
+      timestamp: Date.now(),
+      state: makeV1V2State(['p1', 'p2']),
+    };
+    const restored = deserialize(v2Data);
+    expect(restored.panels).toBeInstanceOf(Map);
+    expect(restored.placements).toBeInstanceOf(Map);
+    expect(restored.panels.size).toBe(2);
+    expect(restored.placements.get('p1')).toEqual({ type: 'docked', groupId: 'tg1' });
+    expect(restored.placements.get('p2')).toEqual({ type: 'docked', groupId: 'tg1' });
   });
 
-  it('state with floating panels survives round-trip', () => {
-    const state = makeState(['p1', 'p2', 'p3']);
-    state.floatingPanels = [
-      { panelId: 'p3', x: 50, y: 60, width: 200, height: 150, zIndex: 10 },
+  it('deserializes v1 wrapped format', () => {
+    const v1Data = {
+      version: 1,
+      timestamp: Date.now(),
+      state: makeV1V2State(['p1']),
+    };
+    const restored = deserialize(v1Data);
+    expect(restored.panels).toBeInstanceOf(Map);
+    expect(restored.placements.get('p1')).toEqual({ type: 'docked', groupId: 'tg1' });
+  });
+
+  it('deserializes legacy raw format (no version wrapper)', () => {
+    const rawState = makeV1V2State(['p1', 'p2']);
+    const restored = deserialize(rawState);
+    expect(restored.panels).toBeInstanceOf(Map);
+    expect(restored.panels.size).toBe(2);
+  });
+
+  it('converts floatingPanels[] to floating placements', () => {
+    const raw = makeV1V2State(['p1', 'p2']);
+    raw.floatingPanels = [
+      { panelId: 'p2', x: 50, y: 60, width: 200, height: 150, zIndex: 10, sourceTabGroupId: 'tg1' },
     ];
-    state.layout = { type: 'tabgroup', id: 'tg1', panels: ['p1', 'p2'], activePanel: 'p1' };
-    const { state: restored } = deserialize(serialize(state));
-    expect(restored.floatingPanels).toEqual(state.floatingPanels);
+    raw.layout = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
+    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    const placement = restored.placements.get('p2');
+    expect(placement).toEqual({
+      type: 'floating',
+      x: 50, y: 60, width: 200, height: 150, zIndex: 10,
+      sourceGroupId: 'tg1',
+    });
+  });
+
+  it('converts unpinnedPanels[] to unpinned placements', () => {
+    const raw = makeV1V2State(['p1', 'p2']);
+    raw.unpinnedPanels = [
+      { panelId: 'p2', edge: 'right', size: 300, sourceTabGroupId: 'tg1' },
+    ];
+    raw.layout = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
+    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    const placement = restored.placements.get('p2');
+    expect(placement).toEqual({
+      type: 'unpinned',
+      edge: 'right', size: 300,
+      sourceGroupId: 'tg1',
+    });
+  });
+
+  it('converts popoutPanels[] to floating placements (can\'t restore OS windows)', () => {
+    const raw = makeV1V2State(['p1', 'p2', 'p3']);
+    raw.popoutPanels = [
+      { panelId: 'p3', windowName: 'win1', x: 100, y: 200, width: 400, height: 300 },
+    ];
+    raw.layout = { type: 'tabgroup', id: 'tg1', panels: ['p1', 'p2'], activePanel: 'p1' };
+    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    const placement = restored.placements.get('p3');
+    expect(placement).toBeDefined();
+    expect(placement!.type).toBe('floating');
+    if (placement!.type === 'floating') {
+      expect(placement!.x).toBe(100);
+      expect(placement!.y).toBe(200);
+      expect(placement!.width).toBe(400);
+      expect(placement!.height).toBe(300);
+    }
+  });
+
+  it('adds stub config for floating panels missing from panels record', () => {
+    const raw = makeV1V2State(['p1']);
+    raw.floatingPanels = [
+      { panelId: 'orphan', x: 0, y: 0, width: 100, height: 100, zIndex: 1 },
+    ];
+    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    expect(restored.panels.has('orphan')).toBe(true);
+    expect(restored.panels.get('orphan')!.title).toBe('orphan');
+  });
+
+  it('adds stub config for unpinned panels missing from panels record', () => {
+    const raw = makeV1V2State(['p1']);
+    raw.unpinnedPanels = [
+      { panelId: 'orphan', edge: 'left', size: 200 },
+    ];
+    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    expect(restored.panels.has('orphan')).toBe(true);
+    expect(restored.panels.get('orphan')!.title).toBe('orphan');
+  });
+
+  it('preserves all four unpinned edges including top', () => {
+    const raw = makeV1V2State(['p1', 'p2', 'p3', 'p4']);
+    raw.layout = { type: 'tabgroup', id: 'tg1', panels: [], activePanel: '' };
+    raw.unpinnedPanels = [
+      { panelId: 'p1', edge: 'left', size: 200 },
+      { panelId: 'p2', edge: 'right', size: 200 },
+      { panelId: 'p3', edge: 'top', size: 150 },
+      { panelId: 'p4', edge: 'bottom', size: 150 },
+    ];
+    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    expect(restored.placements.get('p1')).toEqual({ type: 'unpinned', edge: 'left', size: 200, sourceGroupId: undefined });
+    expect(restored.placements.get('p3')).toEqual({ type: 'unpinned', edge: 'top', size: 150, sourceGroupId: undefined });
   });
 });
 
-describe('URL encoding', () => {
-  it('exportAsUrl produces a string', () => {
-    const result = exportAsUrl(makeState());
-    expect(typeof result).toBe('string');
-    expect(result.length).toBeGreaterThan(0);
+// ─── Deserialize validation ─────────────────────────────────────────
+
+describe('deserialize validation', () => {
+  it('throws on non-object input', () => {
+    expect(() => deserialize(null)).toThrow();
+    expect(() => deserialize('string')).toThrow();
   });
 
-  it('importFromUrl(exportAsUrl(state)) returns equivalent state', () => {
-    const state = makeState(['a', 'b']);
-    const encoded = exportAsUrl(state);
-    const restored = importFromUrl(encoded);
-    expect(restored.layout).toEqual(state.layout);
-    expect(restored.panels).toEqual(state.panels);
-    expect(restored.floatingPanels).toEqual(state.floatingPanels);
+  it('throws on missing layout in v1/v2', () => {
+    const data = { version: 2, state: { panels: {} } };
+    expect(() => deserialize(data)).toThrow();
   });
 
-  it('importFromUrl throws on invalid base64', () => {
-    expect(() => importFromUrl('!!!not-base64!!!')).toThrow();
+  it('throws on unrecognized format', () => {
+    expect(() => deserialize({ foo: 'bar' })).toThrow('Unrecognized layout format');
   });
 });
+
+// ─── localStorage ───────────────────────────────────────────────────
 
 describe('localStorage', () => {
   let storage: Record<string, string>;
@@ -265,25 +332,79 @@ describe('localStorage', () => {
 
   it('saveToLocalStorage + loadFromLocalStorage round-trips', () => {
     const state = makeState(['p1', 'p2']);
-    saveToLocalStorage(state);
-    const result = loadFromLocalStorage();
+    saveToLocalStorage('test-key', state);
+    const result = loadFromLocalStorage('test-key');
     expect(result).not.toBeNull();
-    expect(result!.state.layout).toEqual(state.layout);
-    expect(result!.state.panels).toEqual(state.panels);
+    expect(result!.layout).toEqual(state.layout);
+    expect([...result!.panels.entries()]).toEqual([...state.panels.entries()]);
+    expect([...result!.placements.entries()]).toEqual([...state.placements.entries()]);
   });
 
   it('loadFromLocalStorage returns null when nothing saved', () => {
-    expect(loadFromLocalStorage()).toBeNull();
+    expect(loadFromLocalStorage('nonexistent-key')).toBeNull();
   });
 
   it('clearLocalStorage removes the stored data', () => {
     const state = makeState();
-    saveToLocalStorage(state);
-    expect(loadFromLocalStorage()).not.toBeNull();
-    clearLocalStorage();
-    expect(loadFromLocalStorage()).toBeNull();
+    saveToLocalStorage('test-key', state);
+    expect(loadFromLocalStorage('test-key')).not.toBeNull();
+    clearLocalStorage('test-key');
+    expect(loadFromLocalStorage('test-key')).toBeNull();
+  });
+
+  it('loadFromLocalStorage returns null on corrupt data', () => {
+    storage['bad-key'] = 'not valid json {{{';
+    expect(loadFromLocalStorage('bad-key')).toBeNull();
   });
 });
+
+// ─── exportToFile / importFromFile ──────────────────────────────────
+
+describe('exportToFile / importFromFile', () => {
+  it('round-trips state through JSON string', () => {
+    const state = makeState(['p1', 'p2']);
+    const json = exportToFile(state);
+    const restored = importFromFile(json);
+    expect(restored.layout).toEqual(state.layout);
+    expect([...restored.panels.entries()]).toEqual([...state.panels.entries()]);
+  });
+
+  it('exportToFile produces valid pretty-printed JSON', () => {
+    const json = exportToFile(makeState());
+    expect(() => JSON.parse(json)).not.toThrow();
+    // Pretty-printed means it contains newlines
+    expect(json).toContain('\n');
+  });
+
+  it('importFromFile throws on invalid JSON', () => {
+    expect(() => importFromFile('not json {')).toThrow('Invalid JSON');
+  });
+});
+
+// ─── URL encoding ───────────────────────────────────────────────────
+
+describe('URL encoding', () => {
+  it('exportAsUrl produces a string', () => {
+    const result = exportAsUrl(makeState());
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('importFromUrl(exportAsUrl(state)) returns equivalent state', () => {
+    const state = makeState(['a', 'b']);
+    const encoded = exportAsUrl(state);
+    const restored = importFromUrl(encoded);
+    expect(restored.layout).toEqual(state.layout);
+    expect([...restored.panels.entries()]).toEqual([...state.panels.entries()]);
+    expect([...restored.placements.entries()]).toEqual([...state.placements.entries()]);
+  });
+
+  it('importFromUrl throws on invalid base64', () => {
+    expect(() => importFromUrl('!!!not-base64!!!')).toThrow();
+  });
+});
+
+// ─── validateIntegrity ──────────────────────────────────────────────
 
 describe('validateIntegrity', () => {
   it('returns no warnings for a valid state', () => {
@@ -291,12 +412,12 @@ describe('validateIntegrity', () => {
     expect(validateIntegrity(state)).toEqual([]);
   });
 
-  it('warns when a panel is referenced in layout but missing from panels record', () => {
+  it('warns when a panel is in placements but missing from panels map', () => {
     const state = makeState(['p1', 'p2']);
-    delete state.panels['p2'];
+    state.panels.delete('p2');
     const warnings = validateIntegrity(state);
     expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings[0]).toContain('p2');
+    expect(warnings.some(w => w.includes('p2'))).toBe(true);
   });
 
   it('warns when maximizedPanelId references a non-existent panel', () => {
