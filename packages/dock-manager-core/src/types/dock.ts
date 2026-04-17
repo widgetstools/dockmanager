@@ -165,6 +165,20 @@ export interface SplitNode {
 export type LayoutNode = TabGroupNode | SplitNode;
 
 /**
+ * Describes where a panel lives in the dock manager.
+ *
+ * Instead of separate arrays for floating, unpinned, and popout panels,
+ * each panel has a single `Placement` that determines its rendering mode.
+ * Docked panels live inside the layout tree; all others are rendered
+ * independently.
+ */
+export type Placement =
+  | { type: 'docked'; groupId: string }
+  | { type: 'floating'; x: number; y: number; width: number; height: number; zIndex: number; sourceGroupId?: string }
+  | { type: 'unpinned'; edge: DockEdge; size: number; sourceGroupId?: string }
+  | { type: 'popout'; windowName: string; x: number; y: number; width: number; height: number };
+
+/**
  * Describes a panel that has been detached from the layout tree
  * and is rendered as a draggable, resizable floating window.
  */
@@ -234,17 +248,16 @@ export interface DockManagerState {
   /** The root of the layout tree describing docked panels. */
   layout: LayoutNode;
   /** Map of panel ID to its configuration. */
-  panels: Record<string, PanelConfig>;
-  /** Panels currently rendered as floating windows. */
-  floatingPanels: FloatingPanel[];
-  /** Panels currently rendered in separate browser windows. */
-  popoutPanels: PopoutPanel[];
-  /** Panels removed from the layout and shown as auto-hide strips. */
-  unpinnedPanels: UnpinnedPanel[];
-  /** Counter used to assign z-index values to floating panels. */
-  nextZIndex: number;
+  panels: Map<string, PanelConfig>;
+  /**
+   * Map of panel ID to its placement. Every panel in `panels` must have
+   * a corresponding entry here — orphan panels are structurally impossible.
+   */
+  placements: Map<string, Placement>;
   /** The panel ID that is currently focused (shown with an active indicator). */
   activePaneId: string;
+  /** Counter used to assign z-index values to floating panels. */
+  nextZIndex: number;
   /** The panel ID currently displayed in maximized (full-container) mode, if any. */
   maximizedPanelId?: string;
 }
