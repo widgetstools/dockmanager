@@ -40,17 +40,24 @@ const sp = (id: string, dir: 'horizontal' | 'vertical', sizes: number[], childre
   ({ type: 'split' as const, id, direction: dir, sizes, children });
 const base = (
   layout: LayoutNode,
-  panels: Record<string, { id: string; title: string }>,
+  panelsObj: Record<string, { id: string; title: string }>,
   active: string,
-): DockManagerState => ({
-  layout,
-  panels,
-  floatingPanels: [],
-  popoutPanels: [],
-  unpinnedPanels: [],
-  nextZIndex: 100,
-  activePaneId: active,
-});
+): DockManagerState => {
+  const panels = new Map(Object.entries(panelsObj)) as Map<string, any>;
+  // Build placements by scanning the layout for docked panels
+  const placements = new Map<string, any>();
+  const scanLayout = (node: LayoutNode) => {
+    if (node.type === 'tabgroup') {
+      for (const pid of node.panels) {
+        placements.set(pid, { type: 'docked', groupId: node.id });
+      }
+    } else {
+      for (const child of node.children) scanLayout(child);
+    }
+  };
+  scanLayout(layout);
+  return { layout, panels, placements, nextZIndex: 100, activePaneId: active };
+};
 
 beforeEach(() => {
   resetIdCounter();
@@ -110,14 +117,14 @@ describe('FLOAT_PANEL → DOCK_FLOATING reproduces trading-terminal scenario', (
       // Capture all group IDs that still exist after the float
       const stateAfterFloat = dockReducer(tradingTerminalTradeLayout(), {
         type: 'FLOAT_PANEL',
-        payload: { panelId: sourcePanelId, x: 100, y: 100, width: 400, height: 300 },
+        panelId: sourcePanelId, x: 100, y: 100, width: 400, height: 300,
       });
       const groupIdsAfterFloat = findAllTabGroups(stateAfterFloat.layout).map(g => g.id);
 
       it(`FLOAT_PANEL alone produces no invariant violations`, () => {
         expectNoViolations(stateAfterFloat, `FLOAT_PANEL(${sourcePanelId})`);
         // And the panel is in floatingPanels
-        expect(stateAfterFloat.floatingPanels.some(f => f.panelId === sourcePanelId)).toBe(true);
+        expect(stateAfterFloat.placements.get(sourcePanelId)?.type === 'floating').toBe(true);
       });
 
       for (const targetId of groupIdsAfterFloat) {
@@ -125,7 +132,7 @@ describe('FLOAT_PANEL → DOCK_FLOATING reproduces trading-terminal scenario', (
           it(`DOCK_FLOATING(${sourcePanelId}, target=${targetId}, pos=${position}) keeps invariants`, () => {
             const result = dockReducer(stateAfterFloat, {
               type: 'DOCK_FLOATING',
-              payload: { panelId: sourcePanelId, targetTabGroupId: targetId, position },
+              panelId: sourcePanelId, targetGroupId: targetId, position,
             });
             expectNoViolations(
               result,
@@ -133,7 +140,7 @@ describe('FLOAT_PANEL → DOCK_FLOATING reproduces trading-terminal scenario', (
             );
             // Panel must land in the layout, not lost to the void
             expect(findTabGroupForPanel(result.layout, sourcePanelId)).not.toBeNull();
-            expect(result.floatingPanels.some(f => f.panelId === sourcePanelId)).toBe(false);
+            expect(result.placements.get(sourcePanelId)?.type === 'floating').toBe(false);
           });
         }
       }
@@ -143,17 +150,17 @@ describe('FLOAT_PANEL → DOCK_FLOATING reproduces trading-terminal scenario', (
   it('DOCK_FLOATING on a targetTabGroupId that no longer exists is a no-op or handled cleanly', () => {
     const state = dockReducer(tradingTerminalTradeLayout(), {
       type: 'FLOAT_PANEL',
-      payload: { panelId: 'blotter', x: 100, y: 100, width: 400, height: 300 },
+      panelId: 'blotter', x: 100, y: 100, width: 400, height: 300,
     });
     // After float, 'tg-orders' was the group holding 'blotter' alone — it's gone
     const result = dockReducer(state, {
       type: 'DOCK_FLOATING',
-      payload: { panelId: 'blotter', targetTabGroupId: 'tg-orders', position: 'left' },
+      panelId: 'blotter', targetGroupId: 'tg-orders', position: 'left',
     });
     expectNoViolations(result, 'DOCK_FLOATING onto missing target');
     // Panel must still be somewhere
     const inLayout = findTabGroupForPanel(result.layout, 'blotter') !== null;
-    const inFloat = result.floatingPanels.some(f => f.panelId === 'blotter');
+    const inFloat = result.placements.get('blotter')?.type === 'floating';
     expect(inLayout || inFloat).toBe(true);
   });
 
@@ -164,25 +171,25 @@ describe('FLOAT_PANEL → DOCK_FLOATING reproduces trading-terminal scenario', (
     // Float and re-dock a panel to create an auto-generated group
     state = dockReducer(state, {
       type: 'FLOAT_PANEL',
-      payload: { panelId: 'orderBook', x: 200, y: 200, width: 400, height: 300 },
+      panelId: 'orderBook', x: 200, y: 200, width: 400, height: 300,
     });
     state = dockReducer(state, {
       type: 'DOCK_FLOATING',
-      payload: { panelId: 'orderBook', targetTabGroupId: 'tg-chart', position: 'right' },
+      panelId: 'orderBook', targetGroupId: 'tg-chart', position: 'right',
     });
     expectNoViolations(state, 'setup — float+dock to create aux group');
 
     // Now float blotter and dock it onto one of the groups at 'left'
     state = dockReducer(state, {
       type: 'FLOAT_PANEL',
-      payload: { panelId: 'blotter', x: 300, y: 300, width: 400, height: 300 },
+      panelId: 'blotter', x: 300, y: 300, width: 400, height: 300,
     });
     expectNoViolations(state, 'float blotter');
 
     const firstGroup = findAllTabGroups(state.layout)[0];
     const result = dockReducer(state, {
       type: 'DOCK_FLOATING',
-      payload: { panelId: 'blotter', targetTabGroupId: firstGroup.id, position: 'left' },
+      panelId: 'blotter', targetGroupId: firstGroup.id, position: 'left',
     });
     expectNoViolations(result, `DOCK_FLOATING blotter onto ${firstGroup.id} left`);
   });
@@ -207,7 +214,7 @@ describe('long chain of FLOAT_PANEL + DOCK_FLOATING survives invariants', () => 
         // Float
         state = dockReducer(state, {
           type: 'FLOAT_PANEL',
-          payload: { panelId, x: 100, y: 100, width: 400, height: 300 },
+          panelId, x: 100, y: 100, width: 400, height: 300,
         });
         step++;
         expectNoViolations(state, `step=${step} FLOAT_PANEL(${panelId})`);
@@ -219,7 +226,7 @@ describe('long chain of FLOAT_PANEL + DOCK_FLOATING survives invariants', () => 
         const position = positions[step % positions.length];
         state = dockReducer(state, {
           type: 'DOCK_FLOATING',
-          payload: { panelId, targetTabGroupId: targetId, position },
+          panelId, targetGroupId: targetId, position,
         });
         step++;
         expectNoViolations(state, `step=${step} DOCK_FLOATING(${panelId}, ${targetId}, ${position})`);
@@ -246,6 +253,9 @@ describe('fuzz starting from trading-terminal layout', () => {
   function pickAction(state: DockManagerState, rand: () => number): DockAction | null {
     const groups = findAllTabGroups(state.layout);
     const layoutPanels = groups.flatMap(g => g.panels);
+    const floatingIds = [...state.placements.entries()]
+      .filter(([, p]) => p.type === 'floating')
+      .map(([id]) => id);
     const r = rand();
 
     // 40%: FLOAT_PANEL
@@ -253,44 +263,38 @@ describe('fuzz starting from trading-terminal layout', () => {
       if (layoutPanels.length === 0) return null;
       return {
         type: 'FLOAT_PANEL',
-        payload: {
-          panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
-          x: 100,
-          y: 100,
-          width: 400,
-          height: 300,
-        },
+        panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
+        x: 100,
+        y: 100,
+        width: 400,
+        height: 300,
       };
     }
     // 40%: DOCK_FLOATING
     if (r < 0.8) {
-      if (state.floatingPanels.length === 0 || groups.length === 0) return null;
+      if (floatingIds.length === 0 || groups.length === 0) return null;
       return {
         type: 'DOCK_FLOATING',
-        payload: {
-          panelId: state.floatingPanels[Math.floor(rand() * state.floatingPanels.length)].panelId,
-          targetTabGroupId: groups[Math.floor(rand() * groups.length)].id,
-          position: POSITIONS[Math.floor(rand() * POSITIONS.length)],
-        },
+        panelId: floatingIds[Math.floor(rand() * floatingIds.length)],
+        targetGroupId: groups[Math.floor(rand() * groups.length)].id,
+        position: POSITIONS[Math.floor(rand() * POSITIONS.length)],
       };
     }
     // 20%: MOVE_PANEL inside the layout
     if (layoutPanels.length === 0 || groups.length === 0) return null;
     return {
       type: 'MOVE_PANEL',
-      payload: {
-        panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
-        targetTabGroupId: groups[Math.floor(rand() * groups.length)].id,
-        position: POSITIONS[Math.floor(rand() * POSITIONS.length)],
-      },
+      panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
+      targetGroupId: groups[Math.floor(rand() * groups.length)].id,
+      position: POSITIONS[Math.floor(rand() * POSITIONS.length)],
     };
   }
 
   function refillIfMissing(state: DockManagerState): DockManagerState {
     let s = state;
     for (const id of PANEL_IDS) {
-      if (!s.panels[id]) {
-        s = dockReducer(s, { type: 'ADD_PANEL', payload: { panelId: id, title: id } });
+      if (!s.panels.has(id)) {
+        s = dockReducer(s, { type: 'ADD_PANEL', panelId: id, config: { id, title: id } as any });
       }
     }
     return s;
@@ -356,7 +360,11 @@ describe('syncIdCounter prevents duplicate IDs on restored layouts', () => {
     ]);
     syncIdCounter(restored);
     const newId = genId('tg');
-    expect(newId).toBe('tg_11');
+    // UUIDs are always unique — no collision with existing IDs
+    expect(newId).not.toBe('tg_5');
+    expect(newId).not.toBe('tg_10');
+    expect(typeof newId).toBe('string');
+    expect(newId.length).toBeGreaterThan(0);
   });
 
   it('float+dock on a restored layout with high IDs does not produce DUP_GROUP_ID', () => {
@@ -378,11 +386,11 @@ describe('syncIdCounter prevents duplicate IDs on restored layouts', () => {
 
     const floated = dockReducer(state, {
       type: 'FLOAT_PANEL',
-      payload: { panelId: 'chart', x: 100, y: 100, width: 400, height: 300 },
+      panelId: 'chart', x: 100, y: 100, width: 400, height: 300,
     });
     const docked = dockReducer(floated, {
       type: 'DOCK_FLOATING',
-      payload: { panelId: 'chart', targetTabGroupId: 'tg_5', position: 'left' },
+      panelId: 'chart', targetGroupId: 'tg_5', position: 'left',
     });
     const violations = checkLayoutInvariants(docked);
     expect(violations).toEqual([]);
@@ -390,21 +398,21 @@ describe('syncIdCounter prevents duplicate IDs on restored layouts', () => {
 
   it('validateState calls syncIdCounter so consumers get protection automatically', () => {
     resetIdCounter();
-    const restored: DockManagerState = {
-      layout: sp('split_3', 'horizontal', [50, 50], [
+    const restored: DockManagerState = base(
+      sp('split_3', 'horizontal', [50, 50], [
         tg('tg_4', ['a']),
         tg('tg_6', ['b']),
       ]),
-      panels: { a: p('a', 'A'), b: p('b', 'B') },
-      floatingPanels: [],
-      popoutPanels: [],
-      unpinnedPanels: [],
-      nextZIndex: 1000,
-      activePaneId: 'a',
-    };
-    validateState(restored);
+      { a: p('a', 'A'), b: p('b', 'B') },
+      'a',
+    );
+    const violations = validateState(restored);
+    expect(violations).toEqual([]);
     const newId = genId('tg');
-    expect(parseInt(newId.split('_')[1], 10)).toBeGreaterThan(6);
+    // UUIDs are always unique — no collision with existing IDs
+    expect(newId).not.toBe('tg_4');
+    expect(newId).not.toBe('tg_6');
+    expect(typeof newId).toBe('string');
   });
 });
 
@@ -420,17 +428,17 @@ describe('defensive guards prevent silent panel loss', () => {
       let state = makeState();
       state = dockReducer(state, {
         type: 'POPOUT_PANEL',
-        payload: { panelId: 'chart', windowName: 'w1', x: 0, y: 0, width: 400, height: 300 },
+        panelId: 'chart', windowName: 'w1', x: 0, y: 0, width: 400, height: 300,
       });
-      expect(state.popoutPanels?.some(p => p.panelId === 'chart')).toBe(true);
+      expect(state.placements.get('chart')?.type === 'popout').toBe(true);
 
       const result = dockReducer(state, {
         type: 'DOCK_POPOUT',
-        payload: { panelId: 'chart', targetTabGroupId: 'nonexistent_99', position: 'left' },
+        panelId: 'chart', targetGroupId: 'nonexistent_99', position: 'left',
       });
       expectNoViolations(result, 'DOCK_POPOUT onto stale target');
       expect(findTabGroupForPanel(result.layout, 'chart')).not.toBeNull();
-      expect(result.popoutPanels?.some(p => p.panelId === 'chart')).toBe(false);
+      expect(result.placements.get('chart')?.type !== 'popout').toBe(true);
     });
   });
 
@@ -439,7 +447,7 @@ describe('defensive guards prevent silent panel loss', () => {
       const state = makeState();
       const result = dockReducer(state, {
         type: 'MOVE_PANEL',
-        payload: { panelId: 'chart', targetTabGroupId: 'nonexistent_99', position: 'left' },
+        panelId: 'chart', targetGroupId: 'nonexistent_99', position: 'left',
       });
       expect(result).toBe(state);
     });
@@ -448,7 +456,7 @@ describe('defensive guards prevent silent panel loss', () => {
       const state = makeState();
       const result = dockReducer(state, {
         type: 'MOVE_PANEL',
-        payload: { panelId: 'ghost_panel', targetTabGroupId: 'tg-chart', position: 'center' },
+        panelId: 'ghost_panel', targetGroupId: 'tg-chart', position: 'center',
       });
       expect(result).toBe(state);
     });
@@ -459,27 +467,27 @@ describe('defensive guards prevent silent panel loss', () => {
       const state = makeState();
       const result = dockReducer(state, {
         type: 'PIN_PANEL',
-        payload: { panelId: 'chart' },
+        panelId: 'chart',
       });
       expect(result).toBe(state);
     });
   });
 
   describe('REORDER_TABS bounds check', () => {
-    it('returns state unchanged when newIndex is out of bounds', () => {
+    it('returns state unchanged when group does not exist', () => {
       const state = makeState();
       const result = dockReducer(state, {
         type: 'REORDER_TABS',
-        payload: { tabGroupId: 'tg-blotter', panelId: 'bondBlotter', newIndex: 999 },
+        groupId: 'nonexistent', panels: ['bondBlotter'],
       });
       expect(result).toBe(state);
     });
 
-    it('returns state unchanged when newIndex is negative', () => {
+    it('reorder with same panels produces valid state', () => {
       const state = makeState();
       const result = dockReducer(state, {
         type: 'REORDER_TABS',
-        payload: { tabGroupId: 'tg-blotter', panelId: 'bondBlotter', newIndex: -1 },
+        groupId: 'tg-blotter', panels: ['bondBlotter'],
       });
       expect(result).toBe(state);
     });
@@ -490,7 +498,7 @@ describe('defensive guards prevent silent panel loss', () => {
       const state = makeState();
       const result = dockReducer(state, {
         type: 'DOCK_TO_EDGE',
-        payload: { panelId: 'ghost_panel', edge: 'left' },
+        panelId: 'ghost_panel', edge: 'left',
       });
       expect(result).toBe(state);
     });
@@ -505,7 +513,7 @@ describe('defensive guards prevent silent panel loss', () => {
           let state = makeState();
           state = dockReducer(state, {
             type: 'POPOUT_PANEL',
-            payload: { panelId, windowName: `w_${panelId}`, x: 0, y: 0, width: 400, height: 300 },
+            panelId, windowName: `w_${panelId}`, x: 0, y: 0, width: 400, height: 300,
           });
           expectNoViolations(state, `POPOUT(${panelId})`);
 
@@ -515,7 +523,7 @@ describe('defensive guards prevent silent panel loss', () => {
 
           state = dockReducer(state, {
             type: 'DOCK_POPOUT',
-            payload: { panelId, targetTabGroupId: target, position },
+            panelId, targetGroupId: target, position,
           });
           expectNoViolations(state, `DOCK_POPOUT(${panelId}, ${target}, ${position})`);
           expect(findTabGroupForPanel(state.layout, panelId)).not.toBeNull();

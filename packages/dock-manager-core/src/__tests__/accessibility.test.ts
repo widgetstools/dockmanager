@@ -32,11 +32,11 @@ function makeTabGroupViewCallbacks() {
   };
 }
 
-function makePanels(): Record<string, PanelConfig> {
-  return {
-    p1: { id: 'p1', title: 'Editor', closable: true },
-    p2: { id: 'p2', title: 'Terminal', closable: true },
-  };
+function makePanels(): Map<string, PanelConfig> {
+  return new Map([
+    ['p1', { id: 'p1', title: 'Editor', closable: true } as PanelConfig],
+    ['p2', { id: 'p2', title: 'Terminal', closable: true } as PanelConfig],
+  ]);
 }
 
 function makeTabGroupNode(): TabGroupNode {
@@ -136,6 +136,7 @@ describe('FloatingWindowView ARIA attributes', () => {
       onDockBack: () => {},
       onClosePanel: () => {},
       onSetActivePane: () => {},
+      onDockToTarget: () => {},
       createContent: () => noopDisposable,
     });
     document.body.appendChild(view.element);

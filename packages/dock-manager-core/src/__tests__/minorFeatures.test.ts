@@ -25,12 +25,12 @@ function makeState(overrides?: Partial<DockManagerState>): DockManagerState {
       panels: ['p1'],
       activePanel: 'p1',
     },
-    panels: {
-      p1: { id: 'p1', title: 'Panel 1', closable: true },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['p1', { id: 'p1', title: 'Panel 1', closable: true } as any],
+    ]),
+    placements: new Map([
+      ['p1', { type: 'docked' as const, groupId: 'tg1' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'p1',
     ...overrides,
@@ -61,6 +61,7 @@ describe('Minor Features', () => {
         onDockBack: vi.fn(),
         onClosePanel: vi.fn(),
         onSetActivePane: vi.fn(),
+        onDockToTarget: vi.fn(),
         createContent: (_id: string, container: HTMLElement) => {
           container.textContent = 'content';
           return { dispose: () => {} };
@@ -82,6 +83,7 @@ describe('Minor Features', () => {
         onDockBack: vi.fn(),
         onClosePanel: vi.fn(),
         onSetActivePane: vi.fn(),
+        onDockToTarget: vi.fn(),
         createContent: (_id: string, container: HTMLElement) => {
           container.textContent = 'content';
           return { dispose: () => {} };
@@ -242,6 +244,7 @@ describe('Minor Features', () => {
         onDockBack: vi.fn(),
         onClosePanel: vi.fn(),
         onSetActivePane: vi.fn(),
+        onDockToTarget: vi.fn(),
         createContent: (_id: string, container: HTMLElement) => {
           container.textContent = 'content';
           return { dispose: () => {} };
@@ -271,6 +274,7 @@ describe('Minor Features', () => {
         onDockBack: vi.fn(),
         onClosePanel: vi.fn(),
         onSetActivePane: vi.fn(),
+        onDockToTarget: vi.fn(),
         createContent: (_id: string, container: HTMLElement) => {
           container.textContent = 'content';
           return { dispose: () => {} };

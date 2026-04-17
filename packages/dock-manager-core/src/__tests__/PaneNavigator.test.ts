@@ -28,14 +28,16 @@ function makeState(): DockManagerState {
       ],
       sizes: [50, 50],
     },
-    panels: {
-      p1: { id: 'p1', title: 'Editor', documentOnly: true },
-      p2: { id: 'p2', title: 'Settings', documentOnly: true },
-      p3: { id: 'p3', title: 'Terminal' },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['p1', { id: 'p1', title: 'Editor', documentOnly: true } as any],
+      ['p2', { id: 'p2', title: 'Settings', documentOnly: true } as any],
+      ['p3', { id: 'p3', title: 'Terminal' } as any],
+    ]),
+    placements: new Map([
+      ['p1', { type: 'docked' as const, groupId: 'tg1' }],
+      ['p2', { type: 'docked' as const, groupId: 'tg1' }],
+      ['p3', { type: 'docked' as const, groupId: 'tg2' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'p1',
   };

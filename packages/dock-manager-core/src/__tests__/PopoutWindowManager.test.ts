@@ -112,10 +112,10 @@ describe('PopoutWindowManager', () => {
     it('appends a container div to the popout body', () => {
       manager.open({ windowName: 'win1', title: 'Test' });
 
-      const container = mockWindow.document.body.querySelector('#popout-root');
+      const container = mockWindow.document.body.querySelector('#popout-root') as HTMLElement;
       expect(container).not.toBeNull();
-      expect(container!.style.width).toBe('100%');
-      expect(container!.style.height).toBe('100%');
+      expect(container.style.width).toBe('100%');
+      expect(container.style.height).toBe('100%');
     });
 
     it('sets body margin and padding to 0', () => {

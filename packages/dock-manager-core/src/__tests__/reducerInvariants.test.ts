@@ -22,6 +22,7 @@ import { checkLayoutInvariants, type InvariantViolation } from '../layout/layout
 import type {
   DockManagerState,
   DockPosition,
+  DockEdge,
 } from '../types/dock';
 
 type Violation = InvariantViolation;
@@ -46,7 +47,7 @@ function seed(state: DockManagerState, panelIds: string[]): DockManagerState {
   for (const id of panelIds) {
     s = dockReducer(s, {
       type: 'ADD_PANEL',
-      payload: { panelId: id, title: id },
+      panelId: id, config: { id, title: id } as any,
     });
   }
   return s;
@@ -61,11 +62,11 @@ function seedNested(panelIds: string[]): DockManagerState {
   if (groups.length > 0 && panelIds.length >= 3) {
     s = dockReducer(s, {
       type: 'MOVE_PANEL',
-      payload: { panelId: panelIds[1], targetTabGroupId: groups[0].id, position: 'right' },
+      panelId: panelIds[1], targetGroupId: groups[0].id, position: 'right',
     });
     s = dockReducer(s, {
       type: 'MOVE_PANEL',
-      payload: { panelId: panelIds[2], targetTabGroupId: groups[0].id, position: 'bottom' },
+      panelId: panelIds[2], targetGroupId: groups[0].id, position: 'bottom',
     });
   }
   return s;
@@ -82,16 +83,25 @@ function pickAction(
 
   const r = rand();
 
+  // Helper: get floating panel IDs from placements
+  const floatingPanelIds = [...state.placements.entries()]
+    .filter(([, p]) => p.type === 'floating')
+    .map(([id]) => id);
+  const unpinnedPanelIds = [...state.placements.entries()]
+    .filter(([, p]) => p.type === 'unpinned')
+    .map(([id]) => id);
+  const popoutPanelIds = [...state.placements.entries()]
+    .filter(([, p]) => p.type === 'popout')
+    .map(([id]) => id);
+
   // 50% MOVE_PANEL
   if (r < 0.5) {
     if (groups.length === 0 || layoutPanels.length === 0) return null;
     return {
       type: 'MOVE_PANEL',
-      payload: {
-        panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
-        targetTabGroupId: groups[Math.floor(rand() * groups.length)].id,
-        position: POSITIONS[Math.floor(rand() * POSITIONS.length)],
-      },
+      panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
+      targetGroupId: groups[Math.floor(rand() * groups.length)].id,
+      position: POSITIONS[Math.floor(rand() * POSITIONS.length)],
     };
   }
   // 12% FLOAT_PANEL
@@ -99,25 +109,21 @@ function pickAction(
     if (layoutPanels.length === 0) return null;
     return {
       type: 'FLOAT_PANEL',
-      payload: {
-        panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
-        x: 100,
-        y: 100,
-        width: 400,
-        height: 300,
-      },
+      panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
+      x: 100,
+      y: 100,
+      width: 400,
+      height: 300,
     };
   }
   // 8% DOCK_FLOATING
   if (r < 0.7) {
-    if (state.floatingPanels.length === 0 || groups.length === 0) return null;
+    if (floatingPanelIds.length === 0 || groups.length === 0) return null;
     return {
       type: 'DOCK_FLOATING',
-      payload: {
-        panelId: state.floatingPanels[Math.floor(rand() * state.floatingPanels.length)].panelId,
-        targetTabGroupId: groups[Math.floor(rand() * groups.length)].id,
-        position: POSITIONS[Math.floor(rand() * POSITIONS.length)],
-      },
+      panelId: floatingPanelIds[Math.floor(rand() * floatingPanelIds.length)],
+      targetGroupId: groups[Math.floor(rand() * groups.length)].id,
+      position: POSITIONS[Math.floor(rand() * POSITIONS.length)],
     };
   }
   // 8% UNPIN_PANEL
@@ -125,24 +131,22 @@ function pickAction(
     if (layoutPanels.length === 0) return null;
     return {
       type: 'UNPIN_PANEL',
-      payload: { panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)] },
+      panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
     };
   }
   // 8% PIN_PANEL
   if (r < 0.86) {
-    if (state.unpinnedPanels.length === 0) return null;
+    if (unpinnedPanelIds.length === 0) return null;
     return {
       type: 'PIN_PANEL',
-      payload: {
-        panelId: state.unpinnedPanels[Math.floor(rand() * state.unpinnedPanels.length)].panelId,
-      },
+      panelId: unpinnedPanelIds[Math.floor(rand() * unpinnedPanelIds.length)],
     };
   }
   // 6% CLOSE_PANEL + re-ADD so the panel count is stable
   if (r < 0.92) {
     if (layoutPanels.length === 0) return null;
     const id = layoutPanels[Math.floor(rand() * layoutPanels.length)];
-    return { type: 'CLOSE_PANEL', payload: { panelId: id } };
+    return { type: 'CLOSE_PANEL', panelId: id };
   }
   // 4% POPOUT_PANEL
   if (r < 0.96) {
@@ -150,29 +154,25 @@ function pickAction(
     const id = layoutPanels[Math.floor(rand() * layoutPanels.length)];
     return {
       type: 'POPOUT_PANEL',
-      payload: { panelId: id, windowName: `w_${id}`, x: 0, y: 0, width: 400, height: 300 },
+      panelId: id, windowName: `w_${id}`, x: 0, y: 0, width: 400, height: 300,
     };
   }
   // 4% DOCK_POPOUT or DOCK_TO_EDGE or REORDER_TABS
-  if (state.popoutPanels && state.popoutPanels.length > 0 && groups.length > 0) {
+  if (popoutPanelIds.length > 0 && groups.length > 0) {
     return {
       type: 'DOCK_POPOUT',
-      payload: {
-        panelId: state.popoutPanels[Math.floor(rand() * state.popoutPanels.length)].panelId,
-        targetTabGroupId: groups[Math.floor(rand() * groups.length)].id,
-        position: POSITIONS[Math.floor(rand() * POSITIONS.length)],
-      },
+      panelId: popoutPanelIds[Math.floor(rand() * popoutPanelIds.length)],
+      targetGroupId: groups[Math.floor(rand() * groups.length)].id,
+      position: POSITIONS[Math.floor(rand() * POSITIONS.length)],
     };
   }
   // Fallback: DOCK_TO_EDGE on a random in-layout panel
   if (layoutPanels.length > 0) {
-    const edges: DockPosition[] = ['left', 'right', 'top', 'bottom'];
+    const edges: DockEdge[] = ['left', 'right', 'top', 'bottom'];
     return {
       type: 'DOCK_TO_EDGE',
-      payload: {
-        panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
-        edge: edges[Math.floor(rand() * edges.length)],
-      },
+      panelId: layoutPanels[Math.floor(rand() * layoutPanels.length)],
+      edge: edges[Math.floor(rand() * edges.length)],
     };
   }
   return null;
@@ -186,8 +186,8 @@ function refillIfMissing(
 ): DockManagerState {
   let s = state;
   for (const id of allPanelIds) {
-    if (!s.panels[id]) {
-      s = dockReducer(s, { type: 'ADD_PANEL', payload: { panelId: id, title: id } });
+    if (!s.panels.has(id)) {
+      s = dockReducer(s, { type: 'ADD_PANEL', panelId: id, config: { id, title: id } as any });
     }
   }
   return s;
@@ -237,9 +237,12 @@ function run(
     for (const h of fail.history.slice(-25)) console.log(' ', JSON.stringify(h));
     console.log('layout:');
     console.log(JSON.stringify(fail.state.layout, null, 2));
-    console.log('floating:', fail.state.floatingPanels.map(f => f.panelId));
-    console.log('unpinned:', fail.state.unpinnedPanels.map(u => u.panelId));
-    console.log('popout:', (fail.state.popoutPanels ?? []).map(p => p.panelId));
+    const floating = [...fail.state.placements.entries()].filter(([, p]) => p.type === 'floating').map(([id]) => id);
+    const unpinned = [...fail.state.placements.entries()].filter(([, p]) => p.type === 'unpinned').map(([id]) => id);
+    const popout = [...fail.state.placements.entries()].filter(([, p]) => p.type === 'popout').map(([id]) => id);
+    console.log('floating:', floating);
+    console.log('unpinned:', unpinned);
+    console.log('popout:', popout);
     throw new Error(`${label} fuzz failure at seed ${fail.seedNum} step ${fail.step}`);
   }
 }

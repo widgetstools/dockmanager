@@ -20,14 +20,16 @@ function makeMockState(): DockManagerState {
       panels: ['p1', 'p2', 'p3'],
       activePanel: 'p1',
     },
-    panels: {
-      p1: { id: 'p1', title: 'Explorer' },
-      p2: { id: 'p2', title: 'Terminal' },
-      p3: { id: 'p3', title: 'Output' },
-    },
-    floatingPanels: [{ panelId: 'p2', x: 0, y: 0, width: 100, height: 100 }],
-    popoutPanels: [],
-    unpinnedPanels: [{ panelId: 'p3', side: 'left' }],
+    panels: new Map([
+      ['p1', { id: 'p1', title: 'Explorer' } as any],
+      ['p2', { id: 'p2', title: 'Terminal' } as any],
+      ['p3', { id: 'p3', title: 'Output' } as any],
+    ]),
+    placements: new Map([
+      ['p1', { type: 'docked' as const, groupId: 'tg1' }],
+      ['p2', { type: 'floating' as const, x: 0, y: 0, width: 100, height: 100, zIndex: 1 }],
+      ['p3', { type: 'unpinned' as const, edge: 'left' as const, size: 200 }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'p1',
   } as DockManagerState;

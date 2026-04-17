@@ -34,13 +34,14 @@ function createSimpleState(): DockManagerState {
       panels: ['panel1', 'panel2'],
       activePanel: 'panel1',
     },
-    panels: {
-      panel1: { id: 'panel1', title: 'Panel 1' },
-      panel2: { id: 'panel2', title: 'Panel 2' },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['panel1', { id: 'panel1', title: 'Panel 1' } as any],
+      ['panel2', { id: 'panel2', title: 'Panel 2' } as any],
+    ]),
+    placements: new Map([
+      ['panel1', { type: 'docked' as const, groupId: 'tg1' }],
+      ['panel2', { type: 'docked' as const, groupId: 'tg1' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'panel1',
   };
@@ -54,12 +55,12 @@ function createSinglePanelState(): DockManagerState {
       panels: ['panel1'],
       activePanel: 'panel1',
     },
-    panels: {
-      panel1: { id: 'panel1', title: 'Panel 1' },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['panel1', { id: 'panel1', title: 'Panel 1' } as any],
+    ]),
+    placements: new Map([
+      ['panel1', { type: 'docked' as const, groupId: 'tg1' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'panel1',
   };
@@ -87,14 +88,16 @@ function createSplitState(): DockManagerState {
       ],
       sizes: [50, 50],
     },
-    panels: {
-      panelA: { id: 'panelA', title: 'Panel A' },
-      panelB: { id: 'panelB', title: 'Panel B' },
-      panelC: { id: 'panelC', title: 'Panel C' },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['panelA', { id: 'panelA', title: 'Panel A' } as any],
+      ['panelB', { id: 'panelB', title: 'Panel B' } as any],
+      ['panelC', { id: 'panelC', title: 'Panel C' } as any],
+    ]),
+    placements: new Map([
+      ['panelA', { type: 'docked' as const, groupId: 'tg_left' }],
+      ['panelB', { type: 'docked' as const, groupId: 'tg_right' }],
+      ['panelC', { type: 'docked' as const, groupId: 'tg_right' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'panelA',
   };
@@ -310,7 +313,7 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'SET_ACTIVE_PANEL',
-        payload: { tabGroupId: 'tg1', panelId: 'panel2' },
+        groupId: 'tg1', panelId: 'panel2',
       });
 
       const selectedTab = container.querySelector('.dock-tab-selected');
@@ -326,7 +329,7 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'SET_ACTIVE_PANEL',
-        payload: { tabGroupId: 'tg1', panelId: 'panel2' },
+        groupId: 'tg1', panelId: 'panel2',
       });
 
       const state = component.getState();
@@ -347,7 +350,7 @@ describe('DockviewComponent', () => {
       // Set panelB as active pane
       component.dispatch({
         type: 'SET_ACTIVE_PANE',
-        payload: { panelId: 'panelB' },
+        panelId: 'panelB',
       });
 
       const activeGroup = container.querySelector('.dock-pane-active');
@@ -363,7 +366,7 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'SET_ACTIVE_PANEL',
-        payload: { tabGroupId: 'tg1', panelId: 'panel2' },
+        groupId: 'tg1', panelId: 'panel2',
       });
 
       const content = container.querySelector('[data-content-panel="panel2"]');
@@ -383,7 +386,7 @@ describe('DockviewComponent', () => {
         createContent: factory,
       });
 
-      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'panel2' } });
+      component.dispatch({ type: 'CLOSE_PANEL', panelId: 'panel2' });
 
       const tabs = container.querySelectorAll('.dock-tab');
       expect(tabs.length).toBe(1); // Single panel still rendered as a tab
@@ -399,10 +402,10 @@ describe('DockviewComponent', () => {
         createContent: factory,
       });
 
-      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'panel2' } });
+      component.dispatch({ type: 'CLOSE_PANEL', panelId: 'panel2' });
 
       const state = component.getState();
-      expect(state.panels['panel2']).toBeUndefined();
+      expect(state.panels.get('panel2')).toBeUndefined();
       expect((state.layout as any).panels).not.toContain('panel2');
     });
 
@@ -415,7 +418,7 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'ADD_PANEL',
-        payload: { panelId: 'panel3', title: 'Panel 3' },
+        panelId: 'panel3', config: { id: 'panel3', title: 'Panel 3' } as any,
       });
 
       const tabs = container.querySelectorAll('[data-tab-id]');
@@ -432,7 +435,7 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'ADD_PANEL',
-        payload: { panelId: 'panel3', title: 'Panel 3' },
+        panelId: 'panel3', config: { id: 'panel3', title: 'Panel 3' } as any,
       });
 
       // ADD_PANEL sets the new panel as active
@@ -449,7 +452,7 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'FLOAT_PANEL',
-        payload: { panelId: 'panel1', x: 100, y: 100, width: 400, height: 300 },
+        panelId: 'panel1', x: 100, y: 100, width: 400, height: 300,
       });
 
       const floatingWindow = container.querySelector('.dock-floating-window');
@@ -465,7 +468,7 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'FLOAT_PANEL',
-        payload: { panelId: 'panel1', x: 100, y: 150, width: 400, height: 300 },
+        panelId: 'panel1', x: 100, y: 150, width: 400, height: 300,
       });
 
       const floatingWindow = container.querySelector('.dock-floating-window') as HTMLElement;
@@ -484,7 +487,7 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'FLOAT_PANEL',
-        payload: { panelId: 'panel1', x: 100, y: 100, width: 400, height: 300 },
+        panelId: 'panel1', x: 100, y: 100, width: 400, height: 300,
       });
 
       const title = container.querySelector('.dock-floating-title');
@@ -501,19 +504,19 @@ describe('DockviewComponent', () => {
       // Float panel1
       component.dispatch({
         type: 'FLOAT_PANEL',
-        payload: { panelId: 'panel1', x: 100, y: 100, width: 400, height: 300 },
+        panelId: 'panel1', x: 100, y: 100, width: 400, height: 300,
       });
       expect(container.querySelector('.dock-floating-window')).not.toBeNull();
 
       // Dock it back - use tg1 which should still have panel2
       component.dispatch({
         type: 'DOCK_FLOATING',
-        payload: { panelId: 'panel1', targetTabGroupId: 'tg1', position: 'center' },
+        panelId: 'panel1', targetGroupId: 'tg1', position: 'center',
       });
 
       expect(container.querySelector('.dock-floating-window')).toBeNull();
       const state = component.getState();
-      expect(state.floatingPanels.length).toBe(0);
+      expect([...state.placements.values()].filter(p => p.type === 'floating').length).toBe(0);
       expect((state.layout as any).panels).toContain('panel1');
     });
 
@@ -527,7 +530,7 @@ describe('DockviewComponent', () => {
       // Move panelA into the right tab group
       component.dispatch({
         type: 'MOVE_PANEL',
-        payload: { panelId: 'panelA', targetTabGroupId: 'tg_right', position: 'center' },
+        panelId: 'panelA', targetGroupId: 'tg_right', position: 'center',
       });
 
       const state = component.getState();
@@ -549,13 +552,13 @@ describe('DockviewComponent', () => {
       // Add a second panel first
       component.dispatch({
         type: 'ADD_PANEL',
-        payload: { panelId: 'panel2', title: 'Panel 2' },
+        panelId: 'panel2', config: { id: 'panel2', title: 'Panel 2' } as any,
       });
 
       // Move panel2 to the right edge
       component.dispatch({
         type: 'MOVE_PANEL',
-        payload: { panelId: 'panel2', targetTabGroupId: 'tg1', position: 'right' },
+        panelId: 'panel2', targetGroupId: 'tg1', position: 'right',
       });
 
       const state = component.getState();
@@ -575,7 +578,7 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'SET_ACTIVE_PANEL',
-        payload: { tabGroupId: 'tg1', panelId: 'panel2' },
+        groupId: 'tg1', panelId: 'panel2',
       });
 
       expect(onStateChange).toHaveBeenCalledTimes(1);
@@ -594,7 +597,7 @@ describe('DockviewComponent', () => {
       // MOVE_PANEL center on a panel already in the target group is a no-op
       component.dispatch({
         type: 'MOVE_PANEL',
-        payload: { panelId: 'panel1', targetTabGroupId: 'tg1', position: 'center' },
+        panelId: 'panel1', targetGroupId: 'tg1', position: 'center',
       });
 
       expect(onStateChange).not.toHaveBeenCalled();
@@ -629,7 +632,7 @@ describe('DockviewComponent', () => {
       expect(active?.getAttribute('data-dock-target')).toBe('tg_left');
 
       // Switch to panelB (tg_right)
-      component.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId: 'panelB' } });
+      component.dispatch({ type: 'SET_ACTIVE_PANE', panelId: 'panelB' });
 
       active = container.querySelector('.dock-pane-active');
       expect(active?.getAttribute('data-dock-target')).toBe('tg_right');
@@ -647,7 +650,7 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'FLOAT_PANEL',
-        payload: { panelId: 'panel1', x: 100, y: 100, width: 400, height: 300 },
+        panelId: 'panel1', x: 100, y: 100, width: 400, height: 300,
       });
 
       // FLOAT_PANEL sets the floated panel as activePaneId
@@ -664,11 +667,11 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'FLOAT_PANEL',
-        payload: { panelId: 'panel1', x: 100, y: 100, width: 400, height: 300 },
+        panelId: 'panel1', x: 100, y: 100, width: 400, height: 300,
       });
 
       // Switch active to panel2 (still docked)
-      component.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId: 'panel2' } });
+      component.dispatch({ type: 'SET_ACTIVE_PANE', panelId: 'panel2' });
 
       const floating = container.querySelector('.dock-floating-window');
       expect(floating?.classList.contains('dock-pane-active')).toBe(false);
@@ -705,7 +708,7 @@ describe('DockviewComponent', () => {
       // Should still be able to dispatch valid actions
       component.dispatch({
         type: 'SET_ACTIVE_PANEL',
-        payload: { tabGroupId: 'tg1', panelId: 'panel2' },
+        groupId: 'tg1', panelId: 'panel2',
       });
 
       const state = component.getState();
@@ -721,7 +724,7 @@ describe('DockviewComponent', () => {
 
       // SET_ACTIVE_PANE with non-existent panel is a no-op (panel doesn't exist in state.panels)
       expect(() => {
-        component.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId: 'nonexistent' } });
+        component.dispatch({ type: 'SET_ACTIVE_PANE', panelId: 'nonexistent' });
       }).not.toThrow();
 
       // State unchanged
@@ -736,16 +739,16 @@ describe('DockviewComponent', () => {
       });
 
       // Try an action that won't change state (no-op)
-      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'nonexistent' } });
+      component.dispatch({ type: 'CLOSE_PANEL', panelId: 'nonexistent' });
 
       // Component should still work
       component.dispatch({
         type: 'ADD_PANEL',
-        payload: { panelId: 'panel3', title: 'Panel 3' },
+        panelId: 'panel3', config: { id: 'panel3', title: 'Panel 3' } as any,
       });
 
       const state = component.getState();
-      expect(state.panels['panel3']).toBeDefined();
+      expect(state.panels.get('panel3')).toBeDefined();
     });
   });
 
@@ -817,7 +820,7 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'FLOAT_PANEL',
-        payload: { panelId: 'panel1', x: 100, y: 100, width: 400, height: 300 },
+        panelId: 'panel1', x: 100, y: 100, width: 400, height: 300,
       });
 
       expect(container.querySelector('.dock-floating-window')).not.toBeNull();
@@ -841,8 +844,8 @@ describe('DockviewComponent', () => {
       });
 
       const state = component.getState();
-      expect(state.panels['panel1']).toBeDefined();
-      expect(state.panels['panel2']).toBeDefined();
+      expect(state.panels.get('panel1')).toBeDefined();
+      expect(state.panels.get('panel2')).toBeDefined();
       expect(state.activePaneId).toBe('panel1');
     });
 
@@ -853,9 +856,9 @@ describe('DockviewComponent', () => {
         createContent: factory,
       });
 
-      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'panel2' } });
+      component.dispatch({ type: 'CLOSE_PANEL', panelId: 'panel2' });
       const state = component.getState();
-      expect(state.panels['panel2']).toBeUndefined();
+      expect(state.panels.get('panel2')).toBeUndefined();
     });
   });
 
@@ -916,7 +919,7 @@ describe('DockviewComponent', () => {
 
       // Panel should not be closed
       const state = component.getState();
-      expect(state.panels['panel1']).toBeDefined();
+      expect(state.panels.get('panel1')).toBeDefined();
     });
 
     it('onWillClose fires with correct panelId', () => {
@@ -977,11 +980,11 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'FLOAT_PANEL',
-        payload: { panelId: 'panelA', x: 50, y: 50, width: 300, height: 200 },
+        panelId: 'panelA', x: 50, y: 50, width: 300, height: 200,
       });
       component.dispatch({
         type: 'FLOAT_PANEL',
-        payload: { panelId: 'panelB', x: 200, y: 200, width: 300, height: 200 },
+        panelId: 'panelB', x: 200, y: 200, width: 300, height: 200,
       });
 
       const floatingWindows = container.querySelectorAll('.dock-floating-window');
@@ -1017,7 +1020,7 @@ describe('DockviewComponent', () => {
         createContent: factory,
       });
 
-      component.dispatch({ type: 'MAXIMIZE_PANEL', payload: { panelId: 'panel1' } });
+      component.dispatch({ type: 'MAXIMIZE_PANEL', panelId: 'panel1' });
 
       const state = component.getState();
       expect(state.maximizedPanelId).toBe('panel1');
@@ -1030,8 +1033,8 @@ describe('DockviewComponent', () => {
         createContent: factory,
       });
 
-      component.dispatch({ type: 'MAXIMIZE_PANEL', payload: { panelId: 'panel1' } });
-      component.dispatch({ type: 'RESTORE_PANEL', payload: { panelId: 'panel1' } });
+      component.dispatch({ type: 'MAXIMIZE_PANEL', panelId: 'panel1' });
+      component.dispatch({ type: 'RESTORE_PANEL', panelId: 'panel1' });
 
       const state = component.getState();
       expect(state.maximizedPanelId).toBeUndefined();
@@ -1051,11 +1054,11 @@ describe('DockviewComponent', () => {
       expect(initialContent?.textContent).toBe('Content for panel1');
 
       // Maximize the panel — overlay should exist
-      component.dispatch({ type: 'MAXIMIZE_PANEL', payload: { panelId: 'panel1' } });
+      component.dispatch({ type: 'MAXIMIZE_PANEL', panelId: 'panel1' });
       expect(component.getState().maximizedPanelId).toBe('panel1');
 
       // Restore the panel — overlay should be gone
-      component.dispatch({ type: 'RESTORE_PANEL', payload: { panelId: 'panel1' } });
+      component.dispatch({ type: 'RESTORE_PANEL', panelId: 'panel1' });
       expect(component.getState().maximizedPanelId).toBeUndefined();
 
       // Key assertion: content element is still present and visible
@@ -1095,9 +1098,9 @@ describe('DockviewComponent', () => {
       // Float panel1 out of the multi-tab group
       component.dispatch({
         type: 'FLOAT_PANEL',
-        payload: { panelId: 'panel1', x: 100, y: 100, width: 400, height: 300 },
+        panelId: 'panel1', x: 100, y: 100, width: 400, height: 300,
       });
-      expect(component.getState().floatingPanels.length).toBe(1);
+      expect([...component.getState().placements.values()].filter(p => p.type === 'floating').length).toBe(1);
 
       // Dock panel1 back
       const targetId = component.getState().layout.type === 'tabgroup'
@@ -1105,9 +1108,9 @@ describe('DockviewComponent', () => {
         : (component.getState().layout as any).children[0].id;
       component.dispatch({
         type: 'DOCK_FLOATING',
-        payload: { panelId: 'panel1', targetTabGroupId: targetId, position: 'center' },
+        panelId: 'panel1', targetGroupId: targetId, position: 'center',
       });
-      expect(component.getState().floatingPanels.length).toBe(0);
+      expect([...component.getState().placements.values()].filter(p => p.type === 'floating').length).toBe(0);
 
       // Key assertion: content is back in a tab group, not lost
       const restoredContent = root.querySelector('.test-content[data-content-panel="panel1"]');
@@ -1128,10 +1131,8 @@ describe('DockviewComponent', () => {
       component = new DockviewComponent(container, {
         initialState: {
           layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
-          panels: {},
-          floatingPanels: [],
-          popoutPanels: [],
-          unpinnedPanels: [],
+          panels: new Map(),
+          placements: new Map(),
           nextZIndex: 1000,
           activePaneId: '',
         },
@@ -1162,10 +1163,8 @@ describe('DockviewComponent', () => {
       component = new DockviewComponent(container, {
         initialState: {
           layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
-          panels: {},
-          floatingPanels: [],
-          popoutPanels: [],
-          unpinnedPanels: [],
+          panels: new Map(),
+          placements: new Map(),
           nextZIndex: 1000,
           activePaneId: '',
         },
@@ -1184,14 +1183,14 @@ describe('DockviewComponent', () => {
 
       component.dispatch({
         type: 'ADD_PANEL',
-        payload: { panelId: 'p1', title: 'P1' },
+        panelId: 'p1', config: { id: 'p1', title: 'P1' } as any,
       });
 
       expect(root.querySelector('.test-watermark')).toBeNull();
       expect(disposals).toEqual([1]);
       expect(root.querySelector('.test-content[data-content-panel="p1"]')).not.toBeNull();
 
-      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'p1' } });
+      component.dispatch({ type: 'CLOSE_PANEL', panelId: 'p1' });
 
       expect(root.querySelector('.test-watermark')).not.toBeNull();
       expect(callCount).toBe(2);
@@ -1202,10 +1201,8 @@ describe('DockviewComponent', () => {
       component = new DockviewComponent(container, {
         initialState: {
           layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
-          panels: {},
-          floatingPanels: [],
-          popoutPanels: [],
-          unpinnedPanels: [],
+          panels: new Map(),
+          placements: new Map(),
           nextZIndex: 1000,
           activePaneId: '',
         },
@@ -1223,10 +1220,8 @@ describe('DockviewComponent', () => {
       component = new DockviewComponent(container, {
         initialState: {
           layout: { type: 'tabgroup', id: 'tg_empty', panels: [], activePanel: '' },
-          panels: {},
-          floatingPanels: [],
-          popoutPanels: [],
-          unpinnedPanels: [],
+          panels: new Map(),
+          placements: new Map(),
           nextZIndex: 1000,
           activePaneId: '',
         },
@@ -1258,14 +1253,16 @@ describe('DockviewComponent', () => {
           panels: ['p1', 'p2', 'p3'],
           activePanel: 'p1',
         },
-        panels: {
-          p1: { id: 'p1', title: 'Panel One' },
-          p2: { id: 'p2', title: 'Panel Two' },
-          p3: { id: 'p3', title: 'Panel Three' },
-        },
-        floatingPanels: [],
-        popoutPanels: [],
-        unpinnedPanels: [],
+        panels: new Map([
+          ['p1', { id: 'p1', title: 'Panel One' } as any],
+          ['p2', { id: 'p2', title: 'Panel Two' } as any],
+          ['p3', { id: 'p3', title: 'Panel Three' } as any],
+        ]),
+        placements: new Map([
+          ['p1', { type: 'docked' as const, groupId: 'tg1' }],
+          ['p2', { type: 'docked' as const, groupId: 'tg1' }],
+          ['p3', { type: 'docked' as const, groupId: 'tg1' }],
+        ]),
         nextZIndex: 1000,
         activePaneId: 'p1',
       };
@@ -1375,13 +1372,14 @@ describe('DockviewComponent', () => {
             { type: 'tabgroup', id: 'tgB', panels: ['p2'], activePanel: 'p2' },
           ],
         },
-        panels: {
-          p1: { id: 'p1', title: 'Locked' },
-          p2: { id: 'p2', title: 'Free' },
-        },
-        floatingPanels: [],
-        popoutPanels: [],
-        unpinnedPanels: [],
+        panels: new Map([
+          ['p1', { id: 'p1', title: 'Locked' } as any],
+          ['p2', { id: 'p2', title: 'Free' } as any],
+        ]),
+        placements: new Map([
+          ['p1', { type: 'docked' as const, groupId: 'tgA' }],
+          ['p2', { type: 'docked' as const, groupId: 'tgB' }],
+        ]),
         nextZIndex: 1000,
         activePaneId: 'p1',
       };
@@ -1417,14 +1415,14 @@ describe('DockviewComponent', () => {
         initialState: createLockedState(),
         createContent: factory,
       });
-      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'p1' } });
-      expect(component.getState().panels.p1).toBeDefined();
+      component.dispatch({ type: 'CLOSE_PANEL', panelId: 'p1' });
+      expect(component.getState().panels.get('p1')).toBeDefined();
 
-      component.dispatch({ type: 'FLOAT_PANEL', payload: { panelId: 'p1', x: 0, y: 0, width: 200, height: 200 } });
-      expect(component.getState().floatingPanels).toHaveLength(0);
+      component.dispatch({ type: 'FLOAT_PANEL', panelId: 'p1', x: 0, y: 0, width: 200, height: 200 });
+      expect([...component.getState().placements.values()].filter(p => p.type === 'floating')).toHaveLength(0);
 
       // Can't drag p2 INTO tgA
-      component.dispatch({ type: 'MOVE_PANEL', payload: { panelId: 'p2', targetTabGroupId: 'tgA', position: 'center' } });
+      component.dispatch({ type: 'MOVE_PANEL', panelId: 'p2', targetGroupId: 'tgA', position: 'center' });
       const tgA = (component.getState().layout as any).children[0];
       expect(tgA.panels).toEqual(['p1']);
     });
@@ -1434,8 +1432,9 @@ describe('DockviewComponent', () => {
       component = new DockviewComponent(container, {
         initialState: {
           layout: { type: 'tabgroup', id: 'tg', panels: ['p1', 'p2'], activePanel: 'p1' },
-          panels: { p1: { id: 'p1', title: 'One' }, p2: { id: 'p2', title: 'Two' } },
-          floatingPanels: [], popoutPanels: [], unpinnedPanels: [], nextZIndex: 1000, activePaneId: 'p1',
+          panels: new Map([['p1', { id: 'p1', title: 'One' } as any], ['p2', { id: 'p2', title: 'Two' } as any]]),
+          placements: new Map([['p1', { type: 'docked' as const, groupId: 'tg' }], ['p2', { type: 'docked' as const, groupId: 'tg' }]]),
+          nextZIndex: 1000, activePaneId: 'p1',
         } as DockManagerState,
         createContent: factory,
       });
@@ -1449,8 +1448,8 @@ describe('DockviewComponent', () => {
       api2.onDidChangeActive(a => actLog.push(['p2', a]));
 
       // Switch active tab to p2
-      component.dispatch({ type: 'SET_ACTIVE_PANEL', payload: { tabGroupId: 'tg', panelId: 'p2' } });
-      component.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId: 'p2' } });
+      component.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: 'tg', panelId: 'p2' });
+      component.dispatch({ type: 'SET_ACTIVE_PANE', panelId: 'p2' });
 
       expect(visLog).toContainEqual(['p1', false]);
       expect(actLog).toContainEqual(['p2', true]);
@@ -1470,8 +1469,8 @@ describe('DockviewComponent', () => {
       const tgA = (component.getState().layout as any).children[0];
       expect(tgA.locked).toBeUndefined();
       // close now works
-      component.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'p1' } });
-      expect(component.getState().panels.p1).toBeUndefined();
+      component.dispatch({ type: 'CLOSE_PANEL', panelId: 'p1' });
+      expect(component.getState().panels.get('p1')).toBeUndefined();
     });
   });
 });

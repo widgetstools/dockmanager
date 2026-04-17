@@ -12,6 +12,7 @@ import type {
   PanelConfig,
   HeaderPosition,
   LayoutNode,
+  TabGroupNode,
   Placement,
 } from '../types/dock';
 
@@ -107,28 +108,24 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       const tree = new LayoutTree(state.layout);
       let newTree: LayoutTree;
 
-      if (target) {
-        const targetGroup = tree.findGroup(target);
-        if (targetGroup) {
-          newTree = tree.insertPanel(targetGroup, panelId, position || 'center');
-        } else {
-          // target doesn't exist, fall back to first group
-          const firstId = findFirstTabGroup(state.layout);
-          if (firstId) {
-            const firstGroup = tree.findGroup(firstId)!;
-            newTree = tree.insertPanel(firstGroup, panelId, position || 'center');
-          } else {
-            newTree = new LayoutTree({ type: 'tabgroup', id: genId(), panels: [panelId], activePanel: panelId });
-          }
+      const resolveGroup = (groupId: string | undefined): TabGroupNode | null => {
+        if (groupId) {
+          const g = tree.findGroup(groupId);
+          if (g) return g;
         }
-      } else {
         const firstId = findFirstTabGroup(state.layout);
-        if (firstId) {
-          const firstGroup = tree.findGroup(firstId)!;
-          newTree = tree.insertPanel(firstGroup, panelId, position || 'center');
-        } else {
-          newTree = new LayoutTree({ type: 'tabgroup', id: genId(), panels: [panelId], activePanel: panelId });
+        return firstId ? tree.findGroup(firstId) : null;
+      };
+
+      const resolvedGroup = resolveGroup(target);
+      if (resolvedGroup) {
+        let insertTree = tree.insertPanel(resolvedGroup, panelId, position || 'center');
+        if (resolvedGroup.headerCollapsed) {
+          insertTree = insertTree.updateGroup(resolvedGroup.id, { headerCollapsed: undefined });
         }
+        newTree = insertTree;
+      } else {
+        newTree = new LayoutTree({ type: 'tabgroup', id: genId(), panels: [panelId], activePanel: panelId });
       }
 
       const placements = new Map(state.placements);
@@ -180,6 +177,14 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       if (targetGroup.locked && sourceGroup?.id !== targetGroupId) return state;
       // Reject dragging out of locked source
       if (sourceGroup?.locked && sourceGroup.id !== targetGroupId) return state;
+      // Reject moves to header-collapsed groups
+      if (targetGroup.headerCollapsed) return state;
+      // Reject documentOnly panels moving to non-document-host groups
+      const panelCfg = state.panels.get(panelId);
+      if (panelCfg?.documentOnly && position === 'center') {
+        const targetHasDocOnly = targetGroup.panels.some(pid => state.panels.get(pid)?.documentOnly);
+        if (!targetHasDocOnly) return state;
+      }
 
       const newTree = tree.movePanel(panelId, targetGroup, position);
 
@@ -235,6 +240,9 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
         const firstId = findFirstTabGroup(state.layout);
         target = firstId ? tree.findGroup(firstId) : null;
       }
+
+      // Reject docking to header-collapsed groups
+      if (target?.headerCollapsed) return state;
 
       let newTree: LayoutTree;
       if (target) {
@@ -387,6 +395,7 @@ export function dockReducer(state: DockManagerState, action: DockAction): DockMa
       const tree = new LayoutTree(state.layout);
       const group = tree.findGroup(groupId);
       if (!group) return state;
+      if (group.panels.length === panels.length && group.panels.every((p, i) => p === panels[i])) return state;
       const newTree = tree.reorderTabs(group, panels);
       return { ...state, layout: newTree.root };
     }

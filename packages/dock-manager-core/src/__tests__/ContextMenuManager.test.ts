@@ -15,14 +15,16 @@ function makeState(overrides?: Partial<DockManagerState>): DockManagerState {
       panels: ['p1', 'p2', 'p3'],
       activePanel: 'p1',
     },
-    panels: {
-      p1: { id: 'p1', title: 'Panel 1', closable: true },
-      p2: { id: 'p2', title: 'Panel 2', closable: true },
-      p3: { id: 'p3', title: 'Panel 3', closable: false },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['p1', { id: 'p1', title: 'Panel 1', closable: true } as any],
+      ['p2', { id: 'p2', title: 'Panel 2', closable: true } as any],
+      ['p3', { id: 'p3', title: 'Panel 3', closable: false } as any],
+    ]),
+    placements: new Map([
+      ['p1', { type: 'docked' as const, groupId: 'tg1' }],
+      ['p2', { type: 'docked' as const, groupId: 'tg1' }],
+      ['p3', { type: 'docked' as const, groupId: 'tg1' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'p1',
     ...overrides,
@@ -101,7 +103,7 @@ describe('ContextMenuManager', () => {
     closeItem!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(dispatch).toHaveBeenCalledWith({
       type: 'CLOSE_PANEL',
-      payload: { panelId: 'p1' },
+      panelId: 'p1',
     });
   });
 
@@ -169,11 +171,11 @@ describe('ContextMenuManager', () => {
     // Should close p2 (closable) but not p3 (closable: false) and not p1 (the clicked panel)
     expect(dispatch).toHaveBeenCalledWith({
       type: 'CLOSE_PANEL',
-      payload: { panelId: 'p2' },
+      panelId: 'p2',
     });
     // p3 is not closable, so only one CLOSE_PANEL call
     const closeCalls = dispatch.mock.calls.filter(
-      (c: [DockAction]) => c[0].type === 'CLOSE_PANEL',
+      (c: any[]) => c[0].type === 'CLOSE_PANEL',
     );
     expect(closeCalls.length).toBe(1);
   });
@@ -190,7 +192,7 @@ describe('ContextMenuManager', () => {
 
     // Should close p1 and p2 (closable), but not p3 (closable: false)
     const closeCalls = dispatch.mock.calls.filter(
-      (c: [DockAction]) => c[0].type === 'CLOSE_PANEL',
+      (c: any[]) => c[0].type === 'CLOSE_PANEL',
     );
     expect(closeCalls.length).toBe(2);
   });
@@ -237,7 +239,7 @@ describe('ContextMenuManager', () => {
     maxItem!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(dispatch).toHaveBeenCalledWith({
       type: 'MAXIMIZE_PANEL',
-      payload: { panelId: 'p1' },
+      panelId: 'p1',
     });
   });
 });

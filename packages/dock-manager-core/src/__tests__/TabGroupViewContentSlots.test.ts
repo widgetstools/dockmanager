@@ -47,15 +47,18 @@ function createInitialState(): DockManagerState {
       ],
       sizes: [50, 50],
     },
-    panels: {
-      A: { id: 'A', title: 'A' },
-      B: { id: 'B', title: 'B' },
-      C: { id: 'C', title: 'C' },
-      D: { id: 'D', title: 'D' },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['A', { id: 'A', title: 'A' } as any],
+      ['B', { id: 'B', title: 'B' } as any],
+      ['C', { id: 'C', title: 'C' } as any],
+      ['D', { id: 'D', title: 'D' } as any],
+    ]),
+    placements: new Map([
+      ['A', { type: 'docked' as const, groupId: 'tg_left' }],
+      ['B', { type: 'docked' as const, groupId: 'tg_left' }],
+      ['C', { type: 'docked' as const, groupId: 'tg_right' }],
+      ['D', { type: 'docked' as const, groupId: 'tg_right' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'A',
   };
@@ -102,13 +105,13 @@ describe('TabGroupView stale content slot bug', () => {
     //   inside tg_left's B slot wrapper.
     component.dispatch({
       type: 'SET_ACTIVE_PANEL',
-      payload: { tabGroupId: 'tg_left', panelId: 'B' },
+      groupId: 'tg_left', panelId: 'B',
     });
     // Step 2: re-select A in tg_left. B's slot wrapper gets display=none
     //   but the slot entry and its persistent container are preserved.
     component.dispatch({
       type: 'SET_ACTIVE_PANEL',
-      payload: { tabGroupId: 'tg_left', panelId: 'A' },
+      groupId: 'tg_left', panelId: 'A',
     });
 
     // Step 3: move B from tg_left into tg_right.
@@ -118,7 +121,7 @@ describe('TabGroupView stale content slot bug', () => {
     //     moves the persistent container from tg_left to tg_right.
     component.dispatch({
       type: 'MOVE_PANEL',
-      payload: { panelId: 'B', targetTabGroupId: 'tg_right', position: 'center' },
+      panelId: 'B', targetGroupId: 'tg_right', position: 'center',
     });
 
     // Sanity: B visible in tg_right right now.
@@ -131,7 +134,7 @@ describe('TabGroupView stale content slot bug', () => {
     //     persistent container is still in tg_right.
     component.dispatch({
       type: 'MOVE_PANEL',
-      payload: { panelId: 'B', targetTabGroupId: 'tg_left', position: 'center' },
+      panelId: 'B', targetGroupId: 'tg_left', position: 'center',
     });
 
     // After the round trip, tg_left should own panel B and B's content

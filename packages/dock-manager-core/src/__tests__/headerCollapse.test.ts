@@ -44,12 +44,12 @@ function createCollapsedSinglePanelState(): DockManagerState {
       activePanel: 'panelA',
       headerCollapsed: true,
     } as TabGroupNode,
-    panels: {
-      panelA: { id: 'panelA', title: 'Panel A', closable: true },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['panelA', { id: 'panelA', title: 'Panel A', closable: true } as any],
+    ]),
+    placements: new Map([
+      ['panelA', { type: 'docked' as const, groupId: 'tg_single' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'panelA',
   };
@@ -78,14 +78,16 @@ function createTwoGroupState(opts?: { leftCollapsed?: boolean }): DockManagerSta
       ],
       sizes: [30, 70],
     } as SplitNode,
-    panels: {
-      panelA: { id: 'panelA', title: 'Panel A', closable: true },
-      panelB: { id: 'panelB', title: 'Panel B', closable: true },
-      panelC: { id: 'panelC', title: 'Panel C', closable: true },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['panelA', { id: 'panelA', title: 'Panel A', closable: true } as any],
+      ['panelB', { id: 'panelB', title: 'Panel B', closable: true } as any],
+      ['panelC', { id: 'panelC', title: 'Panel C', closable: true } as any],
+    ]),
+    placements: new Map([
+      ['panelA', { type: 'docked' as const, groupId: 'tg_left' }],
+      ['panelB', { type: 'docked' as const, groupId: 'tg_right' }],
+      ['panelC', { type: 'docked' as const, groupId: 'tg_right' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'panelB',
   };
@@ -104,7 +106,7 @@ describe('SET_HEADER_COLLAPSED reducer', () => {
     const state = createTwoGroupState();
     const next = dockReducer(state, {
       type: 'SET_HEADER_COLLAPSED',
-      payload: { tabGroupId: 'tg_left', collapsed: true },
+      groupId: 'tg_left', collapsed: true,
     });
     const tg = findTabGroupById(next.layout, 'tg_left');
     expect(tg?.headerCollapsed).toBe(true);
@@ -117,7 +119,7 @@ describe('SET_HEADER_COLLAPSED reducer', () => {
 
     const next = dockReducer(state, {
       type: 'SET_HEADER_COLLAPSED',
-      payload: { tabGroupId: 'tg_single', collapsed: false },
+      groupId: 'tg_single', collapsed: false,
     });
     const tg1 = findTabGroupById(next.layout, 'tg_single');
     expect(tg1?.headerCollapsed).toBeUndefined();
@@ -127,7 +129,7 @@ describe('SET_HEADER_COLLAPSED reducer', () => {
     const state = createTwoGroupState();
     const next = dockReducer(state, {
       type: 'SET_HEADER_COLLAPSED',
-      payload: { tabGroupId: 'tg_left', collapsed: true },
+      groupId: 'tg_left', collapsed: true,
     });
     const right = findTabGroupById(next.layout, 'tg_right');
     expect(right?.headerCollapsed).toBeUndefined();
@@ -143,7 +145,7 @@ describe('MOVE_PANEL with collapsed target', () => {
     const state = createTwoGroupState({ leftCollapsed: true });
     const next = dockReducer(state, {
       type: 'MOVE_PANEL',
-      payload: { panelId: 'panelB', targetTabGroupId: 'tg_left', position: 'center' },
+      panelId: 'panelB', targetGroupId: 'tg_left', position: 'center',
     });
     // Drop refused — state unchanged
     expect(next).toBe(state);
@@ -153,7 +155,7 @@ describe('MOVE_PANEL with collapsed target', () => {
     const state = createTwoGroupState({ leftCollapsed: true });
     const next = dockReducer(state, {
       type: 'MOVE_PANEL',
-      payload: { panelId: 'panelB', targetTabGroupId: 'tg_left', position: 'right' },
+      panelId: 'panelB', targetGroupId: 'tg_left', position: 'right',
     });
     expect(next).toBe(state);
   });
@@ -168,17 +170,17 @@ describe('DOCK_FLOATING with collapsed target', () => {
     let state = createTwoGroupState({ leftCollapsed: true });
     state = dockReducer(state, {
       type: 'FLOAT_PANEL',
-      payload: { panelId: 'panelB', x: 100, y: 100, width: 300, height: 200 },
+      panelId: 'panelB', x: 100, y: 100, width: 300, height: 200,
     });
-    expect(state.floatingPanels).toHaveLength(1);
+    expect([...state.placements.values()].filter(p => p.type === 'floating')).toHaveLength(1);
 
     const next = dockReducer(state, {
       type: 'DOCK_FLOATING',
-      payload: { panelId: 'panelB', targetTabGroupId: 'tg_left', position: 'center' },
+      panelId: 'panelB', targetGroupId: 'tg_left', position: 'center',
     });
     // Drop refused — state unchanged, panel still floating
     expect(next).toBe(state);
-    expect(next.floatingPanels).toHaveLength(1);
+    expect([...next.placements.values()].filter(p => p.type === 'floating')).toHaveLength(1);
   });
 
   it('clears headerCollapsed when docking back to saved sourceTabGroupId', () => {
@@ -189,12 +191,12 @@ describe('DOCK_FLOATING with collapsed target', () => {
     // Actually the reducer doesn't care about UI constraints, so we can float directly
     state = dockReducer(state, {
       type: 'FLOAT_PANEL',
-      payload: { panelId: 'panelA', x: 100, y: 100, width: 300, height: 200 },
+      panelId: 'panelA', x: 100, y: 100, width: 300, height: 200,
     });
     // panelA is floating, tg_left should be gone (empty groups are cleaned up)
     // So when we dock back, it should fall through to first available group
-    const floatingA = state.floatingPanels.find(f => f.panelId === 'panelA');
-    expect(floatingA?.sourceTabGroupId).toBe('tg_left');
+    const floatingA = state.placements.get('panelA');
+    expect(floatingA?.type === 'floating' && (floatingA as any).sourceGroupId).toBe('tg_left');
   });
 });
 
@@ -207,7 +209,7 @@ describe('ADD_PANEL with collapsed first group', () => {
     const state = createCollapsedSinglePanelState();
     const next = dockReducer(state, {
       type: 'ADD_PANEL',
-      payload: { panelId: 'newPanel', title: 'New Panel' },
+      panelId: 'newPanel', config: { id: 'newPanel', title: 'New Panel' } as any,
     });
     const tg = findTabGroupById(next.layout, 'tg_single');
     expect(tg?.headerCollapsed).toBeUndefined();
@@ -227,19 +229,20 @@ describe('PIN_PANEL with collapsed source group', () => {
     // Unpin panelA from tg_left
     state = dockReducer(state, {
       type: 'UNPIN_PANEL',
-      payload: { panelId: 'panelA' },
+      panelId: 'panelA',
     });
-    expect(state.unpinnedPanels).toHaveLength(1);
-    expect(state.unpinnedPanels[0].sourceTabGroupId).toBe('tg_left');
+    const unpinned = [...state.placements.values()].filter(p => p.type === 'unpinned');
+    expect(unpinned).toHaveLength(1);
+    expect((unpinned[0] as any).sourceGroupId).toBe('tg_left');
 
     // Pin panelA back — it should go to tg_left if it still exists
     // After removing panelA, tg_left is empty and gets cleaned up
     // So the pin will create a new group at the edge
     const next = dockReducer(state, {
       type: 'PIN_PANEL',
-      payload: { panelId: 'panelA' },
+      panelId: 'panelA',
     });
-    expect(next.unpinnedPanels).toHaveLength(0);
+    expect([...next.placements.values()].filter(p => p.type === 'unpinned')).toHaveLength(0);
     // panelA should be back in the layout
     const panelGroup = findTabGroupForPanel(next.layout, 'panelA');
     expect(panelGroup).toBeTruthy();
@@ -255,15 +258,15 @@ describe('CLOSE_PANEL on collapsed pane', () => {
     const state = createTwoGroupState({ leftCollapsed: true });
     const next = dockReducer(state, {
       type: 'CLOSE_PANEL',
-      payload: { panelId: 'panelA' },
+      panelId: 'panelA',
     });
     // panelA should be gone
-    expect(next.panels['panelA']).toBeUndefined();
+    expect(next.panels.get('panelA')).toBeUndefined();
     // tg_left should be cleaned up (no panels)
     const tg = findTabGroupById(next.layout, 'tg_left');
     expect(tg).toBeNull();
     // Other panels should still exist
-    expect(next.panels['panelB']).toBeDefined();
+    expect(next.panels.get('panelB')).toBeDefined();
   });
 });
 
@@ -276,11 +279,11 @@ describe('FLOAT_PANEL from collapsed pane', () => {
     const state = createTwoGroupState({ leftCollapsed: true });
     const next = dockReducer(state, {
       type: 'FLOAT_PANEL',
-      payload: { panelId: 'panelA', x: 100, y: 100, width: 300, height: 200 },
+      panelId: 'panelA', x: 100, y: 100, width: 300, height: 200,
     });
-    const floating = next.floatingPanels.find(f => f.panelId === 'panelA');
+    const floating = next.placements.get('panelA');
     expect(floating).toBeDefined();
-    expect(floating?.sourceTabGroupId).toBe('tg_left');
+    expect(floating?.type === 'floating' && (floating as any).sourceGroupId).toBe('tg_left');
   });
 });
 
@@ -293,7 +296,7 @@ describe('MAXIMIZE_PANEL with collapsed pane', () => {
     const state = createCollapsedSinglePanelState();
     const next = dockReducer(state, {
       type: 'MAXIMIZE_PANEL',
-      payload: { panelId: 'panelA' },
+      panelId: 'panelA',
     });
     expect(next.maximizedPanelId).toBe('panelA');
   });
@@ -302,11 +305,11 @@ describe('MAXIMIZE_PANEL with collapsed pane', () => {
     let state = createCollapsedSinglePanelState();
     state = dockReducer(state, {
       type: 'MAXIMIZE_PANEL',
-      payload: { panelId: 'panelA' },
+      panelId: 'panelA',
     });
     const next = dockReducer(state, {
       type: 'RESTORE_PANEL',
-      payload: { panelId: 'panelA' },
+      panelId: 'panelA',
     });
     expect(next.maximizedPanelId).toBeUndefined();
     // headerCollapsed should still be preserved
@@ -333,7 +336,7 @@ describe('headerCollapsed serialization', () => {
     const initial = createTwoGroupState();
     const next = dockReducer(initial, {
       type: 'LOAD_STATE',
-      payload: collapsed,
+      state: collapsed,
     });
     const tg = findTabGroupById(next.layout, 'tg_single');
     expect(tg?.headerCollapsed).toBe(true);
@@ -349,13 +352,14 @@ describe('headerCollapsed serialization', () => {
         activePanel: 'p1',
         headerCollapsed: true,
       } as TabGroupNode,
-      panels: {
-        p1: { id: 'p1', title: 'P1' },
-        p2: { id: 'p2', title: 'P2' },
-      },
-      floatingPanels: [],
-      popoutPanels: [],
-      unpinnedPanels: [],
+      panels: new Map([
+        ['p1', { id: 'p1', title: 'P1' } as any],
+        ['p2', { id: 'p2', title: 'P2' } as any],
+      ]),
+      placements: new Map([
+        ['p1', { type: 'docked' as const, groupId: 'tg_multi' }],
+        ['p2', { type: 'docked' as const, groupId: 'tg_multi' }],
+      ]),
       nextZIndex: 1000,
       activePaneId: 'p1',
     };
@@ -378,7 +382,7 @@ describe('headerCollapsed serialization', () => {
 describe('TabGroupView header collapse — data-dock-target', () => {
   it('sets data-dock-target on construction for non-collapsed pane', () => {
     const node: TabGroupNode = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
-    const panels = { p1: { id: 'p1', title: 'Panel 1' } };
+    const panels = new Map([['p1', { id: 'p1', title: 'Panel 1' }]]) as any;
     const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
     expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
     view.dispose();
@@ -388,7 +392,7 @@ describe('TabGroupView header collapse — data-dock-target', () => {
     const node: TabGroupNode = {
       type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1', headerCollapsed: true,
     };
-    const panels = { p1: { id: 'p1', title: 'Panel 1' } };
+    const panels = new Map([['p1', { id: 'p1', title: 'Panel 1' }]]) as any;
     const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
     expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
     expect(view.element.hasAttribute('data-header-collapsed')).toBe(true);
@@ -398,7 +402,7 @@ describe('TabGroupView header collapse — data-dock-target', () => {
   it('keeps data-dock-target when header is toggled via update()', () => {
     const callbacks = makeCallbacks();
     const node: TabGroupNode = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
-    const panels = { p1: { id: 'p1', title: 'Panel 1' } };
+    const panels = new Map([['p1', { id: 'p1', title: 'Panel 1' }]]) as any;
     const view = new TabGroupView(node, panels, 'p1', undefined, callbacks);
     document.body.appendChild(view.element);
 
@@ -427,7 +431,7 @@ describe('TabGroupView header collapse — data-dock-target', () => {
     const node: TabGroupNode = {
       type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1', headerCollapsed: true,
     };
-    const panels = { p1: { id: 'p1', title: 'Panel 1' }, p2: { id: 'p2', title: 'Panel 2' } };
+    const panels = new Map([['p1', { id: 'p1', title: 'Panel 1' }], ['p2', { id: 'p2', title: 'Panel 2' }]]) as any;
     const view = new TabGroupView(node, panels, 'p1', undefined, callbacks);
 
     // data-dock-target stays present even while collapsed
@@ -456,7 +460,7 @@ describe('TabGroupView header collapse — data-dock-target', () => {
 describe('TabGroupView header collapse — header visibility', () => {
   it('header is visible by default for single-tab pane', () => {
     const node: TabGroupNode = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
-    const panels = { p1: { id: 'p1', title: 'Panel 1' } };
+    const panels = new Map([['p1', { id: 'p1', title: 'Panel 1' }]]) as any;
     const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
     const header = view.element.querySelector('.dock-panel-header') as HTMLElement;
     expect(header.style.display).not.toBe('none');
@@ -467,7 +471,7 @@ describe('TabGroupView header collapse — header visibility', () => {
     const node: TabGroupNode = {
       type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1', headerCollapsed: true,
     };
-    const panels = { p1: { id: 'p1', title: 'Panel 1' } };
+    const panels = new Map([['p1', { id: 'p1', title: 'Panel 1' }]]) as any;
     const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
     const header = view.element.querySelector('.dock-panel-header') as HTMLElement;
     expect(header.style.display).toBe('none');
@@ -483,7 +487,7 @@ describe('TabGroupView header collapse — header visibility', () => {
 describe('TabGroupView update() — headerCollapsed sync', () => {
   it('collapses header when update() receives headerCollapsed=true', () => {
     const node: TabGroupNode = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
-    const panels = { p1: { id: 'p1', title: 'Panel 1' } };
+    const panels = new Map([['p1', { id: 'p1', title: 'Panel 1' }]]) as any;
     const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
 
     expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
@@ -504,7 +508,7 @@ describe('TabGroupView update() — headerCollapsed sync', () => {
     const node: TabGroupNode = {
       type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1', headerCollapsed: true,
     };
-    const panels = { p1: { id: 'p1', title: 'Panel 1' } };
+    const panels = new Map([['p1', { id: 'p1', title: 'Panel 1' }]]) as any;
     const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
 
     expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
@@ -526,7 +530,7 @@ describe('TabGroupView update() — headerCollapsed sync', () => {
       type: 'tabgroup', id: 'tg1', panels: ['p1', 'p2'], activePanel: 'p1',
       headerCollapsed: true,
     };
-    const panels = { p1: { id: 'p1', title: 'P1' }, p2: { id: 'p2', title: 'P2' } };
+    const panels = new Map([['p1', { id: 'p1', title: 'P1' }], ['p2', { id: 'p2', title: 'P2' }]]) as any;
     const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
 
     // Should NOT be collapsed (multi-panel)
@@ -547,10 +551,7 @@ describe('TabGroupView — single/multi panel transitions', () => {
     const node: TabGroupNode = {
       type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1', headerCollapsed: true,
     };
-    const panels = {
-      p1: { id: 'p1', title: 'P1' },
-      p2: { id: 'p2', title: 'P2' },
-    };
+    const panels = new Map([['p1', { id: 'p1', title: 'P1' }], ['p2', { id: 'p2', title: 'P2' }]]) as any;
     const view = new TabGroupView(node, panels, 'p1', undefined, callbacks);
 
     // Collapsed (data-dock-target stays present)
@@ -576,7 +577,7 @@ describe('TabGroupView — single/multi panel transitions', () => {
     const node: TabGroupNode = {
       type: 'tabgroup', id: 'tg1', panels: ['p1', 'p2'], activePanel: 'p1',
     };
-    const panels = { p1: { id: 'p1', title: 'P1' }, p2: { id: 'p2', title: 'P2' } };
+    const panels = new Map([['p1', { id: 'p1', title: 'P1' }], ['p2', { id: 'p2', title: 'P2' }]]) as any;
     const view = new TabGroupView(node, panels, 'p1', undefined, makeCallbacks());
 
     expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
@@ -585,7 +586,7 @@ describe('TabGroupView — single/multi panel transitions', () => {
     const updated: TabGroupNode = {
       type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1',
     };
-    const remainingPanels = { p1: { id: 'p1', title: 'P1' } };
+    const remainingPanels = new Map([['p1', { id: 'p1', title: 'P1' }]]) as any;
     view.update(updated, remainingPanels, 'p1', undefined);
 
     expect(view.element.getAttribute('data-dock-target')).toBe('tg1');
@@ -604,12 +605,12 @@ describe('Compound edge cases', () => {
     let state = createTwoGroupState();
     state = dockReducer(state, {
       type: 'SET_HEADER_COLLAPSED',
-      payload: { tabGroupId: 'tg_left', collapsed: true },
+      groupId: 'tg_left', collapsed: true,
     });
     const before = state;
     state = dockReducer(state, {
       type: 'MOVE_PANEL',
-      payload: { panelId: 'panelC', targetTabGroupId: 'tg_left', position: 'center' },
+      panelId: 'panelC', targetGroupId: 'tg_left', position: 'center',
     });
     // Drop refused — collapsed pane stays untouched
     expect(state).toBe(before);
@@ -622,16 +623,16 @@ describe('Compound edge cases', () => {
     let state = createTwoGroupState();
     state = dockReducer(state, {
       type: 'SET_HEADER_COLLAPSED',
-      payload: { tabGroupId: 'tg_left', collapsed: true },
+      groupId: 'tg_left', collapsed: true,
     });
     state = dockReducer(state, {
       type: 'FLOAT_PANEL',
-      payload: { panelId: 'panelB', x: 100, y: 100, width: 300, height: 200 },
+      panelId: 'panelB', x: 100, y: 100, width: 300, height: 200,
     });
     const before = state;
     state = dockReducer(state, {
       type: 'DOCK_FLOATING',
-      payload: { panelId: 'panelB', targetTabGroupId: 'tg_left', position: 'center' },
+      panelId: 'panelB', targetGroupId: 'tg_left', position: 'center',
     });
     expect(state).toBe(before);
     const tg = findTabGroupById(state.layout, 'tg_left');
@@ -661,14 +662,16 @@ describe('Compound edge cases', () => {
         ],
         sizes: [50, 50],
       } as SplitNode,
-      panels: {
-        panelA: { id: 'panelA', title: 'Panel A', closable: true },
-        panelB: { id: 'panelB', title: 'Panel B', closable: true },
-        panelC: { id: 'panelC', title: 'Panel C', closable: true },
-      },
-      floatingPanels: [],
-      popoutPanels: [],
-      unpinnedPanels: [],
+      panels: new Map([
+        ['panelA', { id: 'panelA', title: 'Panel A', closable: true } as any],
+        ['panelB', { id: 'panelB', title: 'Panel B', closable: true } as any],
+        ['panelC', { id: 'panelC', title: 'Panel C', closable: true } as any],
+      ]),
+      placements: new Map([
+        ['panelA', { type: 'docked' as const, groupId: 'tg_left' }],
+        ['panelB', { type: 'docked' as const, groupId: 'tg_left' }],
+        ['panelC', { type: 'docked' as const, groupId: 'tg_right' }],
+      ]),
       nextZIndex: 1000,
       activePaneId: 'panelA',
     };
@@ -676,12 +679,12 @@ describe('Compound edge cases', () => {
     // Close panelB so tg_left becomes single-panel
     state = dockReducer(state, {
       type: 'CLOSE_PANEL',
-      payload: { panelId: 'panelB' },
+      panelId: 'panelB',
     });
     // Collapse tg_left
     state = dockReducer(state, {
       type: 'SET_HEADER_COLLAPSED',
-      payload: { tabGroupId: 'tg_left', collapsed: true },
+      groupId: 'tg_left', collapsed: true,
     });
     const tg1 = findTabGroupById(state.layout, 'tg_left');
     expect(tg1?.headerCollapsed).toBe(true);
@@ -690,13 +693,13 @@ describe('Compound edge cases', () => {
     // Unpin panelC
     state = dockReducer(state, {
       type: 'UNPIN_PANEL',
-      payload: { panelId: 'panelC' },
+      panelId: 'panelC',
     });
     // Pin panelC back — it should go to tg_right (its source)
     // tg_right might have been cleaned up since it was empty
     state = dockReducer(state, {
       type: 'PIN_PANEL',
-      payload: { panelId: 'panelC' },
+      panelId: 'panelC',
     });
     // panelC should be in the layout
     const panelCGroup = findTabGroupForPanel(state.layout, 'panelC');
@@ -721,7 +724,7 @@ describe('Compound edge cases', () => {
     const state = createTwoGroupState({ leftCollapsed: true });
     const next = dockReducer(state, {
       type: 'SET_ACTIVE_PANE',
-      payload: { panelId: 'panelA' },
+      panelId: 'panelA',
     });
     expect(next.activePaneId).toBe('panelA');
   });

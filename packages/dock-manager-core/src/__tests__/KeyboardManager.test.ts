@@ -15,14 +15,16 @@ function makeState(overrides?: Partial<DockManagerState>): DockManagerState {
       panels: ['p1', 'p2', 'p3'],
       activePanel: 'p1',
     },
-    panels: {
-      p1: { id: 'p1', title: 'Panel 1', closable: true },
-      p2: { id: 'p2', title: 'Panel 2', closable: true },
-      p3: { id: 'p3', title: 'Panel 3', closable: false },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['p1', { id: 'p1', title: 'Panel 1', closable: true } as any],
+      ['p2', { id: 'p2', title: 'Panel 2', closable: true } as any],
+      ['p3', { id: 'p3', title: 'Panel 3', closable: false } as any],
+    ]),
+    placements: new Map([
+      ['p1', { type: 'docked' as const, groupId: 'tg1' }],
+      ['p2', { type: 'docked' as const, groupId: 'tg1' }],
+      ['p3', { type: 'docked' as const, groupId: 'tg1' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'p1',
     ...overrides,
@@ -41,15 +43,18 @@ function makeSplitState(): DockManagerState {
       ],
       sizes: [50, 50],
     },
-    panels: {
-      p1: { id: 'p1', title: 'Panel 1', closable: true },
-      p2: { id: 'p2', title: 'Panel 2', closable: true },
-      p3: { id: 'p3', title: 'Panel 3', closable: true },
-      p4: { id: 'p4', title: 'Panel 4', closable: true },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['p1', { id: 'p1', title: 'Panel 1', closable: true } as any],
+      ['p2', { id: 'p2', title: 'Panel 2', closable: true } as any],
+      ['p3', { id: 'p3', title: 'Panel 3', closable: true } as any],
+      ['p4', { id: 'p4', title: 'Panel 4', closable: true } as any],
+    ]),
+    placements: new Map([
+      ['p1', { type: 'docked' as const, groupId: 'tg1' }],
+      ['p2', { type: 'docked' as const, groupId: 'tg1' }],
+      ['p3', { type: 'docked' as const, groupId: 'tg2' }],
+      ['p4', { type: 'docked' as const, groupId: 'tg2' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'p1',
   };
@@ -102,7 +107,7 @@ describe('KeyboardManager', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'CLOSE_PANEL',
-      payload: { panelId: 'p1' },
+      panelId: 'p1',
     });
   });
 
@@ -126,11 +131,11 @@ describe('KeyboardManager', () => {
     expect(dispatch).toHaveBeenCalledTimes(2);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'SET_ACTIVE_PANEL',
-      payload: { tabGroupId: 'tg1', panelId: 'p2' },
+      groupId: 'tg1', panelId: 'p2',
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: 'SET_ACTIVE_PANE',
-      payload: { panelId: 'p2' },
+      panelId: 'p2',
     });
   });
 
@@ -139,7 +144,7 @@ describe('KeyboardManager', () => {
     fireKey(container, 'F6', { ctrlKey: true });
     expect(dispatch).toHaveBeenCalledWith({
       type: 'SET_ACTIVE_PANEL',
-      payload: { tabGroupId: 'tg1', panelId: 'p1' },
+      groupId: 'tg1', panelId: 'p1',
     });
   });
 
@@ -151,7 +156,7 @@ describe('KeyboardManager', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'SET_ACTIVE_PANEL',
-      payload: { tabGroupId: 'tg1', panelId: 'p1' },
+      groupId: 'tg1', panelId: 'p1',
     });
   });
 
@@ -159,7 +164,7 @@ describe('KeyboardManager', () => {
     fireKey(container, 'F6', { ctrlKey: true, shiftKey: true });
     expect(dispatch).toHaveBeenCalledWith({
       type: 'SET_ACTIVE_PANEL',
-      payload: { tabGroupId: 'tg1', panelId: 'p3' },
+      groupId: 'tg1', panelId: 'p3',
     });
   });
 
@@ -170,7 +175,7 @@ describe('KeyboardManager', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'NAVIGATE',
-      payload: { direction: 'next' },
+      direction: 'next',
     });
   });
 
@@ -181,7 +186,7 @@ describe('KeyboardManager', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'NAVIGATE',
-      payload: { direction: 'previous' },
+      direction: 'previous',
     });
   });
 
@@ -192,7 +197,7 @@ describe('KeyboardManager', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'DOCK_TO_EDGE',
-      payload: { panelId: 'p1', edge: 'left' },
+      panelId: 'p1', edge: 'left',
     });
   });
 
@@ -201,7 +206,7 @@ describe('KeyboardManager', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'DOCK_TO_EDGE',
-      payload: { panelId: 'p1', edge: 'right' },
+      panelId: 'p1', edge: 'right',
     });
   });
 
@@ -210,7 +215,7 @@ describe('KeyboardManager', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'DOCK_TO_EDGE',
-      payload: { panelId: 'p1', edge: 'top' },
+      panelId: 'p1', edge: 'top',
     });
   });
 
@@ -219,7 +224,7 @@ describe('KeyboardManager', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'DOCK_TO_EDGE',
-      payload: { panelId: 'p1', edge: 'bottom' },
+      panelId: 'p1', edge: 'bottom',
     });
   });
 
@@ -237,19 +242,23 @@ describe('KeyboardManager', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'RESTORE_PANEL',
-      payload: { panelId: 'p1' },
+      panelId: 'p1',
     });
   });
 
   it('Escape docks a floating panel back', () => {
     state = makeState({
-      floatingPanels: [{ panelId: 'p1', x: 0, y: 0, width: 300, height: 200, zIndex: 1000 }],
+      placements: new Map([
+        ['p1', { type: 'floating' as const, x: 0, y: 0, width: 300, height: 200, zIndex: 1000 }],
+        ['p2', { type: 'docked' as const, groupId: 'tg1' }],
+        ['p3', { type: 'docked' as const, groupId: 'tg1' }],
+      ]),
     });
     const e = fireKey(container, 'Escape');
     expect(e.defaultPrevented).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'DOCK_FLOATING',
-      payload: { panelId: 'p1', targetTabGroupId: 'default', position: 'center' },
+      panelId: 'p1', targetGroupId: 'default', position: 'center',
     });
   });
 
@@ -265,7 +274,7 @@ describe('KeyboardManager', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: 'MAXIMIZE_PANEL',
-      payload: { panelId: 'p1' },
+      panelId: 'p1',
     });
   });
 
@@ -274,7 +283,7 @@ describe('KeyboardManager', () => {
     fireKey(container, 'F11');
     expect(dispatch).toHaveBeenCalledWith({
       type: 'RESTORE_PANEL',
-      payload: { panelId: 'p2' },
+      panelId: 'p2',
     });
   });
 
@@ -342,7 +351,7 @@ describe('KeyboardManager', () => {
     fireKey(container, 'F6', { altKey: true });
     expect(dispatch).toHaveBeenCalledWith({
       type: 'NAVIGATE',
-      payload: { direction: 'next' },
+      direction: 'next',
     });
   });
 
@@ -361,12 +370,16 @@ describe('KeyboardManager', () => {
   it('Escape restores maximize even if there is also a floating panel', () => {
     state = makeState({
       maximizedPanelId: 'p1',
-      floatingPanels: [{ panelId: 'p2', x: 0, y: 0, width: 300, height: 200, zIndex: 1000 }],
+      placements: new Map([
+        ['p1', { type: 'docked' as const, groupId: 'tg1' }],
+        ['p2', { type: 'floating' as const, x: 0, y: 0, width: 300, height: 200, zIndex: 1000 }],
+        ['p3', { type: 'docked' as const, groupId: 'tg1' }],
+      ]),
     });
     fireKey(container, 'Escape');
     expect(dispatch).toHaveBeenCalledWith({
       type: 'RESTORE_PANEL',
-      payload: { panelId: 'p1' },
+      panelId: 'p1',
     });
     // Should not also dispatch DOCK_FLOATING
     expect(dispatch).toHaveBeenCalledTimes(1);

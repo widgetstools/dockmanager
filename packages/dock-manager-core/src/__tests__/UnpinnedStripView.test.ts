@@ -8,8 +8,8 @@ function makeUnpinnedPanels(ids: string[], edge: 'left' | 'right' | 'top' | 'bot
   return ids.map(id => ({ panelId: id, edge, size: 250 }));
 }
 
-function makePanels(ids: string[]): Record<string, PanelConfig> {
-  return Object.fromEntries(ids.map(id => [id, { id, title: `Panel ${id}` }]));
+function makePanels(ids: string[]): Map<string, PanelConfig> {
+  return new Map(ids.map(id => [id, { id, title: `Panel ${id}` } as PanelConfig]));
 }
 
 function makeCallbacks(): UnpinnedStripViewCallbacks {
@@ -358,7 +358,7 @@ describe('UnpinnedStripView', () => {
       // When createContent ran, its container's parent chain should terminate
       // at document — i.e. the flyout was already attached.
       expect(parentAtCreateTime).not.toBeNull();
-      let node: Node | null = parentAtCreateTime;
+      let node: Node | null = parentAtCreateTime!;
       let reachedDocument = false;
       while (node) {
         if (node === document) {

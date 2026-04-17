@@ -7,10 +7,8 @@ import type { DockManagerState } from '../types/dock';
 function makeState(label: string): DockManagerState {
   return {
     layout: { type: 'tabgroup', id: 'tg1', panels: [label], activePanel: label },
-    panels: { [label]: { id: label, title: label, closable: true } },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([[label, { id: label, title: label, closable: true } as any]]),
+    placements: new Map([[label, { type: 'docked' as const, groupId: 'tg1' }]]),
     nextZIndex: 1000,
     activePaneId: label,
   };

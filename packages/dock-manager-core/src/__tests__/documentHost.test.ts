@@ -28,14 +28,16 @@ function makeDocHostState(): DockManagerState {
       ],
       sizes: [70, 30],
     },
-    panels: {
-      doc1: { id: 'doc1', title: 'Document 1', documentOnly: true },
-      doc2: { id: 'doc2', title: 'Document 2', documentOnly: true },
-      tool1: { id: 'tool1', title: 'Tool Window' },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['doc1', { id: 'doc1', title: 'Document 1', documentOnly: true } as any],
+      ['doc2', { id: 'doc2', title: 'Document 2', documentOnly: true } as any],
+      ['tool1', { id: 'tool1', title: 'Tool Window' } as any],
+    ]),
+    placements: new Map([
+      ['doc1', { type: 'docked' as const, groupId: 'tg-doc' }],
+      ['doc2', { type: 'docked' as const, groupId: 'tg-doc' }],
+      ['tool1', { type: 'docked' as const, groupId: 'tg-tools' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'doc1',
   };
@@ -50,7 +52,7 @@ describe('Document Host enforcement', () => {
     // Try to move doc1 to tg-tools (which has no documentOnly panels) at center
     const result = dockReducer(state, {
       type: 'MOVE_PANEL',
-      payload: { panelId: 'doc1', targetTabGroupId: 'tg-tools', position: 'center' },
+      panelId: 'doc1', targetGroupId: 'tg-tools', position: 'center',
     });
 
     // State should not change (move rejected)
@@ -95,7 +97,7 @@ describe('Document Host enforcement', () => {
     // Move doc1 to tg-doc2 (which has documentOnly panels)
     const result = dockReducer(stateWithThreeGroups, {
       type: 'MOVE_PANEL',
-      payload: { panelId: 'doc1', targetTabGroupId: 'tg-doc2', position: 'center' },
+      panelId: 'doc1', targetGroupId: 'tg-doc2', position: 'center',
     });
 
     // State should change (move accepted)
@@ -109,7 +111,7 @@ describe('Document Host enforcement', () => {
     // Move tool1 to tg-doc (which has documentOnly panels)
     const result = dockReducer(state, {
       type: 'MOVE_PANEL',
-      payload: { panelId: 'tool1', targetTabGroupId: 'tg-doc', position: 'center' },
+      panelId: 'tool1', targetGroupId: 'tg-doc', position: 'center',
     });
 
     // State should change (move accepted)
@@ -123,7 +125,7 @@ describe('Document Host enforcement', () => {
     // Move doc1 to tg-tools via split (left position) - this creates a new group
     const result = dockReducer(state, {
       type: 'MOVE_PANEL',
-      payload: { panelId: 'doc1', targetTabGroupId: 'tg-tools', position: 'left' },
+      panelId: 'doc1', targetGroupId: 'tg-tools', position: 'left',
     });
 
     // Split positions are allowed (they create new groups)

@@ -17,13 +17,14 @@ function makeState(overrides?: Partial<DockManagerState>): DockManagerState {
       panels: ['p1', 'p2'],
       activePanel: 'p1',
     },
-    panels: {
-      p1: { id: 'p1', title: 'Panel 1', closable: true, disabled: true },
-      p2: { id: 'p2', title: 'Panel 2', closable: true },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['p1', { id: 'p1', title: 'Panel 1', closable: true, disabled: true } as any],
+      ['p2', { id: 'p2', title: 'Panel 2', closable: true } as any],
+    ]),
+    placements: new Map([
+      ['p1', { type: 'docked' as const, groupId: 'tg1' }],
+      ['p2', { type: 'docked' as const, groupId: 'tg1' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'p1',
     ...overrides,
@@ -69,7 +70,7 @@ describe('Disabled panel feature', () => {
         onDrop,
         onFloat,
         onSelect,
-        getPanelConfig: (id) => makeState().panels[id],
+        getPanelConfig: (id) => makeState().panels.get(id),
         theme: 'light',
       });
     });
@@ -133,7 +134,7 @@ describe('Disabled panel feature', () => {
     it('buildActionButtons should return empty for disabled active panel', () => {
       // When a panel is disabled, TabGroupView.buildActionButtons returns early
       // This is verified by checking the panel config
-      const panel = makeState().panels['p1'];
+      const panel = makeState().panels.get('p1')!;
       expect(panel.disabled).toBe(true);
     });
   });
