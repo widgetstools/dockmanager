@@ -1,8 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DockviewApi } from '../api/DockviewApi';
 import { dockReducer, createDefaultState } from '../reducer/dockReducer';
-import type { DockManagerState, TabGroupNode } from '../types/dock';
-import { resetIdCounter } from '../layout/LayoutTree';
+import type { DockManagerState, PanelConfig, Placement } from '../types/dock';
 
 // ---------------------------------------------------------------------------
 // Test helper
@@ -19,8 +18,24 @@ function createApiWithState(
   return { api: new DockviewApi(getState, dispatch), getState };
 }
 
-/** Reusable state: split layout with three tab groups */
+/** Reusable state: split layout with three tab groups, using Map-based panels and placements */
 function createTestState(): DockManagerState {
+  const panels = new Map<string, PanelConfig>([
+    ['explorer', { id: 'explorer', title: 'Explorer' }],
+    ['doc1', { id: 'doc1', title: 'Document 1', closable: true }],
+    ['doc2', { id: 'doc2', title: 'Document 2', closable: true }],
+    ['doc3', { id: 'doc3', title: 'Document 3', closable: true }],
+    ['terminal', { id: 'terminal', title: 'Terminal' }],
+  ]);
+
+  const placements = new Map<string, Placement>([
+    ['explorer', { type: 'docked', groupId: 'tg_left' }],
+    ['doc1', { type: 'docked', groupId: 'tg_center' }],
+    ['doc2', { type: 'docked', groupId: 'tg_center' }],
+    ['doc3', { type: 'docked', groupId: 'tg_center' }],
+    ['terminal', { type: 'docked', groupId: 'tg_bottom' }],
+  ]);
+
   return {
     layout: {
       type: 'split',
@@ -56,16 +71,8 @@ function createTestState(): DockManagerState {
       ],
       sizes: [20, 80],
     },
-    panels: {
-      explorer: { id: 'explorer', title: 'Explorer' },
-      doc1: { id: 'doc1', title: 'Document 1', closable: true },
-      doc2: { id: 'doc2', title: 'Document 2', closable: true },
-      doc3: { id: 'doc3', title: 'Document 3', closable: true },
-      terminal: { id: 'terminal', title: 'Terminal' },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels,
+    placements,
     nextZIndex: 1000,
     activePaneId: 'doc1',
   };
@@ -74,10 +81,6 @@ function createTestState(): DockManagerState {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
-
-beforeEach(() => {
-  resetIdCounter();
-});
 
 // ── 1. State queries ─────────────────────────────────────────────────────
 
@@ -155,6 +158,11 @@ describe('State queries', () => {
     expect(api.isPanelPlaced('doc1')).toBe(true);
   });
 
+  it('isPanelPlaced returns false for unknown panels', () => {
+    const { api } = createApiWithState(createTestState());
+    expect(api.isPanelPlaced('unknown')).toBe(false);
+  });
+
   it('getGroupForPanel returns the tab group ID for a panel', () => {
     const { api } = createApiWithState(createTestState());
     expect(api.getGroupForPanel('doc1')).toBe('tg_center');
@@ -210,7 +218,7 @@ describe('State queries', () => {
 
 describe('addPanel', () => {
   it('adds a panel to the first tab group', () => {
-    const { api, getState } = createApiWithState(createTestState());
+    const { api } = createApiWithState(createTestState());
     api.addPanel({ id: 'newPanel', title: 'New Panel' });
     expect(api.hasPanel('newPanel')).toBe(true);
     expect(api.panelCount).toBe(6);
@@ -424,6 +432,23 @@ describe('floatPanel', () => {
     const { api } = createApiWithState(createTestState());
     api.floatPanel({ panelId: 'doc1' });
     expect(api.isPanelPlaced('doc1')).toBe(true);
+  });
+
+  it('getFloatingPanels returns data in FloatingPanel shape', () => {
+    const { api } = createApiWithState(createTestState());
+    api.floatPanel({ panelId: 'doc1', x: 10, y: 20, width: 300, height: 200 });
+    const fps = api.getFloatingPanels();
+    expect(fps).toHaveLength(1);
+    const fp = fps[0];
+    expect(fp).toHaveProperty('panelId', 'doc1');
+    expect(fp).toHaveProperty('x', 10);
+    expect(fp).toHaveProperty('y', 20);
+    expect(fp).toHaveProperty('width', 300);
+    expect(fp).toHaveProperty('height', 200);
+    expect(fp).toHaveProperty('zIndex');
+    expect(typeof fp.zIndex).toBe('number');
+    // sourceTabGroupId should be present (the group it came from)
+    expect(fp).toHaveProperty('sourceTabGroupId');
   });
 });
 
@@ -729,13 +754,293 @@ describe('loadState', () => {
 });
 
 describe('unpinPanel', () => {
-  it('removes the panel from layout and adds to unpinned', () => {
+  it('removes the panel from layout and adds to placements as unpinned', () => {
     const { api, getState } = createApiWithState(createTestState());
     api.unpinPanel('explorer');
     expect(api.getGroupForPanel('explorer')).toBeNull();
-    expect(getState().unpinnedPanels.some((p) => p.panelId === 'explorer')).toBe(true);
+    const placement = getState().placements.get('explorer');
+    expect(placement).toBeDefined();
+    expect(placement!.type).toBe('unpinned');
   });
 });
+
+describe('dockAllFloating', () => {
+  it('docks all floating panels back into the layout', () => {
+    const { api } = createApiWithState(createTestState());
+    api.floatPanel({ panelId: 'doc1' });
+    api.floatPanel({ panelId: 'doc2' });
+    expect(api.getFloatingPanels()).toHaveLength(2);
+    api.dockAllFloating();
+    expect(api.getFloatingPanels()).toHaveLength(0);
+    expect(api.getGroupForPanel('doc1')).not.toBeNull();
+    expect(api.getGroupForPanel('doc2')).not.toBeNull();
+  });
+});
+
+describe('presets', () => {
+  it('saves and loads a preset', () => {
+    const { api } = createApiWithState(createTestState());
+    const preset = api.savePreset('default');
+    expect(preset.name).toBe('default');
+    expect(api.getPresets()).toHaveLength(1);
+
+    // Modify state
+    api.closePanel('doc1');
+    expect(api.panelCount).toBe(4);
+
+    // Load preset restores
+    api.loadPreset(preset);
+    expect(api.panelCount).toBe(5);
+  });
+
+  it('getPresets returns all saved presets', () => {
+    const { api } = createApiWithState(createTestState());
+    api.savePreset('preset1');
+    api.savePreset('preset2');
+    expect(api.getPresets()).toHaveLength(2);
+  });
+});
+
+describe('resetLayout', () => {
+  it('replaces state with the provided default', () => {
+    const { api } = createApiWithState(createTestState());
+    const fresh = createDefaultState();
+    api.resetLayout(fresh);
+    expect(api.panelCount).toBe(0);
+  });
+});
+
+describe('undo / redo', () => {
+  it('calls the undo callback', () => {
+    const undoFn = vi.fn();
+    const redoFn = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, () => {}, undoFn, redoFn);
+    api.undo();
+    expect(undoFn).toHaveBeenCalledOnce();
+  });
+
+  it('calls the redo callback', () => {
+    const undoFn = vi.fn();
+    const redoFn = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, () => {}, undoFn, redoFn);
+    api.redo();
+    expect(redoFn).toHaveBeenCalledOnce();
+  });
+
+  it('does not throw when no undo/redo callbacks are provided', () => {
+    const state = createTestState();
+    const api = new DockviewApi(() => state, () => {});
+    expect(() => api.undo()).not.toThrow();
+    expect(() => api.redo()).not.toThrow();
+  });
+});
+
+describe('debugMode', () => {
+  it('defaults to false', () => {
+    const state = createTestState();
+    const api = new DockviewApi(() => state, () => {});
+    expect(api.debugMode).toBe(false);
+  });
+
+  it('can be toggled', () => {
+    const state = createTestState();
+    const api = new DockviewApi(() => state, () => {});
+    api.setDebugMode(true);
+    expect(api.debugMode).toBe(true);
+    api.setDebugMode(false);
+    expect(api.debugMode).toBe(false);
+  });
+
+  it('calls the debug overlay handler', () => {
+    const state = createTestState();
+    const api = new DockviewApi(() => state, () => {});
+    const handler = vi.fn();
+    api._setDebugOverlayHandler(handler);
+    api.setDebugMode(true);
+    expect(handler).toHaveBeenCalledWith(true);
+  });
+});
+
+describe('exportAsUrl / importFromUrl', () => {
+  it('round-trips state through URL encoding', () => {
+    const { api } = createApiWithState(createTestState());
+    const encoded = api.exportAsUrl();
+    expect(typeof encoded).toBe('string');
+    expect(encoded.length).toBeGreaterThan(0);
+
+    // Import it back
+    api.importFromUrl(encoded);
+    // Should still have all panels
+    expect(api.panelCount).toBe(5);
+    expect(api.hasPanel('doc1')).toBe(true);
+  });
+});
+
+// ── 12. Action dispatch verification ─────────────────────────────────────
+
+describe('Action dispatch', () => {
+  it('addPanel dispatches ADD_PANEL action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.addPanel({ id: 'test', title: 'Test' });
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'ADD_PANEL', panelId: 'test' }),
+    );
+  });
+
+  it('closePanel dispatches CLOSE_PANEL action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.closePanel('doc1');
+    expect(dispatch).toHaveBeenCalledWith({ type: 'CLOSE_PANEL', panelId: 'doc1' });
+  });
+
+  it('movePanel dispatches MOVE_PANEL action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.movePanel({ panelId: 'doc1', targetGroupId: 'tg_bottom', position: 'center' });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'MOVE_PANEL',
+      panelId: 'doc1',
+      targetGroupId: 'tg_bottom',
+      position: 'center',
+    });
+  });
+
+  it('setActivePanel dispatches SET_ACTIVE_PANEL action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.setActivePanel('tg_center', 'doc2');
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'SET_ACTIVE_PANEL',
+      groupId: 'tg_center',
+      panelId: 'doc2',
+    });
+  });
+
+  it('setActivePane dispatches SET_ACTIVE_PANE action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.setActivePane('doc2');
+    expect(dispatch).toHaveBeenCalledWith({ type: 'SET_ACTIVE_PANE', panelId: 'doc2' });
+  });
+
+  it('updatePanel dispatches UPDATE_PANEL_CONFIG action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.updatePanel('doc1', { title: 'New' });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'UPDATE_PANEL_CONFIG',
+      panelId: 'doc1',
+      config: { title: 'New' },
+    });
+  });
+
+  it('floatPanel dispatches FLOAT_PANEL action with defaults', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.floatPanel({ panelId: 'doc1' });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'FLOAT_PANEL',
+      panelId: 'doc1',
+      x: 100,
+      y: 100,
+      width: 400,
+      height: 300,
+    });
+  });
+
+  it('maximizePanel dispatches MAXIMIZE_PANEL action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.maximizePanel('doc1');
+    expect(dispatch).toHaveBeenCalledWith({ type: 'MAXIMIZE_PANEL', panelId: 'doc1' });
+  });
+
+  it('restorePanel dispatches RESTORE_PANEL action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.restorePanel();
+    expect(dispatch).toHaveBeenCalledWith({ type: 'RESTORE_PANEL', panelId: '' });
+  });
+
+  it('navigateNext dispatches NAVIGATE next action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.navigateNext();
+    expect(dispatch).toHaveBeenCalledWith({ type: 'NAVIGATE', direction: 'next' });
+  });
+
+  it('navigatePrevious dispatches NAVIGATE previous action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.navigatePrevious();
+    expect(dispatch).toHaveBeenCalledWith({ type: 'NAVIGATE', direction: 'previous' });
+  });
+
+  it('resizeSplit dispatches RESIZE_SPLIT action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.resizeSplit('split_root', [30, 70]);
+    expect(dispatch).toHaveBeenCalledWith({ type: 'RESIZE_SPLIT', splitId: 'split_root', sizes: [30, 70] });
+  });
+
+  it('unpinPanel dispatches UNPIN_PANEL action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.unpinPanel('doc1');
+    expect(dispatch).toHaveBeenCalledWith({ type: 'UNPIN_PANEL', panelId: 'doc1' });
+  });
+
+  it('pinPanel dispatches PIN_PANEL action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.pinPanel('doc1');
+    expect(dispatch).toHaveBeenCalledWith({ type: 'PIN_PANEL', panelId: 'doc1' });
+  });
+
+  it('bringToFront dispatches BRING_TO_FRONT action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.bringToFront('doc1');
+    expect(dispatch).toHaveBeenCalledWith({ type: 'BRING_TO_FRONT', panelId: 'doc1' });
+  });
+
+  it('setHeaderPosition dispatches SET_HEADER_POSITION action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.setHeaderPosition('tg_center', 'bottom');
+    expect(dispatch).toHaveBeenCalledWith({ type: 'SET_HEADER_POSITION', groupId: 'tg_center', position: 'bottom' });
+  });
+
+  it('setTabGroupLocked dispatches SET_TAB_GROUP_LOCKED action', () => {
+    const dispatch = vi.fn();
+    const state = createTestState();
+    const api = new DockviewApi(() => state, dispatch);
+    api.setTabGroupLocked('tg_center', true);
+    expect(dispatch).toHaveBeenCalledWith({ type: 'SET_TAB_GROUP_LOCKED', groupId: 'tg_center', locked: true });
+  });
+});
+
+// ── 13. Complex workflows ────────────────────────────────────────────────
 
 describe('complex workflows', () => {
   it('add then float then dock a panel', () => {

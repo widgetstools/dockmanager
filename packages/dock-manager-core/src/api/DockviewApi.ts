@@ -1,24 +1,24 @@
 import type {
   DockManagerState,
   DockPosition,
-  DockEdge,
   PanelConfig,
   HeaderPosition,
   TabGroupNode,
   LayoutNode,
   FloatingPanel,
+  Placement,
 } from '../types/dock';
 import type { DockAction } from '../reducer/dockReducer';
 import {
+  LayoutTree,
   findTabGroupForPanel,
   findFirstTabGroup,
   findTabGroupById,
   findAllTabGroups,
   collectAllPanelsOrdered,
   collectLayoutPanelIds,
-  isPanelPlaced,
-  countPanels,
 } from '../layout/LayoutTree';
+import { serialize, deserialize } from '../serialization/serializer';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -138,7 +138,7 @@ export class DockviewApi {
    * @returns The panel config, or `undefined` if no panel with that ID exists.
    */
   getPanel(panelId: string): PanelConfig | undefined {
-    return this.getState().panels[panelId];
+    return this.getState().panels.get(panelId);
   }
 
   /**
@@ -152,13 +152,12 @@ export class DockviewApi {
 
   /** Get all panel IDs across the entire dock manager */
   getAllPanelIds(): string[] {
-    const state = this.getState();
-    return Object.keys(state.panels);
+    return Array.from(this.getState().panels.keys());
   }
 
   /** Get the total number of panels */
   get panelCount(): number {
-    return Object.keys(this.getState().panels).length;
+    return this.getState().panels.size;
   }
 
   /**
@@ -168,7 +167,7 @@ export class DockviewApi {
    * @returns `true` if the panel is registered (regardless of placement).
    */
   hasPanel(panelId: string): boolean {
-    return panelId in this.getState().panels;
+    return this.getState().panels.has(panelId);
   }
 
   /**
@@ -178,7 +177,7 @@ export class DockviewApi {
    * @returns `true` if the panel occupies a slot in the UI.
    */
   isPanelPlaced(panelId: string): boolean {
-    return isPanelPlaced(this.getState(), panelId);
+    return this.getState().placements.has(panelId);
   }
 
   /**
@@ -206,9 +205,26 @@ export class DockviewApi {
     return findAllTabGroups(this.getState().layout);
   }
 
-  /** Get all floating panels */
+  /**
+   * Get all floating panels in the old `FloatingPanel[]` shape for backward compatibility.
+   */
   getFloatingPanels(): readonly FloatingPanel[] {
-    return this.getState().floatingPanels;
+    const state = this.getState();
+    const result: FloatingPanel[] = [];
+    for (const [panelId, placement] of state.placements) {
+      if (placement.type === 'floating') {
+        result.push({
+          panelId,
+          x: placement.x,
+          y: placement.y,
+          width: placement.width,
+          height: placement.height,
+          zIndex: placement.zIndex,
+          sourceTabGroupId: placement.sourceGroupId,
+        });
+      }
+    }
+    return result;
   }
 
   /**
@@ -218,7 +234,8 @@ export class DockviewApi {
    * @returns `true` if the panel is floating.
    */
   isFloating(panelId: string): boolean {
-    return this.getState().floatingPanels.some(fp => fp.panelId === panelId);
+    const placement = this.getState().placements.get(panelId);
+    return placement?.type === 'floating';
   }
 
   /** Check if a panel is the active pane */
@@ -261,19 +278,25 @@ export class DockviewApi {
 
     const { title, icon, closable, floatable, dockable, tabComponent, widgetType, widgetProps, targetGroupId, position } = options;
 
-    // Add the panel config first
+    const config: PanelConfig = {
+      id: panelId,
+      title,
+      icon,
+      closable,
+      floatable,
+      dockable,
+      tabComponent,
+      widgetType,
+      widgetProps,
+    };
+
     this.dispatch({
       type: 'ADD_PANEL',
-      payload: { panelId, title, icon, closable, floatable, dockable, tabComponent, widgetType, widgetProps },
+      panelId,
+      config,
+      target: targetGroupId,
+      position: position,
     });
-
-    // If a specific target/position was requested and it's not the default
-    if (targetGroupId && (targetGroupId !== findFirstTabGroup(this.getState().layout) || position !== 'center')) {
-      this.dispatch({
-        type: 'MOVE_PANEL',
-        payload: { panelId, targetTabGroupId: targetGroupId, position: position || 'center' },
-      });
-    }
   }
 
   /**
@@ -285,7 +308,7 @@ export class DockviewApi {
    * @param panelId - The ID of the panel to close.
    */
   closePanel(panelId: string): void {
-    this.dispatch({ type: 'CLOSE_PANEL', payload: { panelId } });
+    this.dispatch({ type: 'CLOSE_PANEL', panelId });
   }
 
   /**
@@ -296,11 +319,9 @@ export class DockviewApi {
   movePanel(options: MovePanelOptions): void {
     this.dispatch({
       type: 'MOVE_PANEL',
-      payload: {
-        panelId: options.panelId,
-        targetTabGroupId: options.targetGroupId,
-        position: options.position,
-      },
+      panelId: options.panelId,
+      targetGroupId: options.targetGroupId,
+      position: options.position,
     });
   }
 
@@ -311,7 +332,7 @@ export class DockviewApi {
    * @param panelId - The panel to make active.
    */
   setActivePanel(groupId: string, panelId: string): void {
-    this.dispatch({ type: 'SET_ACTIVE_PANEL', payload: { tabGroupId: groupId, panelId } });
+    this.dispatch({ type: 'SET_ACTIVE_PANEL', groupId, panelId });
   }
 
   /**
@@ -320,7 +341,7 @@ export class DockviewApi {
    * @param panelId - The panel to focus.
    */
   setActivePane(panelId: string): void {
-    this.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId } });
+    this.dispatch({ type: 'SET_ACTIVE_PANE', panelId });
   }
 
   /**
@@ -332,7 +353,7 @@ export class DockviewApi {
    * @param updates - Partial config to merge.
    */
   updatePanel(panelId: string, updates: Partial<PanelConfig>): void {
-    this.dispatch({ type: 'UPDATE_PANEL_CONFIG', payload: { panelId, updates } });
+    this.dispatch({ type: 'UPDATE_PANEL_CONFIG', panelId, config: updates });
   }
 
   // ── Floating operations ────────────────────────────────────────
@@ -346,13 +367,11 @@ export class DockviewApi {
   floatPanel(options: FloatPanelOptions): void {
     this.dispatch({
       type: 'FLOAT_PANEL',
-      payload: {
-        panelId: options.panelId,
-        x: options.x ?? 100,
-        y: options.y ?? 100,
-        width: options.width ?? 400,
-        height: options.height ?? 300,
-      },
+      panelId: options.panelId,
+      x: options.x ?? 100,
+      y: options.y ?? 100,
+      width: options.width ?? 400,
+      height: options.height ?? 300,
     });
   }
 
@@ -364,15 +383,13 @@ export class DockviewApi {
    * @param position - Where to place it relative to the target. Defaults to `'center'`.
    */
   dockFloatingPanel(panelId: string, targetGroupId?: string, position: DockPosition = 'center'): void {
-    const panel = this.getState().panels[panelId];
+    const panel = this.getState().panels.get(panelId);
     if (panel?.dockable === false) return;
     this.dispatch({
       type: 'DOCK_FLOATING',
-      payload: {
-        panelId,
-        targetTabGroupId: targetGroupId || 'default',
-        position,
-      },
+      panelId,
+      targetGroupId: targetGroupId || 'default',
+      position,
     });
   }
 
@@ -383,7 +400,7 @@ export class DockviewApi {
    * @param updates - Partial position/size values to merge.
    */
   updateFloatingPanel(panelId: string, updates: { x?: number; y?: number; width?: number; height?: number }): void {
-    this.dispatch({ type: 'UPDATE_FLOATING', payload: { panelId, ...updates } });
+    this.dispatch({ type: 'UPDATE_FLOATING', panelId, ...updates });
   }
 
   /**
@@ -392,7 +409,7 @@ export class DockviewApi {
    * @param panelId - The floating panel to bring forward.
    */
   bringToFront(panelId: string): void {
-    this.dispatch({ type: 'BRING_TO_FRONT', payload: { panelId } });
+    this.dispatch({ type: 'BRING_TO_FRONT', panelId });
   }
 
   // ── Maximize/restore ───────────────────────────────────────────
@@ -403,12 +420,12 @@ export class DockviewApi {
    * @param panelId - The panel to maximize.
    */
   maximizePanel(panelId: string): void {
-    this.dispatch({ type: 'MAXIMIZE_PANEL', payload: { panelId } });
+    this.dispatch({ type: 'MAXIMIZE_PANEL', panelId });
   }
 
   /** Restore the maximized panel to its original position */
   restorePanel(): void {
-    this.dispatch({ type: 'RESTORE_PANEL', payload: { panelId: '' } });
+    this.dispatch({ type: 'RESTORE_PANEL', panelId: '' });
   }
 
   /**
@@ -429,12 +446,12 @@ export class DockviewApi {
 
   /** Navigate to the next panel (Ctrl+Tab behavior) */
   navigateNext(): void {
-    this.dispatch({ type: 'NAVIGATE', payload: { direction: 'next' } });
+    this.dispatch({ type: 'NAVIGATE', direction: 'next' });
   }
 
   /** Navigate to the previous panel (Ctrl+Shift+Tab behavior) */
   navigatePrevious(): void {
-    this.dispatch({ type: 'NAVIGATE', payload: { direction: 'previous' } });
+    this.dispatch({ type: 'NAVIGATE', direction: 'previous' });
   }
 
   // ── Layout operations ──────────────────────────────────────────
@@ -446,7 +463,7 @@ export class DockviewApi {
    * @param sizes - New size percentages for each child. Must sum to 100.
    */
   resizeSplit(splitId: string, sizes: number[]): void {
-    this.dispatch({ type: 'RESIZE_SPLIT', payload: { splitId, sizes } });
+    this.dispatch({ type: 'RESIZE_SPLIT', splitId, sizes });
   }
 
   /**
@@ -456,7 +473,7 @@ export class DockviewApi {
    * @param position - The new header position, or `undefined` to reset to default.
    */
   setHeaderPosition(groupId: string, position: HeaderPosition | undefined): void {
-    this.dispatch({ type: 'SET_HEADER_POSITION', payload: { tabGroupId: groupId, headerPosition: position } });
+    this.dispatch({ type: 'SET_HEADER_POSITION', groupId, position });
   }
 
   /**
@@ -467,7 +484,7 @@ export class DockviewApi {
    * @param locked - `true` to lock, `false` to unlock.
    */
   setTabGroupLocked(groupId: string, locked: boolean): void {
-    this.dispatch({ type: 'SET_TAB_GROUP_LOCKED', payload: { tabGroupId: groupId, locked } });
+    this.dispatch({ type: 'SET_TAB_GROUP_LOCKED', groupId, locked });
   }
 
   // ── Unpinned panels ────────────────────────────────────────────
@@ -479,7 +496,7 @@ export class DockviewApi {
    * @param panelId - The panel to unpin.
    */
   unpinPanel(panelId: string): void {
-    this.dispatch({ type: 'UNPIN_PANEL', payload: { panelId } });
+    this.dispatch({ type: 'UNPIN_PANEL', panelId });
   }
 
   /**
@@ -488,7 +505,7 @@ export class DockviewApi {
    * @param panelId - The unpinned panel to restore.
    */
   pinPanel(panelId: string): void {
-    this.dispatch({ type: 'PIN_PANEL', payload: { panelId } });
+    this.dispatch({ type: 'PIN_PANEL', panelId });
   }
 
   // ── State management ───────────────────────────────────────────
@@ -501,14 +518,14 @@ export class DockviewApi {
    * @param state - The complete state to load.
    */
   loadState(state: DockManagerState): void {
-    this.dispatch({ type: 'LOAD_STATE', payload: state });
+    this.dispatch({ type: 'LOAD_STATE', state });
   }
 
   /** Close all panels */
   closeAllPanels(): void {
     const panelIds = this.getAllPanelIds();
     for (const id of panelIds) {
-      this.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: id } });
+      this.dispatch({ type: 'CLOSE_PANEL', panelId: id });
     }
   }
 
@@ -530,7 +547,7 @@ export class DockviewApi {
 
   /** Reset layout to a given default state. */
   resetLayout(defaultState: DockManagerState): void {
-    this.dispatch({ type: 'LOAD_STATE', payload: defaultState });
+    this.dispatch({ type: 'LOAD_STATE', state: defaultState });
   }
 
   /** Save the current state as a named preset. Returns the preset object. */
@@ -542,7 +559,7 @@ export class DockviewApi {
 
   /** Load a previously saved preset. */
   loadPreset(preset: { name: string; state: DockManagerState }): void {
-    this.dispatch({ type: 'LOAD_STATE', payload: preset.state });
+    this.dispatch({ type: 'LOAD_STATE', state: preset.state });
   }
 
   /** Get all saved presets. */
@@ -555,10 +572,18 @@ export class DockviewApi {
   /** Dock all floating panels back into the layout. */
   dockAllFloating(): void {
     const state = this.getState();
-    for (const fp of [...state.floatingPanels]) {
+    const floatingPanelIds: string[] = [];
+    for (const [panelId, placement] of state.placements) {
+      if (placement.type === 'floating') {
+        floatingPanelIds.push(panelId);
+      }
+    }
+    for (const panelId of floatingPanelIds) {
       this.dispatch({
         type: 'DOCK_FLOATING',
-        payload: { panelId: fp.panelId, targetTabGroupId: 'default', position: 'center' },
+        panelId,
+        targetGroupId: 'default',
+        position: 'center',
       });
     }
   }
@@ -567,7 +592,7 @@ export class DockviewApi {
 
   /** Export the current state as a base64 URL-safe string. */
   exportAsUrl(): string {
-    const json = JSON.stringify(this.getState());
+    const json = JSON.stringify(serialize(this.getState()));
     if (typeof btoa === 'function') {
       return btoa(unescape(encodeURIComponent(json)));
     }
@@ -582,8 +607,8 @@ export class DockviewApi {
     } else {
       json = Buffer.from(urlString, 'base64').toString('utf-8');
     }
-    const state = JSON.parse(json) as DockManagerState;
-    this.dispatch({ type: 'LOAD_STATE', payload: state });
+    const state = deserialize(JSON.parse(json));
+    this.dispatch({ type: 'LOAD_STATE', state });
   }
 
   // ── Developer Experience ──────────────────────────────────────
