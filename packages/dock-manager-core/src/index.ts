@@ -22,6 +22,7 @@ export type {
   PreventableDockEvent,
   HeaderPosition,
   LayoutConstraints,
+  Placement,
 } from './types/dock';
 
 export { createPreventableEvent } from './types/dock';
@@ -130,7 +131,7 @@ export type { PanelFinderOptions } from './dom/PanelFinder';
 // the primary public API. Use DockviewApi for programmatic control.
 
 /** @internal */
-export { genId, resetIdCounter, syncIdCounter } from './layout/LayoutTree';
+export { LayoutTree, genId, resetIdCounter, syncIdCounter } from './layout/LayoutTree';
 
 // ─── Lifecycle utilities ─────────────────────────────────────────────
 
