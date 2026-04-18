@@ -300,7 +300,7 @@ export class AppComponent implements OnDestroy, AfterViewInit {
   createTabContent = (panelId: string, container: HTMLElement, _isActive: boolean): IDisposable => {
     // Use the api's live state (not this.currentState which may be stale during render)
     const liveState = this.api?.state ?? this.currentState;
-    const panel = liveState.panels[panelId] || (defaultState.panels as any)[panelId];
+    const panel = liveState.panels.get(panelId) ?? defaultState.panels.get(panelId);
     if (!panel) return { dispose: () => {} };
 
     const span = document.createElement('span');
@@ -376,7 +376,7 @@ export class AppComponent implements OnDestroy, AfterViewInit {
 
   onWillClose(data: { event: PreventableDockEvent; panelId: string }): void {
     if (UNSAVED_PANELS.has(data.panelId)) {
-      const panel = this.currentState.panels[data.panelId];
+      const panel = this.currentState.panels.get(data.panelId);
       if (!window.confirm(`"${panel?.title ?? data.panelId}" has unsaved changes. Close anyway?`)) {
         data.event.preventDefault();
       }
@@ -422,7 +422,7 @@ export class AppComponent implements OnDestroy, AfterViewInit {
   }
 
   toggleDisabled(): void {
-    const p = this.currentState.panels['contentPane2'];
+    const p = this.currentState.panels.get('contentPane2');
     if (p) { this.api?.updatePanel('contentPane2', { disabled: !p.disabled }); this.showToast(p.disabled ? 'Enabled' : 'Disabled'); }
   }
 

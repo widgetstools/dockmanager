@@ -75,6 +75,7 @@ export {
 
 export {
   serialize,
+  serializeToObject,
   deserialize,
   saveToLocalStorage,
   loadFromLocalStorage,
@@ -83,6 +84,7 @@ export {
   importFromFile,
   exportAsUrl,
   importFromUrl,
+  validateIntegrity,
 } from './serialization/serializer';
 export type { SerializedDockLayout } from './serialization/serializer';
 

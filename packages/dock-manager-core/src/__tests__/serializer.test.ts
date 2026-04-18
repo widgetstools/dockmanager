@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { DockManagerState, PanelConfig, Placement } from '../types/dock';
 import {
   serialize,
+  serializeToObject,
   deserialize,
   saveToLocalStorage,
   loadFromLocalStorage,
@@ -54,7 +55,7 @@ describe('v3 serialize / deserialize round-trip', () => {
   it('returns equivalent state after round-trip', () => {
     const state = makeState();
     const serialized = serialize(state);
-    const restored = deserialize(serialized);
+    const { state: restored } = deserialize(serialized);
     expect(restored.layout).toEqual(state.layout);
     expect([...restored.panels.entries()]).toEqual([...state.panels.entries()]);
     expect([...restored.placements.entries()]).toEqual([...state.placements.entries()]);
@@ -64,7 +65,7 @@ describe('v3 serialize / deserialize round-trip', () => {
 
   it('preserves layout structure (tabgroup)', () => {
     const state = makeState(['a', 'b', 'c']);
-    const restored = deserialize(serialize(state));
+    const { state: restored } = deserialize(serialize(state));
     expect(restored.layout.type).toBe('tabgroup');
     if (restored.layout.type === 'tabgroup') {
       expect(restored.layout.panels).toEqual(['a', 'b', 'c']);
@@ -79,7 +80,7 @@ describe('v3 serialize / deserialize round-trip', () => {
     config.closable = false;
     config.widgetType = 'chart';
     config.widgetProps = { symbol: 'AAPL' };
-    const restored = deserialize(serialize(state));
+    const { state: restored } = deserialize(serialize(state));
     expect(restored.panels.get('x')).toEqual(config);
   });
 
@@ -89,7 +90,7 @@ describe('v3 serialize / deserialize round-trip', () => {
       type: 'floating', x: 10, y: 20, width: 300, height: 200, zIndex: 5,
     });
     state.layout = { type: 'tabgroup', id: 'tg1', panels: [], activePanel: '' };
-    const restored = deserialize(serialize(state));
+    const { state: restored } = deserialize(serialize(state));
     expect(restored.placements.get('p1')).toEqual({
       type: 'floating', x: 10, y: 20, width: 300, height: 200, zIndex: 5,
     });
@@ -99,7 +100,7 @@ describe('v3 serialize / deserialize round-trip', () => {
     const state = makeState(['p1']);
     state.placements.set('p1', { type: 'unpinned', edge: 'left', size: 250 });
     state.layout = { type: 'tabgroup', id: 'tg1', panels: [], activePanel: '' };
-    const restored = deserialize(serialize(state));
+    const { state: restored } = deserialize(serialize(state));
     expect(restored.placements.get('p1')).toEqual({ type: 'unpinned', edge: 'left', size: 250 });
   });
 
@@ -109,7 +110,7 @@ describe('v3 serialize / deserialize round-trip', () => {
       type: 'popout', windowName: 'win1', x: 100, y: 200, width: 400, height: 300,
     });
     state.layout = { type: 'tabgroup', id: 'tg1', panels: [], activePanel: '' };
-    const restored = deserialize(serialize(state));
+    const { state: restored } = deserialize(serialize(state));
     expect(restored.placements.get('p1')).toEqual({
       type: 'popout', windowName: 'win1', x: 100, y: 200, width: 400, height: 300,
     });
@@ -118,17 +119,24 @@ describe('v3 serialize / deserialize round-trip', () => {
   it('preserves maximizedPanelId when set', () => {
     const state = makeState(['p1', 'p2']);
     state.maximizedPanelId = 'p1';
-    const restored = deserialize(serialize(state));
+    const { state: restored } = deserialize(serialize(state));
     expect(restored.maximizedPanelId).toBe('p1');
   });
 
-  it('serialize sets version to 3', () => {
+  it('serialize returns a JSON string', () => {
     const serialized = serialize(makeState());
+    expect(typeof serialized).toBe('string');
+    const parsed = JSON.parse(serialized);
+    expect(parsed.version).toBe(3);
+  });
+
+  it('serializeToObject sets version to 3', () => {
+    const serialized = serializeToObject(makeState());
     expect(serialized.version).toBe(3);
   });
 
-  it('serialize converts Maps to Records', () => {
-    const serialized = serialize(makeState(['p1']));
+  it('serializeToObject converts Maps to Records', () => {
+    const serialized = serializeToObject(makeState(['p1']));
     expect(typeof serialized.panels).toBe('object');
     expect(serialized.panels).not.toBeInstanceOf(Map);
     expect(serialized.panels['p1']).toBeDefined();
@@ -173,7 +181,7 @@ describe('v3 serialize / deserialize round-trip', () => {
       activePaneId: 'p1',
       nextZIndex: 1,
     };
-    const restored = deserialize(serialize(state));
+    const { state: restored } = deserialize(serialize(state));
     expect(restored.layout).toEqual(state.layout);
     expect(restored.panels.size).toBe(4);
     expect(restored.placements.size).toBe(4);
@@ -189,7 +197,7 @@ describe('v1/v2 deserialization (migration)', () => {
       timestamp: Date.now(),
       state: makeV1V2State(['p1', 'p2']),
     };
-    const restored = deserialize(v2Data);
+    const { state: restored } = deserialize(v2Data);
     expect(restored.panels).toBeInstanceOf(Map);
     expect(restored.placements).toBeInstanceOf(Map);
     expect(restored.panels.size).toBe(2);
@@ -203,14 +211,14 @@ describe('v1/v2 deserialization (migration)', () => {
       timestamp: Date.now(),
       state: makeV1V2State(['p1']),
     };
-    const restored = deserialize(v1Data);
+    const { state: restored } = deserialize(v1Data);
     expect(restored.panels).toBeInstanceOf(Map);
     expect(restored.placements.get('p1')).toEqual({ type: 'docked', groupId: 'tg1' });
   });
 
   it('deserializes legacy raw format (no version wrapper)', () => {
     const rawState = makeV1V2State(['p1', 'p2']);
-    const restored = deserialize(rawState);
+    const { state: restored } = deserialize(rawState);
     expect(restored.panels).toBeInstanceOf(Map);
     expect(restored.panels.size).toBe(2);
   });
@@ -221,7 +229,7 @@ describe('v1/v2 deserialization (migration)', () => {
       { panelId: 'p2', x: 50, y: 60, width: 200, height: 150, zIndex: 10, sourceTabGroupId: 'tg1' },
     ];
     raw.layout = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
-    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    const { state: restored } = deserialize({ version: 2, timestamp: 0, state: raw });
     const placement = restored.placements.get('p2');
     expect(placement).toEqual({
       type: 'floating',
@@ -236,7 +244,7 @@ describe('v1/v2 deserialization (migration)', () => {
       { panelId: 'p2', edge: 'right', size: 300, sourceTabGroupId: 'tg1' },
     ];
     raw.layout = { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' };
-    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    const { state: restored } = deserialize({ version: 2, timestamp: 0, state: raw });
     const placement = restored.placements.get('p2');
     expect(placement).toEqual({
       type: 'unpinned',
@@ -251,7 +259,7 @@ describe('v1/v2 deserialization (migration)', () => {
       { panelId: 'p3', windowName: 'win1', x: 100, y: 200, width: 400, height: 300 },
     ];
     raw.layout = { type: 'tabgroup', id: 'tg1', panels: ['p1', 'p2'], activePanel: 'p1' };
-    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    const { state: restored } = deserialize({ version: 2, timestamp: 0, state: raw });
     const placement = restored.placements.get('p3');
     expect(placement).toBeDefined();
     expect(placement!.type).toBe('floating');
@@ -268,7 +276,7 @@ describe('v1/v2 deserialization (migration)', () => {
     raw.floatingPanels = [
       { panelId: 'orphan', x: 0, y: 0, width: 100, height: 100, zIndex: 1 },
     ];
-    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    const { state: restored } = deserialize({ version: 2, timestamp: 0, state: raw });
     expect(restored.panels.has('orphan')).toBe(true);
     expect(restored.panels.get('orphan')!.title).toBe('orphan');
   });
@@ -278,7 +286,7 @@ describe('v1/v2 deserialization (migration)', () => {
     raw.unpinnedPanels = [
       { panelId: 'orphan', edge: 'left', size: 200 },
     ];
-    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    const { state: restored } = deserialize({ version: 2, timestamp: 0, state: raw });
     expect(restored.panels.has('orphan')).toBe(true);
     expect(restored.panels.get('orphan')!.title).toBe('orphan');
   });
@@ -292,7 +300,7 @@ describe('v1/v2 deserialization (migration)', () => {
       { panelId: 'p3', edge: 'top', size: 150 },
       { panelId: 'p4', edge: 'bottom', size: 150 },
     ];
-    const restored = deserialize({ version: 2, timestamp: 0, state: raw });
+    const { state: restored } = deserialize({ version: 2, timestamp: 0, state: raw });
     expect(restored.placements.get('p1')).toEqual({ type: 'unpinned', edge: 'left', size: 200, sourceGroupId: undefined });
     expect(restored.placements.get('p3')).toEqual({ type: 'unpinned', edge: 'top', size: 150, sourceGroupId: undefined });
   });
@@ -332,12 +340,12 @@ describe('localStorage', () => {
 
   it('saveToLocalStorage + loadFromLocalStorage round-trips', () => {
     const state = makeState(['p1', 'p2']);
-    saveToLocalStorage('test-key', state);
+    saveToLocalStorage(state, 'test-key');
     const result = loadFromLocalStorage('test-key');
     expect(result).not.toBeNull();
-    expect(result!.layout).toEqual(state.layout);
-    expect([...result!.panels.entries()]).toEqual([...state.panels.entries()]);
-    expect([...result!.placements.entries()]).toEqual([...state.placements.entries()]);
+    expect(result!.state.layout).toEqual(state.layout);
+    expect([...result!.state.panels.entries()]).toEqual([...state.panels.entries()]);
+    expect([...result!.state.placements.entries()]).toEqual([...state.placements.entries()]);
   });
 
   it('loadFromLocalStorage returns null when nothing saved', () => {
@@ -346,7 +354,7 @@ describe('localStorage', () => {
 
   it('clearLocalStorage removes the stored data', () => {
     const state = makeState();
-    saveToLocalStorage('test-key', state);
+    saveToLocalStorage(state, 'test-key');
     expect(loadFromLocalStorage('test-key')).not.toBeNull();
     clearLocalStorage('test-key');
     expect(loadFromLocalStorage('test-key')).toBeNull();
@@ -360,24 +368,22 @@ describe('localStorage', () => {
 
 // ─── exportToFile / importFromFile ──────────────────────────────────
 
-describe('exportToFile / importFromFile', () => {
+describe('serialize / deserialize string round-trip', () => {
   it('round-trips state through JSON string', () => {
     const state = makeState(['p1', 'p2']);
-    const json = exportToFile(state);
-    const restored = importFromFile(json);
+    const json = serialize(state);
+    const { state: restored } = deserialize(json);
     expect(restored.layout).toEqual(state.layout);
     expect([...restored.panels.entries()]).toEqual([...state.panels.entries()]);
   });
 
-  it('exportToFile produces valid pretty-printed JSON', () => {
-    const json = exportToFile(makeState());
+  it('serialize produces valid JSON', () => {
+    const json = serialize(makeState());
     expect(() => JSON.parse(json)).not.toThrow();
-    // Pretty-printed means it contains newlines
-    expect(json).toContain('\n');
   });
 
-  it('importFromFile throws on invalid JSON', () => {
-    expect(() => importFromFile('not json {')).toThrow('Invalid JSON');
+  it('deserialize throws on invalid JSON string', () => {
+    expect(() => deserialize('not json {')).toThrow('Invalid JSON');
   });
 });
 
@@ -393,7 +399,7 @@ describe('URL encoding', () => {
   it('importFromUrl(exportAsUrl(state)) returns equivalent state', () => {
     const state = makeState(['a', 'b']);
     const encoded = exportAsUrl(state);
-    const restored = importFromUrl(encoded);
+    const { state: restored } = importFromUrl(encoded);
     expect(restored.layout).toEqual(state.layout);
     expect([...restored.panels.entries()]).toEqual([...state.panels.entries()]);
     expect([...restored.placements.entries()]).toEqual([...state.placements.entries()]);

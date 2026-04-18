@@ -592,7 +592,7 @@ export class DockviewApi {
 
   /** Export the current state as a base64 URL-safe string. */
   exportAsUrl(): string {
-    const json = JSON.stringify(serialize(this.getState()));
+    const json = serialize(this.getState());
     if (typeof btoa === 'function') {
       return btoa(unescape(encodeURIComponent(json)));
     }
@@ -607,7 +607,7 @@ export class DockviewApi {
     } else {
       json = Buffer.from(urlString, 'base64').toString('utf-8');
     }
-    const state = deserialize(JSON.parse(json));
+    const { state } = deserialize(json);
     this.dispatch({ type: 'LOAD_STATE', state });
   }
 

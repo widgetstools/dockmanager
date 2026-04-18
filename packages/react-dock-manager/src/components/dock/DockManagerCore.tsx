@@ -256,7 +256,7 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
 
       switch (entry.type) {
         case 'content': {
-          const panel = state?.panels[entry.panelId];
+          const panel = state?.panels.get(entry.panelId);
           if (panel && entry.api) {
             // Try widget registry first, then fall back to renderPanel
             const widgetType = panel.widgetType || '';
@@ -270,7 +270,7 @@ export const DockManagerCore = forwardRef<DockManagerCoreHandle, DockManagerCore
           break;
         }
         case 'tab': {
-          const panel = state?.panels[entry.panelId];
+          const panel = state?.panels.get(entry.panelId);
           if (panel && cbs.renderTab) {
             content = cbs.renderTab(entry.panelId, panel, entry.isActive ?? false);
           }

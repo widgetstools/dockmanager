@@ -128,7 +128,7 @@ export class DockManagerCoreComponent implements AfterViewInit, OnDestroy, OnCha
         // Try widget registry first
         // Note: this.dock may be null during initial construction, so fall back to initialState
         const state = this.dock?.getState() ?? this.initialState;
-        const panel = state?.panels[panelId];
+        const panel = state?.panels.get(panelId);
         const widgetType = panel?.widgetType || '';
         const WidgetClass = this.widgets?.[widgetType];
 

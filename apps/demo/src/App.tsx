@@ -158,7 +158,7 @@ function App() {
 
   const onWillClose = useCallback((event: PreventableDockEvent) => {
     if (event.panelId && UNSAVED_PANELS.has(event.panelId)) {
-      const panel = latestStateRef.current.panels[event.panelId];
+      const panel = latestStateRef.current.panels.get(event.panelId);
       if (!window.confirm(`"${panel?.title ?? event.panelId}" has unsaved changes. Close anyway?`)) {
         event.preventDefault();
       }
@@ -298,7 +298,7 @@ function App() {
             <Sep />
             <Btn icon={<Anchor className="w-3.5 h-3.5" />} title="Dock all floating" onClick={() => { api?.dockAllFloating(); showToast('Docked all'); }} />
             <Btn icon={<Ban className="w-3.5 h-3.5" />} title="Toggle disabled" onClick={() => {
-              const p = latestStateRef.current.panels['contentPane2'];
+              const p = latestStateRef.current.panels.get('contentPane2');
               if (p) { api?.updatePanel('contentPane2', { disabled: !p.disabled }); showToast(p.disabled ? 'Enabled' : 'Disabled'); }
             }} />
             <button onClick={() => { const v = !debugMode; api?.setDebugMode(v); setDebugMode(v); showToast(v ? 'Debug ON' : 'Debug OFF'); }}

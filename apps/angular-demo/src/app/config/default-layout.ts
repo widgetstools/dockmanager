@@ -19,9 +19,9 @@ import type { DockManagerState } from '@widgetstools/dock-manager-core';
  * └────────────────────────────────┘
  */
 export const defaultState: DockManagerState = {
-  panels: {
+  panels: new Map<string, any>([
     // Left: File Tree (Explorer)
-    contentPane1: {
+    ['contentPane1', {
       id: 'contentPane1',
       title: 'Explorer',
       icon: 'folder',
@@ -30,9 +30,9 @@ export const defaultState: DockManagerState = {
       allowMaximize: true,
       allowPinning: true,
       widgetType: 'file-tree',
-    },
+    }],
     // Center: Document 1 (Editor)
-    doc1: {
+    ['doc1', {
       id: 'doc1',
       title: 'Document 1',
       icon: 'file',
@@ -41,9 +41,9 @@ export const defaultState: DockManagerState = {
       allowMaximize: true,
       widgetType: 'editor',
       widgetProps: { language: 'ts' },
-    },
+    }],
     // Center: Document 2 (Editor)
-    doc2: {
+    ['doc2', {
       id: 'doc2',
       title: 'Document 2',
       icon: 'file',
@@ -52,9 +52,9 @@ export const defaultState: DockManagerState = {
       allowMaximize: true,
       widgetType: 'editor',
       widgetProps: { language: 'css' },
-    },
+    }],
     // Right top: Clock (part of bottom-tabs group)
-    tab1: {
+    ['tab1', {
       id: 'tab1',
       title: 'Clock',
       icon: 'clock',
@@ -63,9 +63,9 @@ export const defaultState: DockManagerState = {
       allowMaximize: true,
       allowPinning: true,
       widgetType: 'clock',
-    },
+    }],
     // Right top: Properties (part of bottom-tabs group)
-    tab2: {
+    ['tab2', {
       id: 'tab2',
       title: 'Properties',
       closable: true,
@@ -74,9 +74,9 @@ export const defaultState: DockManagerState = {
       allowPinning: true,
       widgetType: 'placeholder',
       widgetProps: { label: 'Properties panel' },
-    },
+    }],
     // Right bottom: Problems
-    contentPane2: {
+    ['contentPane2', {
       id: 'contentPane2',
       title: 'Problems',
       icon: 'alert',
@@ -85,9 +85,9 @@ export const defaultState: DockManagerState = {
       allowMaximize: true,
       allowPinning: true,
       widgetType: 'problems',
-    },
+    }],
     // Floating pane: Clock
-    floatingPane: {
+    ['floatingPane', {
       id: 'floatingPane',
       title: 'Floating Clock',
       icon: 'clock',
@@ -95,9 +95,9 @@ export const defaultState: DockManagerState = {
       floatable: true,
       allowMaximize: true,
       widgetType: 'clock',
-    },
+    }],
     // Unpinned Pane 1 (left edge auto-hide): Terminal
-    unpinnedPane1: {
+    ['unpinnedPane1', {
       id: 'unpinnedPane1',
       title: 'Terminal',
       icon: 'terminal',
@@ -105,35 +105,35 @@ export const defaultState: DockManagerState = {
       floatable: true,
       allowPinning: true,
       widgetType: 'terminal',
-    },
+    }],
     // Chart — blue area (size-dependent canvas, ResizeObserver path)
-    chartPane: {
+    ['chartPane', {
       id: 'chartPane', title: 'Revenue', icon: 'list',
       closable: true, floatable: true, allowPinning: true,
       widgetType: 'chart', widgetProps: { color: '#3b82f6', variant: 'area' },
-    },
-    chartPane2: {
+    }],
+    ['chartPane2', {
       id: 'chartPane2', title: 'Signups', icon: 'list',
       closable: true, floatable: true, allowPinning: true,
       widgetType: 'chart', widgetProps: { color: '#10b981', variant: 'line' },
-    },
-    chartPane3: {
+    }],
+    ['chartPane3', {
       id: 'chartPane3', title: 'Errors', icon: 'list',
       closable: true, floatable: true, allowPinning: true,
       widgetType: 'chart', widgetProps: { color: '#f59e0b', variant: 'bars' },
-    },
-    chartPane4: {
+    }],
+    ['chartPane4', {
       id: 'chartPane4', title: 'Latency', icon: 'list',
       closable: true, floatable: true, allowPinning: true,
       widgetType: 'chart', widgetProps: { color: '#f43f5e', variant: 'area' },
-    },
-    dataGridPane: {
+    }],
+    ['dataGridPane', {
       id: 'dataGridPane', title: 'Vehicles', icon: 'list',
       closable: true, floatable: true, allowPinning: true,
       widgetType: 'datagrid',
-    },
+    }],
     // Unpinned Pane 2 (bottom edge auto-hide)
-    unpinnedPane2: {
+    ['unpinnedPane2', {
       id: 'unpinnedPane2',
       title: 'Output',
       icon: 'scroll',
@@ -142,8 +142,8 @@ export const defaultState: DockManagerState = {
       allowPinning: true,
       widgetType: 'placeholder',
       widgetProps: { label: 'Output panel' },
-    },
-  },
+    }],
+  ]),
   layout: {
     type: 'split',
     id: 'root_split',
@@ -190,26 +190,22 @@ export const defaultState: DockManagerState = {
       },
     ],
   },
-  floatingPanels: [
-    {
-      panelId: 'floatingPane',
-      x: 300,
-      y: 200,
-      width: 300,
-      height: 200,
-      zIndex: 1,
-    },
-  ],
-  popoutPanels: [],
-  unpinnedPanels: [
-    { panelId: 'unpinnedPane1', edge: 'left', size: 200 },
-    { panelId: 'chartPane', edge: 'left', size: 320 },
-    { panelId: 'chartPane2', edge: 'left', size: 320 },
-    { panelId: 'chartPane3', edge: 'right', size: 320 },
-    { panelId: 'chartPane4', edge: 'right', size: 320 },
-    { panelId: 'dataGridPane', edge: 'right', size: 520 },
-    { panelId: 'unpinnedPane2', edge: 'bottom', size: 180 },
-  ],
+  placements: new Map([
+    ['contentPane1', { type: 'docked' as const, groupId: 'tg_left' }],
+    ['doc1', { type: 'docked' as const, groupId: 'tg_center' }],
+    ['doc2', { type: 'docked' as const, groupId: 'tg_center' }],
+    ['tab1', { type: 'docked' as const, groupId: 'tg_right_top' }],
+    ['tab2', { type: 'docked' as const, groupId: 'tg_right_top' }],
+    ['contentPane2', { type: 'docked' as const, groupId: 'tg_right_bottom' }],
+    ['floatingPane', { type: 'floating' as const, x: 300, y: 200, width: 300, height: 200, zIndex: 1 }],
+    ['unpinnedPane1', { type: 'unpinned' as const, edge: 'left' as const, size: 200 }],
+    ['chartPane', { type: 'unpinned' as const, edge: 'left' as const, size: 320 }],
+    ['chartPane2', { type: 'unpinned' as const, edge: 'left' as const, size: 320 }],
+    ['chartPane3', { type: 'unpinned' as const, edge: 'right' as const, size: 320 }],
+    ['chartPane4', { type: 'unpinned' as const, edge: 'right' as const, size: 320 }],
+    ['dataGridPane', { type: 'unpinned' as const, edge: 'right' as const, size: 520 }],
+    ['unpinnedPane2', { type: 'unpinned' as const, edge: 'bottom' as const, size: 180 }],
+  ]),
   nextZIndex: 2,
   activePaneId: 'tab2',
 };

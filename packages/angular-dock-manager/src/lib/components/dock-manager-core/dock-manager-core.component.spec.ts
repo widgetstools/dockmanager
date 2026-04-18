@@ -45,13 +45,14 @@ function createTestState(): DockManagerState {
       panels: ['p1', 'p2'],
       activePanel: 'p1',
     },
-    panels: {
-      p1: { id: 'p1', title: 'Panel 1' },
-      p2: { id: 'p2', title: 'Panel 2' },
-    },
-    floatingPanels: [],
-    popoutPanels: [],
-    unpinnedPanels: [],
+    panels: new Map([
+      ['p1', { id: 'p1', title: 'Panel 1' } as any],
+      ['p2', { id: 'p2', title: 'Panel 2' } as any],
+    ]),
+    placements: new Map([
+      ['p1', { type: 'docked' as const, groupId: 'tg1' }],
+      ['p2', { type: 'docked' as const, groupId: 'tg1' }],
+    ]),
     nextZIndex: 1000,
     activePaneId: 'p1',
   };
@@ -128,36 +129,37 @@ describe('Angular wrapper integration (DockviewComponent with Angular-like usage
   // ── Dispatch (mirrors component.dispatch()) ──
 
   it('should switch tabs on SET_ACTIVE_PANEL', () => {
-    dock.dispatch({ type: 'SET_ACTIVE_PANEL', payload: { tabGroupId: 'tg1', panelId: 'p2' } });
+    dock.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: 'tg1', panelId: 'p2' });
     const state = dock.getState();
     expect((state.layout as any).activePanel).toBe('p2');
   });
 
   it('should emit state changes on dispatch', () => {
-    dock.dispatch({ type: 'SET_ACTIVE_PANEL', payload: { tabGroupId: 'tg1', panelId: 'p2' } });
+    dock.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: 'tg1', panelId: 'p2' });
     expect(stateChanges.length).toBeGreaterThan(0);
   });
 
   it('should close panel', () => {
-    dock.dispatch({ type: 'CLOSE_PANEL', payload: { panelId: 'p2' } });
+    dock.dispatch({ type: 'CLOSE_PANEL', panelId: 'p2' });
     const state = dock.getState();
-    expect(state.panels['p2']).toBeUndefined();
+    expect(state.panels.get('p2')).toBeUndefined();
   });
 
   it('should add panel', () => {
-    dock.dispatch({ type: 'ADD_PANEL', payload: { panelId: 'p3', title: 'Panel 3' } });
+    dock.dispatch({ type: 'ADD_PANEL', panelId: 'p3', config: { id: 'p3', title: 'Panel 3' } as any });
     const state = dock.getState();
-    expect(state.panels['p3']).toBeDefined();
-    expect(state.panels['p3'].title).toBe('Panel 3');
+    expect(state.panels.get('p3')).toBeDefined();
+    expect(state.panels.get('p3')!.title).toBe('Panel 3');
   });
 
   it('should float panel', () => {
     dock.dispatch({
       type: 'FLOAT_PANEL',
-      payload: { panelId: 'p1', x: 50, y: 50, width: 300, height: 200 },
+      panelId: 'p1', x: 50, y: 50, width: 300, height: 200,
     });
     const state = dock.getState();
-    expect(state.floatingPanels.length).toBe(1);
+    const floatingCount = [...state.placements.values()].filter(p => p.type === 'floating').length;
+    expect(floatingCount).toBe(1);
     const floating = container.querySelectorAll('.dock-floating-window');
     expect(floating.length).toBe(1);
   });
@@ -192,7 +194,7 @@ describe('Angular wrapper integration (DockviewComponent with Angular-like usage
   });
 
   it('should move dock-pane-active when SET_ACTIVE_PANE dispatched', () => {
-    dock.dispatch({ type: 'SET_ACTIVE_PANE', payload: { panelId: 'p2' } });
+    dock.dispatch({ type: 'SET_ACTIVE_PANE', panelId: 'p2' });
     const state = dock.getState();
     expect(state.activePaneId).toBe('p2');
   });
@@ -209,7 +211,7 @@ describe('Angular wrapper integration (DockviewComponent with Angular-like usage
 
   it('should return current state', () => {
     const state = dock.getState();
-    expect(state.panels['p1'].title).toBe('Panel 1');
+    expect(state.panels.get('p1')!.title).toBe('Panel 1');
     expect(state.activePaneId).toBe('p1');
   });
 });

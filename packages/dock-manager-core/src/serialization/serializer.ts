@@ -111,8 +111,13 @@ export function validateIntegrity(state: DockManagerState): string[] {
 
 // ─── Serialization ──────────────────────────────────────────────────
 
+/** Serialize dock manager state to a JSON string */
+export function serialize(state: DockManagerState): string {
+  return JSON.stringify(serializeToObject(state));
+}
+
 /** Serialize dock manager state to a SerializedDockLayout object */
-export function serialize(state: DockManagerState): SerializedDockLayout {
+export function serializeToObject(state: DockManagerState): SerializedDockLayout {
   const panels: Record<string, PanelConfig> = {};
   for (const [id, config] of state.panels) {
     panels[id] = config;
@@ -142,7 +147,18 @@ export function serialize(state: DockManagerState): SerializedDockLayout {
 // ─── Deserialization ────────────────────────────────────────────────
 
 /** Deserialize any supported format (v1, v2, v3) into DockManagerState */
-export function deserialize(data: any): DockManagerState {
+export function deserialize(data: any): { state: DockManagerState; warnings: string[] } {
+  let parsed = data;
+  if (typeof data === 'string') {
+    try { parsed = JSON.parse(data); }
+    catch { throw new Error('Invalid JSON: unable to parse layout data'); }
+  }
+  const state = deserializeInner(parsed);
+  const warnings = validateIntegrity(state);
+  return { state, warnings };
+}
+
+function deserializeInner(data: any): DockManagerState {
   if (!data || typeof data !== 'object') {
     throw new Error('Invalid data: expected an object');
   }
@@ -282,68 +298,86 @@ function deserializeV1V2(stateData: any): DockManagerState {
 
 // ─── Local Storage helpers ──────────────────────────────────────────
 
-export function saveToLocalStorage(key: string, state: DockManagerState): void {
+const STORAGE_KEY = 'dock-manager-layout';
+
+export function saveToLocalStorage(state: DockManagerState, key?: string): void {
   try {
-    const json = JSON.stringify(serialize(state));
-    localStorage.setItem(key, json);
+    const json = serialize(state);
+    localStorage.setItem(key || STORAGE_KEY, json);
   } catch (e) {
     console.warn('Failed to save dock layout to localStorage:', e);
   }
 }
 
-export function loadFromLocalStorage(key: string): DockManagerState | null {
+export function loadFromLocalStorage(key?: string): { state: DockManagerState; warnings: string[] } | null {
   try {
-    const json = localStorage.getItem(key);
+    const json = localStorage.getItem(key || STORAGE_KEY);
     if (!json) return null;
-    const parsed = JSON.parse(json);
-    return deserialize(parsed);
+    return deserialize(json);
   } catch (e) {
     console.warn('Failed to load dock layout from localStorage:', e);
     return null;
   }
 }
 
-export function clearLocalStorage(key: string): void {
-  localStorage.removeItem(key);
+export function clearLocalStorage(key?: string): void {
+  localStorage.removeItem(key || STORAGE_KEY);
 }
 
 // ─── File export/import helpers ─────────────────────────────────────
 
-/** Export the state as a pretty-printed JSON string */
-export function exportToFile(state: DockManagerState): string {
-  return JSON.stringify(serialize(state), null, 2);
+export function exportToFile(state: DockManagerState, filename?: string): void {
+  const json = serialize(state);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || `dock-layout-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
-/** Import state from a JSON string */
-export function importFromFile(json: string): DockManagerState {
-  let parsed: any;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    throw new Error('Invalid JSON: unable to parse layout data');
-  }
-  return deserialize(parsed);
+export function importFromFile(): Promise<{ state: DockManagerState; warnings: string[] }> {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) { reject(new Error('No file selected')); return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        try { resolve(deserialize(reader.result as string)); }
+        catch (err) { reject(err); }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsText(file);
+    };
+    input.click();
+  });
 }
 
 // ─── URL encoding helpers ───────────────────────────────────────────
 
-/** Export the state as a base64 URL-safe string */
 export function exportAsUrl(state: DockManagerState): string {
-  const json = JSON.stringify(serialize(state));
+  const json = serialize(state);
   if (typeof btoa === 'function') {
     return btoa(unescape(encodeURIComponent(json)));
   }
   return Buffer.from(json, 'utf-8').toString('base64');
 }
 
-/** Import state from a base64 URL-safe string */
-export function importFromUrl(urlString: string): DockManagerState {
+export function importFromUrl(urlString: string): { state: DockManagerState; warnings: string[] } {
   let json: string;
   if (typeof atob === 'function') {
     json = decodeURIComponent(escape(atob(urlString)));
   } else {
     json = Buffer.from(urlString, 'base64').toString('utf-8');
   }
-  const parsed = JSON.parse(json);
-  return deserialize(parsed);
+  return deserialize(json);
 }

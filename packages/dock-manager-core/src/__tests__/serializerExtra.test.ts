@@ -3,8 +3,6 @@ import type { DockManagerState, PanelConfig, Placement } from '../types/dock';
 import {
   serialize,
   deserialize,
-  exportToFile,
-  importFromFile,
 } from '../serialization/serializer';
 
 function makeState(panelIds: string[] = ['p1', 'p2']): DockManagerState {
@@ -25,27 +23,26 @@ function makeState(panelIds: string[] = ['p1', 'p2']): DockManagerState {
   };
 }
 
-describe('exportToFile / importFromFile', () => {
-  it('exportToFile returns a pretty-printed JSON string', () => {
+describe('serialize / deserialize string round-trip (extra)', () => {
+  it('serialize returns a valid JSON string with version 3', () => {
     const state = makeState();
-    const json = exportToFile(state);
+    const json = serialize(state);
     expect(typeof json).toBe('string');
-    expect(json).toContain('\n');
     const parsed = JSON.parse(json);
     expect(parsed.version).toBe(3);
   });
 
-  it('importFromFile restores state from JSON string', () => {
+  it('deserialize restores state from JSON string', () => {
     const state = makeState(['p1', 'p2']);
-    const json = exportToFile(state);
-    const restored = importFromFile(json);
+    const json = serialize(state);
+    const { state: restored } = deserialize(json);
     expect(restored.panels).toBeInstanceOf(Map);
     expect(restored.panels.size).toBe(2);
     expect(restored.layout).toEqual(state.layout);
   });
 
-  it('importFromFile throws on invalid JSON', () => {
-    expect(() => importFromFile('{{{')).toThrow('Invalid JSON');
+  it('deserialize throws on invalid JSON string', () => {
+    expect(() => deserialize('{{{')).toThrow('Invalid JSON');
   });
 
   it('round-trips complex state', () => {
@@ -56,8 +53,8 @@ describe('exportToFile / importFromFile', () => {
     state.layout = {
       type: 'tabgroup', id: 'tg1', panels: ['p1', 'p2'], activePanel: 'p1',
     };
-    const json = exportToFile(state);
-    const restored = importFromFile(json);
+    const json = serialize(state);
+    const { state: restored } = deserialize(json);
     expect(restored.placements.get('p3')).toEqual({
       type: 'floating', x: 10, y: 20, width: 300, height: 200, zIndex: 5,
     });
@@ -81,7 +78,7 @@ describe('v1/v2 migration via deserialize', () => {
       nextZIndex: 1000,
       activePaneId: 'p1',
     };
-    const restored = deserialize({ version: 2, timestamp: 0, state: v2State });
+    const { state: restored } = deserialize({ version: 2, timestamp: 0, state: v2State });
     const placement = restored.placements.get('p3');
     expect(placement).toBeDefined();
     expect(placement!.type).toBe('floating');
@@ -104,7 +101,7 @@ describe('v1/v2 migration via deserialize', () => {
       nextZIndex: 1,
     };
     delete (v2State as any).activePaneId;
-    const restored = deserialize({ version: 2, timestamp: 0, state: v2State });
+    const { state: restored } = deserialize({ version: 2, timestamp: 0, state: v2State });
     expect(restored.activePaneId).toBe('');
   });
 
@@ -126,7 +123,7 @@ describe('v1/v2 migration via deserialize', () => {
       nextZIndex: 1000,
       activePaneId: 'p1',
     };
-    const restored = deserialize({ version: 2, timestamp: 0, state: v2State });
+    const { state: restored } = deserialize({ version: 2, timestamp: 0, state: v2State });
     const p3 = restored.placements.get('p3');
     const p4 = restored.placements.get('p4');
     expect(p3!.type).toBe('floating');
