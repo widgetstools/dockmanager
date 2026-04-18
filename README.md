@@ -2,6 +2,120 @@
 
 Zero-dependency layout manager for React and Angular. Tabbed panels, split panes, floating windows, auto-hide strips, drag-and-drop, theming, undo/redo, and full state serialization -- all in under 30 KB gzipped.
 
+## Upgrading to v0.2 (Breaking Changes)
+
+Version 0.2 is a ground-up rewrite of `dock-manager-core` (12.7K → 5.4K lines). The public API surface is preserved, but the **state shape** has changed. All existing features, look and feel, and behavior are retained.
+
+### What Changed
+
+| Area | Before (v0.1) | After (v0.2) |
+|------|---------------|--------------|
+| **`state.panels`** | `Record<string, PanelConfig>` | `Map<string, PanelConfig>` |
+| **Panel placement** | `state.floatingPanels[]`, `state.unpinnedPanels[]`, `state.popoutPanels[]` | `state.placements: Map<string, Placement>` |
+| **Node IDs** | Sequential counters (`tg_1`, `split_2`) | `crypto.randomUUID()` |
+| **Serialization** | `serialize()` returned object, `deserialize()` returned state | `serialize()` returns JSON string, `deserialize()` returns `{ state, warnings }` |
+| **Serialization format** | v2 | v3 (auto-migrates v1/v2 on deserialize) |
+| **Reducer actions** | Wrapped in `{ type, payload }` | Flat: `{ type: 'CLOSE_PANEL', panelId }` |
+| **`strictMode` option** | N/A | New — auto-rollback on panel loss or invariant violation |
+
+### Migration Guide
+
+#### 1. Convert `panels` from Record to Map
+
+```ts
+// Before
+const state: DockManagerState = {
+  panels: {
+    explorer: { id: 'explorer', title: 'Explorer', closable: true },
+    doc1: { id: 'doc1', title: 'Document 1', closable: true },
+  },
+  // ...
+};
+
+// After
+const state: DockManagerState = {
+  panels: new Map([
+    ['explorer', { id: 'explorer', title: 'Explorer', closable: true }],
+    ['doc1', { id: 'doc1', title: 'Document 1', closable: true }],
+  ]),
+  // ...
+};
+```
+
+#### 2. Replace `floatingPanels` / `unpinnedPanels` / `popoutPanels` with `placements`
+
+```ts
+// Before
+const state = {
+  layout: { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' },
+  panels: { p1: {...}, p2: {...}, p3: {...} },
+  floatingPanels: [{ panelId: 'p2', x: 100, y: 100, width: 300, height: 200, zIndex: 1 }],
+  unpinnedPanels: [{ panelId: 'p3', edge: 'left', size: 200 }],
+  popoutPanels: [],
+  nextZIndex: 2,
+  activePaneId: 'p1',
+};
+
+// After
+const state = {
+  layout: { type: 'tabgroup', id: 'tg1', panels: ['p1'], activePanel: 'p1' },
+  panels: new Map([['p1', {...}], ['p2', {...}], ['p3', {...}]]),
+  placements: new Map([
+    ['p1', { type: 'docked', groupId: 'tg1' }],
+    ['p2', { type: 'floating', x: 100, y: 100, width: 300, height: 200, zIndex: 1 }],
+    ['p3', { type: 'unpinned', edge: 'left', size: 200 }],
+  ]),
+  nextZIndex: 2,
+  activePaneId: 'p1',
+};
+```
+
+#### 3. Update panel access from bracket notation to `.get()`
+
+```ts
+// Before
+const panel = state.panels[panelId];
+
+// After
+const panel = state.panels.get(panelId);
+```
+
+#### 4. Update serialization calls
+
+```ts
+// Before
+const obj = serialize(state);      // returned object
+const state = deserialize(obj);    // returned DockManagerState
+
+// After
+const json = serialize(state);                     // returns JSON string
+const { state, warnings } = deserialize(json);     // returns { state, warnings }
+```
+
+Saved layouts from v1/v2 are automatically migrated when `deserialize()` is called — no manual conversion needed.
+
+#### 5. Enable `strictMode` (recommended)
+
+```tsx
+<DockManagerCore
+  initialState={state}
+  strictMode={true}   // auto-rollback on panel loss or invariant violation
+  // ...
+/>
+```
+
+### What You DON'T Need to Change
+
+- **DockviewApi methods** — all method signatures are identical
+- **React/Angular wrapper props** — same component API
+- **PanelConfig fields** — same shape
+- **Theming** — same CSS custom properties and theme objects
+- **Keyboard shortcuts** — same bindings
+- **Layout tree structure** — `TabGroupNode` and `SplitNode` are the same
+- **Serialized layouts** — old formats auto-migrate on load
+
+---
+
 ## Features at a Glance
 
 | Category | Highlights |
@@ -245,6 +359,23 @@ Splitters honor per-child aggregated constraints derived from each panel's `mini
 
 A child with an explicit min size will not collapse to zero during drag.
 
+### Strict Mode
+
+Enable `strictMode` to guarantee zero orphan panels in production. When enabled, the dock manager runs invariant checks after every state mutation and automatically rolls back to the previous state if:
+
+- Any panel disappears (lost from all placements)
+- Any layout invariant is violated (empty nested groups, duplicate IDs, orphan panels)
+
+```tsx
+<DockManagerCore
+  initialState={state}
+  strictMode={true}
+  widgets={widgets}
+/>
+```
+
+Rollbacks are logged to the console as `[DockManager] strictMode: rolling back` for debugging.
+
 ### Undo / Redo
 
 The `StateHistoryManager` maintains a stack of state snapshots. Use `DockviewApi.undo()` and `DockviewApi.redo()` or the keyboard shortcuts.
@@ -267,15 +398,17 @@ api?.resetLayout(defaultState);
 
 | Function | Description |
 |----------|-------------|
-| `saveToLocalStorage(state)` | Persist state to `localStorage` |
-| `loadFromLocalStorage()` | Restore from `localStorage` |
-| `clearLocalStorage()` | Remove saved state |
-| `exportToFile(state)` | Download state as a `.json` file |
-| `importFromFile()` | Upload and parse a `.json` file |
-| `serialize(state)` | Convert state to a JSON string |
-| `deserialize(json)` | Parse a JSON string back to state |
+| `serialize(state)` | Convert state to a JSON string (v3 format) |
+| `serializeToObject(state)` | Convert state to a plain object (for custom serialization) |
+| `deserialize(data)` | Parse JSON string or object → `{ state, warnings }`. Auto-migrates v1/v2 formats. |
+| `validateIntegrity(state)` | Check state for orphan panels, missing placements. Returns warning strings. |
+| `saveToLocalStorage(state, key?)` | Persist state to `localStorage` |
+| `loadFromLocalStorage(key?)` | Restore from `localStorage` → `{ state, warnings }` or `null` |
+| `clearLocalStorage(key?)` | Remove saved state |
+| `exportToFile(state)` | Download state as a `.json` file (triggers browser download) |
+| `importFromFile()` | Upload and parse a `.json` file (opens file picker) → `{ state, warnings }` |
 | `exportAsUrl(state)` | Encode state as base64 URL-safe string |
-| `importFromUrl(encoded)` | Decode base64 string to state |
+| `importFromUrl(encoded)` | Decode base64 string → `{ state, warnings }` |
 
 ### Developer Tools
 
@@ -553,18 +686,27 @@ All visual properties are controlled via CSS custom properties scoped to the doc
 
 ### DockManagerState
 
-The single source of truth for the entire dock layout. Fully JSON-serializable.
+The single source of truth for the entire dock layout. Serializable via `serialize()` / `deserialize()`.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `layout` | `LayoutNode` | Root of the layout tree (split or tab group) |
-| `panels` | `Record<string, PanelConfig>` | All panel configurations keyed by ID |
-| `floatingPanels` | `FloatingPanel[]` | Panels rendered as floating windows |
-| `popoutPanels` | `PopoutPanel[]` | Panels in separate browser windows |
-| `unpinnedPanels` | `UnpinnedPanel[]` | Panels collapsed to auto-hide strips |
+| `panels` | `Map<string, PanelConfig>` | All panel configurations keyed by ID |
+| `placements` | `Map<string, Placement>` | Where each panel lives (docked, floating, unpinned, or popout) |
 | `nextZIndex` | `number` | Counter for floating panel z-index |
 | `activePaneId` | `string` | Currently focused panel ID |
 | `maximizedPanelId` | `string?` | Maximized panel ID, if any |
+
+### Placement Types
+
+Every registered panel has exactly one entry in the `placements` map:
+
+| Placement Type | Fields | Description |
+|----------------|--------|-------------|
+| `docked` | `groupId` | Panel is in a tab group in the layout tree |
+| `floating` | `x, y, width, height, zIndex` | Panel is in a draggable floating window |
+| `unpinned` | `edge, size` | Panel is collapsed to an auto-hide strip |
+| `popout` | `windowName, x, y, width, height` | Panel is in a separate browser window |
 
 ### Layout Tree Nodes
 
