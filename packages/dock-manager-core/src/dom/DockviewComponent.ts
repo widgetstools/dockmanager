@@ -4,7 +4,6 @@ import type {
   TabGroupNode,
   SplitNode,
   FloatingPanel,
-  PanelConfig,
   DockPosition,
   PreventableDockEvent,
   DockEdge,
@@ -30,9 +29,7 @@ import { RenderContainerManager } from './RenderContainerManager';
 import type { DockTheme } from '../theme/DockTheme';
 import { applyTheme, vsCodeLight, vsCodeDark } from '../theme/DockTheme';
 import { ensureStyles, releaseStyles } from './styleInjector';
-import { debugLog, debugError, isDockManagerDebugEnabled } from '../utils/debug';
-
-// ─── Options ─────────────────────────────────────────────────────────
+import { debugLog, isDockManagerDebugEnabled } from '../utils/debug';
 
 /** A resource that can release its DOM and event listener references. */
 export interface IDisposable {
@@ -46,44 +43,13 @@ export interface IDisposable {
 export interface DockviewComponentOptions {
   /** The initial layout and panel state to render. */
   initialState: DockManagerState;
-  /**
-   * Factory called to render a panel's content into a container element.
-   *
-   * @param panelId - The panel to render.
-   * @param container - The DOM element to mount content into.
-   * @param api - PanelApi instance for this panel (widget-to-header communication).
-   * @returns A disposable that cleans up the rendered content.
-   */
+  /** Factory to render a panel's content into a container. Returns a disposable for cleanup. */
   createContent: (panelId: string, container: HTMLElement, api: PanelApi) => IDisposable;
-  /**
-   * Optional factory to render a custom tab for a panel.
-   *
-   * @param panelId - The panel the tab belongs to.
-   * @param container - The DOM element to mount the tab into.
-   * @param isActive - Whether the tab is currently active.
-   * @returns A disposable that cleans up the rendered tab.
-   */
+  /** Optional factory to render a custom tab for a panel. */
   createTab?: (panelId: string, container: HTMLElement, isActive: boolean) => IDisposable;
-  /**
-   * Optional factory to render custom header action buttons in a tab group.
-   *
-   * @param slot - Which slot to render into (`'left'`, `'right'`, or `'prefix'`).
-   * @param tabGroupId - The tab group the actions belong to.
-   * @param container - The DOM element to mount actions into.
-   * @returns A disposable that cleans up the rendered actions.
-   */
+  /** Optional factory to render custom header action buttons in a tab group. */
   createHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string, container: HTMLElement) => IDisposable;
-  /**
-   * Optional factory to render a watermark (placeholder) into an empty tab
-   * group. When a tab group has no panels and this callback is provided, the
-   * returned element is rendered inside the group's content area instead of
-   * the default `.dock-empty-placeholder`. The group remains a valid drop
-   * target so users can drag panels into it.
-   *
-   * @param container - The DOM element to mount the watermark into.
-   * @returns A disposable that cleans up the watermark when a panel is added
-   *          to the group (or the group is disposed).
-   */
+  /** Optional factory to render a watermark into an empty tab group. */
   createWatermark?: (container: HTMLElement) => IDisposable;
   /** Called after every state change with the new state. */
   onStateChange?: (state: DockManagerState) => void;
@@ -93,13 +59,7 @@ export interface DockviewComponentOptions {
   onWillDrop?: (event: PreventableDockEvent, sourceId: string, targetId: string, position: DockPosition) => void;
   /** Called when the user explicitly requests a layout save via context menu. */
   onSaveLayout?: (state: DockManagerState) => void;
-  /**
-   * Color theme. Can be:
-   *   - `'light'` / `'dark'` — uses the default VS Code-style theme
-   *   - A `DockTheme` object — applies custom colors via CSS custom properties
-   *
-   * Defaults to `'light'`.
-   */
+  /** Color theme: `'light'` | `'dark'` or a custom `DockTheme` object. Defaults to `'light'`. */
   theme?: 'light' | 'dark' | DockTheme;
   /** Whether to show edge dock indicators. Defaults to true. */
   allowRootDock?: boolean;
@@ -109,32 +69,13 @@ export interface DockviewComponentOptions {
   resourceStrings?: Partial<import('../types/resourceStrings').DockResourceStrings>;
 }
 
-// ─── DockviewComponent ───────────────────────────────────────────────
-
 /**
  * Framework-agnostic dock layout manager.
  *
- * `DockviewComponent` owns the entire DOM tree for the dock layout.
- * It accepts a host element and a set of renderer callbacks, then
- * manages tab groups, split panes, floating windows, unpinned strips,
- * drag-and-drop, and keyboard navigation internally.
- *
- * Framework wrappers (React, Vue, Angular) typically instantiate this
- * class and supply framework-specific content renderers.
- *
- * @example
- * ```ts
- * const dock = new DockviewComponent(document.getElementById('root')!, {
- *   initialState: createDefaultState(),
- *   createContent: (panelId, container) => {
- *     container.textContent = panelId;
- *     return { dispose: () => { container.textContent = ''; } };
- *   },
- * });
- * dock.dispatch({ type: 'ADD_PANEL', panelId: 'p1', config: { id: 'p1', title: 'Panel 1' } });
- * // Later:
- * dock.dispose();
- * ```
+ * Owns the entire DOM tree for the dock layout: tab groups, split panes,
+ * floating windows, unpinned strips, drag-and-drop, and keyboard navigation.
+ * Framework wrappers (React, Vue, Angular) instantiate this class and supply
+ * framework-specific content renderers.
  */
 export class DockviewComponent {
   private container: HTMLElement;
@@ -153,12 +94,7 @@ export class DockviewComponent {
   private floatingViews = new Map<string, FloatingWindowView>();
   private unpinnedStripViews = new Map<DockEdge, UnpinnedStripView>();
   private panelApis = new Map<string, PanelApi>();
-  /**
-   * Stable render container manager. Each panel has exactly ONE content
-   * container that lives at a fixed location in the DOM (the render root)
-   * for its entire lifetime. Views render placeholder divs and the manager
-   * mirrors the placeholder rect onto the container. No reparenting.
-   */
+  /** Stable render container manager — one persistent content container per panel, no reparenting. */
   private renderManager!: RenderContainerManager;
   private _api: DockviewApi | null = null;
   private maximizeOverlay: MaximizeOverlayView | null = null;
@@ -176,12 +112,7 @@ export class DockviewComponent {
   private bottomStripContainer: HTMLDivElement;
   private layoutContentEl: HTMLDivElement;
 
-  /**
-   * Create a new dock layout manager.
-   *
-   * @param element - The host DOM element. The dock layout will fill this element.
-   * @param options - Configuration including initial state and renderer callbacks.
-   */
+  /** Create a new dock layout manager inside the given host element. */
   constructor(element: HTMLElement, options: DockviewComponentOptions) {
     ensureStyles();
     this.container = element;
@@ -199,45 +130,27 @@ export class DockviewComponent {
     // Apply theme
     this.applyThemeOption(options.theme);
 
+    const mkDiv = (css: string) => { const d = document.createElement('div'); d.style.cssText = css; return d; };
+    const stripCss = 'position:relative;display:none;';
+
     // Main row: [left-strip] [center-layout] [right-strip]
-    this.layoutRowEl = document.createElement('div');
-    this.layoutRowEl.style.cssText = 'flex:1;display:flex;flex-direction:row;overflow:hidden;position:relative;';
+    this.layoutRowEl = mkDiv('flex:1;display:flex;flex-direction:row;overflow:hidden;position:relative;');
+    this.leftStripContainer = mkDiv(stripCss);
+    this.centerEl = mkDiv('flex:1;overflow:hidden;position:relative;');
+    this.rightStripContainer = mkDiv(stripCss);
+    this.layoutRowEl.append(this.leftStripContainer, this.centerEl, this.rightStripContainer);
 
-    this.leftStripContainer = document.createElement('div');
-    this.leftStripContainer.style.cssText = 'position:relative;display:none;';
-    this.layoutRowEl.appendChild(this.leftStripContainer);
-
-    this.centerEl = document.createElement('div');
-    this.centerEl.style.cssText = 'flex:1;overflow:hidden;position:relative;';
-    this.layoutRowEl.appendChild(this.centerEl);
-
-    this.rightStripContainer = document.createElement('div');
-    this.rightStripContainer.style.cssText = 'position:relative;display:none;';
-    this.layoutRowEl.appendChild(this.rightStripContainer);
-
-    // Top strip container (for top-edge unpinned panels)
-    this.topStripContainer = document.createElement('div');
-    this.topStripContainer.style.cssText = 'position:relative;display:none;';
-    this.rootEl.appendChild(this.topStripContainer);
-
-    this.rootEl.appendChild(this.layoutRowEl);
-
-    // Bottom strip container
-    this.bottomStripContainer = document.createElement('div');
-    this.bottomStripContainer.style.cssText = 'position:relative;display:none;';
-    this.rootEl.appendChild(this.bottomStripContainer);
+    this.topStripContainer = mkDiv(stripCss);
+    this.bottomStripContainer = mkDiv(stripCss);
+    this.rootEl.append(this.topStripContainer, this.layoutRowEl, this.bottomStripContainer);
 
     // Layout content area (inside center)
-    this.layoutContentEl = document.createElement('div');
-    this.layoutContentEl.style.cssText = 'width:100%;height:100%;';
+    this.layoutContentEl = mkDiv('width:100%;height:100%;');
     this.centerEl.appendChild(this.layoutContentEl);
 
     this.container.appendChild(this.rootEl);
 
-    // Stable render container manager — owns the persistent content containers
-    // for every panel. Must be created AFTER rootEl is attached so its
-    // ResizeObserver sees the correct host rect, but BEFORE any views are built
-    // (views call createContent which routes through the manager).
+    // Render container manager — created after rootEl is attached, before views.
     this.renderManager = new RenderContainerManager(this.rootEl, (panelId, container) => {
       const api = this.getPanelApi(panelId);
       // Observe container resizes and forward to the PanelApi as dimension events.
@@ -258,31 +171,18 @@ export class DockviewComponent {
       };
     });
 
-    // Set up event delegation for action buttons.
-    // Use mousedown instead of click so that actions fire immediately,
-    // before any re-render (triggered by DockDragManager's onSelect on
-    // mouseup) can remove the button from the DOM and swallow the click.
+    // Event delegation for action buttons (mousedown fires before re-render on mouseup)
     this.rootEl.addEventListener('mousedown', this.onActionClick);
 
-    // Initialize drag manager
     this.dragManager = new DockDragManager({
       containerElement: this.rootEl,
       onDrop: (sourceId, targetId, position) => {
-        // Check if the source is a floating panel
         const isFloating = this.state.placements.get(sourceId)?.type === 'floating';
-
         debugLog('DOCK_DROP', { sourceId, targetId, position, isFloating });
-
         if (targetId === '__root__') {
-          if (isFloating) {
-            // Dock floating panel, then move to edge
-            this.dispatch({ type: 'DOCK_FLOATING', panelId: sourceId, targetGroupId: findFirstTabGroup(this.state.layout) || '', position: 'center' });
-            this.dispatch({ type: 'DOCK_TO_EDGE', panelId: sourceId, edge: position as DockEdge });
-          } else {
-            this.dispatch({ type: 'DOCK_TO_EDGE', panelId: sourceId, edge: position as DockEdge });
-          }
+          if (isFloating) this.dispatch({ type: 'DOCK_FLOATING', panelId: sourceId, targetGroupId: findFirstTabGroup(this.state.layout) || '', position: 'center' });
+          this.dispatch({ type: 'DOCK_TO_EDGE', panelId: sourceId, edge: position as DockEdge });
         } else if (isFloating) {
-          // Dock floating panel to the specific target
           this.dispatch({ type: 'DOCK_FLOATING', panelId: sourceId, targetGroupId: targetId, position });
         } else {
           this.dispatch({ type: 'MOVE_PANEL', panelId: sourceId, targetGroupId: targetId, position });
@@ -290,16 +190,11 @@ export class DockviewComponent {
       },
       onFloat: (sourceId, x, y) => {
         debugLog('DOCK_DROP_FLOAT', { sourceId, x, y });
-        this.dispatch({
-          type: 'FLOAT_PANEL',
-          panelId: sourceId, x, y, width: 400, height: 300,
-        });
+        this.dispatch({ type: 'FLOAT_PANEL', panelId: sourceId, x, y, width: 400, height: 300 });
       },
       onSelect: (sourceId) => {
         const tabGroupId = findTabGroupForPanel(this.state.layout, sourceId);
-        if (tabGroupId) {
-          this.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: tabGroupId, panelId: sourceId });
-        }
+        if (tabGroupId) this.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: tabGroupId, panelId: sourceId });
         this.dispatch({ type: 'SET_ACTIVE_PANE', panelId: sourceId });
       },
       onReorderTab: (tabGroupId, panelId, newIndex) => {
@@ -311,41 +206,21 @@ export class DockviewComponent {
         }
       },
       onWillDrop: this.options.onWillDrop
-        ? (event, sourceId, targetId, position) => {
-            this.options.onWillDrop?.(event, sourceId, targetId, position);
-          }
+        ? (event, sourceId, targetId, position) => { this.options.onWillDrop?.(event, sourceId, targetId, position); }
         : undefined,
       theme: this.resolveThemeMode(options.theme),
     });
 
-    // Initialize focus manager
     this.focusManager = new FocusManager({
       containerElement: this.rootEl,
-      onFocusChanged: (panelId) => {
-        if (panelId) {
-          this.dispatch({ type: 'SET_ACTIVE_PANE', panelId });
-        }
-      },
-      onNavigate: (direction) => {
-        this.dispatch({ type: 'NAVIGATE', direction });
-      },
+      onFocusChanged: (panelId) => { if (panelId) this.dispatch({ type: 'SET_ACTIVE_PANE', panelId }); },
+      onNavigate: (direction) => { this.dispatch({ type: 'NAVIGATE', direction }); },
       onCloseActivePanel: () => {
-        const activePanelId = this.state.activePaneId;
-        if (activePanelId && this.state.panels.get(activePanelId)?.closable !== false) {
-          if (this.options.onWillClose) {
-            const event = createPreventableEvent('willClose', activePanelId);
-            this.options.onWillClose(event, activePanelId);
-            if (event.defaultPrevented) return;
-          }
-          this.dispatch({ type: 'CLOSE_PANEL', panelId: activePanelId });
-        }
+        const id = this.state.activePaneId;
+        if (id && this.state.panels.get(id)?.closable !== false) this.closePanel(id);
       },
-      onNavigateTabGroup: (direction) => {
-        this.dispatch({ type: 'NAVIGATE', direction });
-      },
+      onNavigateTabGroup: (direction) => { this.dispatch({ type: 'NAVIGATE', direction }); },
     });
-
-    // Initialize keyboard manager
     this.keyboardManager = new KeyboardManager({
       containerElement: this.rootEl,
       dispatch: (action) => this.dispatch(action),
@@ -354,17 +229,12 @@ export class DockviewComponent {
       onRedo: () => this.redo(),
       onPanelFinder: () => this.panelFinder?.toggle(),
     });
-
-    // Initialize panel finder (Ctrl+P)
     this.panelFinder = new PanelFinder({
       containerElement: this.rootEl,
       getState: () => this.state,
       onActivatePanel: (panelId) => {
-        // Activate the panel wherever it is
         const tabGroupId = findTabGroupForPanel(this.state.layout, panelId);
-        if (tabGroupId) {
-          this.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: tabGroupId, panelId });
-        }
+        if (tabGroupId) this.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: tabGroupId, panelId });
         this.dispatch({ type: 'SET_ACTIVE_PANE', panelId });
       },
     });
@@ -373,16 +243,7 @@ export class DockviewComponent {
     this.render();
   }
 
-  // ── Public API ──────────────────────────────────────────────────
-
-  /**
-   * Dispatch a {@link DockAction} to update state and re-render.
-   *
-   * If the reducer throws, the error is logged and the previous valid state
-   * is preserved. If the state did not change (same reference), rendering is skipped.
-   *
-   * @param action - The action to dispatch.
-   */
+  /** Dispatch a {@link DockAction} to update state and re-render. */
   /** Actions that are purely visual / navigational — don't push undo state for these */
   private static readonly NON_UNDOABLE_ACTIONS = new Set([
     'SET_ACTIVE_PANEL', 'SET_ACTIVE_PANE', 'NAVIGATE', 'BRING_TO_FRONT',
@@ -401,79 +262,36 @@ export class DockviewComponent {
       this.historyManager.push(prevState);
     }
 
-    try {
-      this.state = dockReducer(this.state, action);
-    } catch (err) {
-      console.error('[DockviewComponent] Reducer error for action', action.type, err, {
-        action,
-        prevState,
-      });
-      // Don't update state if reducer threw — keep previous valid state
-      return;
-    }
+    try { this.state = dockReducer(this.state, action); }
+    catch (err) { console.error('[DockviewComponent] Reducer error for', action.type, err); return; }
 
     if (this.state !== prevState) {
-      // Always check for lost panels — panels that were registered before
-      // this action but are no longer in any placement AND still registered
-      // in state.panels. This indicates a reducer bug that silently dropped
-      // the panel somewhere between remove and insert.
+      // Detect reducer bugs that silently drop panels
       const lost = findLostPanels(prevState, this.state);
       if (lost.length > 0) {
-        console.error(
-          '[DockManager] PANEL LOST after action',
-          action.type,
-          'panels=',
-          lost,
-          {
-            action,
-            prevLayout: prevState.layout,
-            nextLayout: this.state.layout,
-          },
-        );
+        console.error('[DockManager] PANEL LOST after', action.type, 'panels=', lost,
+          { action, prevLayout: prevState.layout, nextLayout: this.state.layout });
       }
 
-      // Invariant checks (debug-gated — noisy if enabled on production)
+      // Invariant checks (debug-gated)
       if (isDockManagerDebugEnabled()) {
         const violations = checkLayoutInvariants(this.state);
         if (violations.length > 0) {
-          // Print the violation details as plain text so a copy-pasted
-          // devtools log is self-contained and doesn't require expanding
-          // a collapsed object.
           const summary = violations.map(v => `[${v.kind}] ${v.detail}`).join('\n  ');
-          console.warn(
-            `[DockManager] ${violations.length} invariant violation(s) after action ${action.type}:\n  ${summary}`,
-          );
+          console.warn(`[DockManager] ${violations.length} invariant violation(s) after ${action.type}:\n  ${summary}`);
+          const byType = (s: DockManagerState, t: string) => [...s.placements.entries()].filter(([, p]) => p.type === t).map(([id]) => id);
           console.warn('[DockManager] violation context', {
-            action,
-            violations,
-            prevLayout: prevState.layout,
-            nextLayout: this.state.layout,
-            prevFloating: [...prevState.placements.entries()].filter(([, p]) => p.type === 'floating').map(([id]) => id),
-            nextFloating: [...this.state.placements.entries()].filter(([, p]) => p.type === 'floating').map(([id]) => id),
-            prevUnpinned: [...prevState.placements.entries()].filter(([, p]) => p.type === 'unpinned').map(([id]) => id),
-            nextUnpinned: [...this.state.placements.entries()].filter(([, p]) => p.type === 'unpinned').map(([id]) => id),
-            prevPopout: [...prevState.placements.entries()].filter(([, p]) => p.type === 'popout').map(([id]) => id),
-            nextPopout: [...this.state.placements.entries()].filter(([, p]) => p.type === 'popout').map(([id]) => id),
+            action, violations,
+            prevLayout: prevState.layout, nextLayout: this.state.layout,
+            floating: [byType(prevState, 'floating'), byType(this.state, 'floating')],
+            unpinned: [byType(prevState, 'unpinned'), byType(this.state, 'unpinned')],
+            popout: [byType(prevState, 'popout'), byType(this.state, 'popout')],
           });
         }
       }
 
-      try {
-        this.render();
-      } catch (renderErr) {
-        console.error(
-          '[DockviewComponent] Render error after action',
-          action.type,
-          renderErr,
-          { action, layout: this.state.layout },
-        );
-        // Don't freeze — existing DOM remains intact
-      }
-      try {
-        this.options.onStateChange?.(this.state);
-      } catch (cbErr) {
-        console.error('[DockviewComponent] onStateChange callback error:', cbErr, { action });
-      }
+      try { this.render(); } catch (e) { console.error('[DockviewComponent] Render error after', action.type, e); }
+      try { this.options.onStateChange?.(this.state); } catch (e) { console.error('[DockviewComponent] onStateChange error:', e); }
     }
   }
 
@@ -520,8 +338,6 @@ export class DockviewComponent {
     return this._api;
   }
 
-  // ── Theme helpers ──────────────────────────────────────────────────
-
   /** Resolve a theme option to a 'light' | 'dark' mode string */
   private resolveThemeMode(theme?: 'light' | 'dark' | DockTheme): 'light' | 'dark' {
     if (!theme) return 'light';
@@ -532,34 +348,12 @@ export class DockviewComponent {
   /** Apply theme option — handles string ('light'/'dark') or DockTheme object */
   private applyThemeOption(theme?: 'light' | 'dark' | DockTheme): void {
     const mode = this.resolveThemeMode(theme);
-
-    // Toggle dark class for CSS base rules
-    if (mode === 'dark') {
-      this.rootEl.classList.add('dark');
-    } else {
-      this.rootEl.classList.remove('dark');
-    }
-
-    // Apply theme colors as CSS custom properties on the container
-    if (typeof theme === 'object' && theme !== null) {
-      // Custom DockTheme object
-      applyTheme(this.rootEl, theme);
-    } else {
-      // Built-in string theme — apply default colors
-      applyTheme(this.rootEl, mode === 'dark' ? vsCodeDark : vsCodeLight);
-    }
-
-    // Update drag manager theme
-    if (this.dragManager) {
-      this.dragManager.setTheme(mode);
-    }
+    this.rootEl.classList.toggle('dark', mode === 'dark');
+    applyTheme(this.rootEl, typeof theme === 'object' && theme !== null ? theme : mode === 'dark' ? vsCodeDark : vsCodeLight);
+    if (this.dragManager) this.dragManager.setTheme(mode);
   }
 
-  /**
-   * Update component options at runtime (e.g., switch theme or change callbacks).
-   *
-   * @param options - Partial options to merge into the current configuration.
-   */
+  /** Update component options at runtime (e.g., switch theme or change callbacks). */
   updateOptions(options: Partial<DockviewComponentOptions>): void {
     Object.assign(this.options, options);
 
@@ -568,51 +362,28 @@ export class DockviewComponent {
     }
 
     if (options.onWillDrop !== undefined) {
-      this.dragManager.setOnWillDrop(
-        options.onWillDrop
-          ? (event, sourceId, targetId, position) => {
-              options.onWillDrop?.(event, sourceId, targetId, position);
-            }
-          : undefined,
-      );
+      this.dragManager.setOnWillDrop(options.onWillDrop
+        ? (event, sourceId, targetId, position) => { options.onWillDrop?.(event, sourceId, targetId, position); }
+        : undefined);
     }
   }
 
-  /**
-   * Get or create a {@link PanelApi} for a given panel.
-   *
-   * The returned API is wired to dispatch `UPDATE_PANEL_CONFIG` actions
-   * back into this component. Panel APIs are cached and reused across renders.
-   *
-   * @param panelId - The panel to get an API for.
-   * @returns The PanelApi instance for the given panel.
-   */
+  /** Get or create a cached {@link PanelApi} wired to dispatch back into this component. */
   getPanelApi(panelId: string): PanelApi {
     let api = this.panelApis.get(panelId);
     if (!api) {
       api = new PanelApi(panelId);
       api._setConfigAccessor(() => this.state.panels.get(panelId));
-      api._setUpdateHandler((id, updates) => {
-        this.dispatch({ type: 'UPDATE_PANEL_CONFIG', panelId: id, config: updates });
-      });
+      api._setUpdateHandler((id, updates) => { this.dispatch({ type: 'UPDATE_PANEL_CONFIG', panelId: id, config: updates }); });
       api._setAttentionHandler((id, attention) => {
-        // Find the tab element and toggle attention CSS class
-        const tabEl = this.rootEl.querySelector(`[data-tab-id="${id}"]`);
-        if (tabEl) {
-          tabEl.classList.toggle('dock-tab-attention', attention);
-        }
+        this.rootEl.querySelector(`[data-tab-id="${id}"]`)?.classList.toggle('dock-tab-attention', attention);
       });
       this.panelApis.set(panelId, api);
     }
     return api;
   }
 
-  /**
-   * Compute the minimum size (pixels) a layout node can occupy along an axis.
-   * For tab groups: max of all contained panels' min along that axis (any
-   * panel could become active). For splits: sum along the same axis, max
-   * along the perpendicular axis. Falls back to 0 when unconstrained.
-   */
+  /** Compute the minimum size (px) a layout node can occupy along an axis. */
   private computeNodeMinSize(node: LayoutNode, axis: 'horizontal' | 'vertical'): number {
     if (node.type === 'tabgroup') {
       let maxMin = 0;
@@ -633,11 +404,7 @@ export class DockviewComponent {
     return node.children.reduce((m, c) => Math.max(m, this.computeNodeMinSize(c, axis)), 0);
   }
 
-  /**
-   * Compute the maximum size (pixels) a layout node can occupy along an axis.
-   * For tab groups: min of all contained panels' max. For splits: sum along
-   * the same axis, min along perpendicular. Returns Infinity when unconstrained.
-   */
+  /** Compute the maximum size (px) a layout node can occupy along an axis. */
   private computeNodeMaxSize(node: LayoutNode, axis: 'horizontal' | 'vertical'): number {
     if (node.type === 'tabgroup') {
       let minMax = Infinity;
@@ -655,29 +422,17 @@ export class DockviewComponent {
     return node.children.reduce((m, c) => Math.min(m, this.computeNodeMaxSize(c, axis)), Infinity);
   }
 
-  /**
-   * After each render, push visibility + active flags to each cached PanelApi.
-   * Visibility = panel is the active tab of its tab group. Active = panel is
-   * the globally focused pane (state.activePaneId).
-   */
+  /** Push visibility + active flags to each cached PanelApi after render. */
   private propagatePanelApiState(): void {
-    // Collect the set of visible panel IDs (active tab in each tab group).
     const visible = new Set<string>();
     const walk = (node: LayoutNode): void => {
-      if (node.type === 'tabgroup') {
-        if (node.activePanel) visible.add(node.activePanel);
-      } else if (node.type === 'split') {
-        for (const c of node.children) walk(c);
-      }
+      if (node.type === 'tabgroup') { if (node.activePanel) visible.add(node.activePanel); }
+      else { for (const c of node.children) walk(c); }
     };
     walk(this.state.layout);
-    // Floating + popout panels count as visible.
     for (const [panelId, placement] of this.state.placements) {
-      if (placement.type === 'floating' || placement.type === 'popout') {
-        visible.add(panelId);
-      }
+      if (placement.type === 'floating' || placement.type === 'popout') visible.add(panelId);
     }
-
     const activeId = this.state.activePaneId;
     for (const [panelId, api] of this.panelApis) {
       api._setVisible(visible.has(panelId));
@@ -685,125 +440,64 @@ export class DockviewComponent {
     }
   }
 
-  /**
-   * Dispose PanelApis for panels that no longer exist in state.
-   */
+  /** Dispose PanelApis and render containers for panels no longer in state. */
   private cleanupPanelApis(): void {
     for (const [panelId, api] of this.panelApis) {
-      if (!this.state.panels.has(panelId)) {
-        api._dispose();
-        this.panelApis.delete(panelId);
-        this.destroyContent(panelId);
-      }
+      if (!this.state.panels.has(panelId)) { api._dispose(); this.panelApis.delete(panelId); this.destroyContent(panelId); }
     }
-    // Clean up any orphaned render containers (e.g. content created for a
-    // panel that was removed without going through cleanupPanelApis above).
     for (const panelId of Array.from(this.renderManager.panelIds())) {
-      if (!this.state.panels.has(panelId)) {
-        this.destroyContent(panelId);
-      }
+      if (!this.state.panels.has(panelId)) this.destroyContent(panelId);
     }
   }
 
   /** Enable or disable the debug overlay showing layout IDs and split ratios. */
   private setDebugOverlay(enabled: boolean): void {
-    if (enabled) {
-      if (!this.debugOverlayEl) {
-        this.debugOverlayEl = document.createElement('div');
-        this.debugOverlayEl.className = 'dock-debug-overlay';
-        this.debugOverlayEl.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:10030;';
-        this.rootEl.appendChild(this.debugOverlayEl);
-      }
-      this.updateDebugOverlay();
-    } else {
-      if (this.debugOverlayEl) {
-        this.debugOverlayEl.remove();
-        this.debugOverlayEl = null;
-      }
+    if (!enabled) { this.debugOverlayEl?.remove(); this.debugOverlayEl = null; return; }
+    if (!this.debugOverlayEl) {
+      this.debugOverlayEl = document.createElement('div');
+      this.debugOverlayEl.className = 'dock-debug-overlay';
+      this.debugOverlayEl.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:10030;';
+      this.rootEl.appendChild(this.debugOverlayEl);
     }
-  }
-
-  /** Update the debug overlay with current layout info. */
-  private updateDebugOverlay(): void {
-    if (!this.debugOverlayEl) return;
     this.debugOverlayEl.innerHTML = '';
-
-    // Add labels for all tab groups
-    const groups = this.rootEl.querySelectorAll<HTMLElement>('[data-dock-target]');
-    groups.forEach(el => {
-      const id = el.getAttribute('data-dock-target');
-      const panelId = el.getAttribute('data-panel-id');
+    const rootRect = this.rootEl.getBoundingClientRect();
+    const addLabel = (el: HTMLElement, text: string, bg: string) => {
       const rect = el.getBoundingClientRect();
-      const rootRect = this.rootEl.getBoundingClientRect();
-
       const label = document.createElement('div');
-      label.style.cssText = `position:absolute;left:${rect.left - rootRect.left}px;top:${rect.top - rootRect.top}px;background:rgba(0,0,0,0.6);color:#fff;font-size:9px;padding:1px 4px;border-radius:2px;font-family:monospace;z-index:1;`;
-      label.textContent = `${id} | ${panelId || ''}`;
+      label.style.cssText = `position:absolute;left:${rect.left - rootRect.left}px;top:${rect.top - rootRect.top}px;background:${bg};color:#fff;font-size:9px;padding:1px 4px;border-radius:2px;font-family:monospace;`;
+      label.textContent = text;
       this.debugOverlayEl!.appendChild(label);
+    };
+    this.rootEl.querySelectorAll<HTMLElement>('[data-dock-target]').forEach(el => {
+      addLabel(el, `${el.getAttribute('data-dock-target')} | ${el.getAttribute('data-panel-id') || ''}`, 'rgba(0,0,0,0.6)');
     });
-
-    // Add labels for all splitters
-    const splitters = this.rootEl.querySelectorAll<HTMLElement>('.dock-splitter');
-    splitters.forEach(el => {
+    this.rootEl.querySelectorAll<HTMLElement>('.dock-splitter').forEach(el => {
       const val = el.getAttribute('aria-valuenow');
-      if (val) {
-        const rect = el.getBoundingClientRect();
-        const rootRect = this.rootEl.getBoundingClientRect();
-        const label = document.createElement('div');
-        label.style.cssText = `position:absolute;left:${rect.left - rootRect.left}px;top:${rect.top - rootRect.top}px;background:rgba(128,0,255,0.7);color:#fff;font-size:9px;padding:1px 3px;border-radius:2px;font-family:monospace;`;
-        label.textContent = `${val}%`;
-        this.debugOverlayEl!.appendChild(label);
-      }
+      if (val) addLabel(el, `${val}%`, 'rgba(128,0,255,0.7)');
     });
   }
 
-  /**
-   * Clean up all resources: dispose sub-managers, views, panel APIs, and
-   * remove the root DOM element from the container.
-   *
-   * After calling `dispose()`, this instance must not be used again.
-   */
+  /** Clean up all resources. After calling `dispose()`, this instance must not be used again. */
   dispose(): void {
-    this.dragManager.dispose();
-    this.focusManager.dispose();
-    this.keyboardManager.dispose();
+    // Dispose sub-managers
+    for (const m of [this.dragManager, this.focusManager, this.keyboardManager]) m.dispose();
     this.panelFinder?.dispose();
 
-    // Dispose all PanelApis
+    // Dispose all view maps and panel APIs
+    const disposeMap = (map: Map<unknown, { dispose(): void }>) => { for (const [, v] of map) v.dispose(); map.clear(); };
     for (const [, api] of this.panelApis) api._dispose();
     this.panelApis.clear();
+    disposeMap(this.tabGroupViews);
+    disposeMap(this.splitViews);
+    disposeMap(this.floatingViews);
+    disposeMap(this.unpinnedStripViews);
 
-    // Dispose all views
-    for (const [, view] of this.tabGroupViews) view.dispose();
-    this.tabGroupViews.clear();
-
-    for (const [, view] of this.splitViews) view.dispose();
-    this.splitViews.clear();
-
-    for (const [, view] of this.floatingViews) view.dispose();
-    this.floatingViews.clear();
-
-    for (const [, view] of this.unpinnedStripViews) view.dispose();
-    this.unpinnedStripViews.clear();
-
-    if (this.maximizeOverlay) {
-      this.maximizeOverlay.dispose();
-      this.maximizeOverlay = null;
-    }
-
-    // Destroy all panel content via the render manager
+    if (this.maximizeOverlay) { this.maximizeOverlay.dispose(); this.maximizeOverlay = null; }
     this.renderManager.dispose();
-
     this.rootEl.removeEventListener('mousedown', this.onActionClick);
-
-    if (this.rootEl.parentNode) {
-      this.rootEl.parentNode.removeChild(this.rootEl);
-    }
-
+    this.rootEl.parentNode?.removeChild(this.rootEl);
     releaseStyles();
   }
-
-  // ── Event delegation: action buttons ────────────────────────────
 
   private onActionClick = (e: MouseEvent): void => {
     // Only handle primary mouse button
@@ -820,87 +514,48 @@ export class DockviewComponent {
     const panelId = btn.getAttribute('data-panel-id') || '';
 
     switch (action) {
-      case 'close': {
-        if (this.options.onWillClose) {
-          const event = createPreventableEvent('willClose', panelId);
-          this.options.onWillClose(event, panelId);
-          if (event.defaultPrevented) return;
-        }
-        this.dispatch({ type: 'CLOSE_PANEL', panelId });
-        break;
-      }
-      case 'maximize': {
-        this.dispatch({ type: 'MAXIMIZE_PANEL', panelId });
-        break;
-      }
-      case 'restore': {
-        this.dispatch({ type: 'RESTORE_PANEL', panelId });
-        break;
-      }
+      case 'close': this.closePanel(panelId); break;
+      case 'maximize': this.dispatch({ type: 'MAXIMIZE_PANEL', panelId }); break;
+      case 'restore': this.dispatch({ type: 'RESTORE_PANEL', panelId }); break;
       case 'float': {
         const rect = btn.closest('.dock-tab-group')?.getBoundingClientRect();
         const rootRect = this.rootEl.getBoundingClientRect();
         const fw = 400, fh = 300;
-        // Position near original location but clamp within the dock manager bounds
-        let fx = rect ? rect.left + 40 : 200;
-        let fy = rect ? rect.top + 40 : 200;
-        fx = Math.max(rootRect.left, Math.min(fx, rootRect.right - fw - 20));
-        fy = Math.max(rootRect.top, Math.min(fy, rootRect.bottom - fh - 20));
-        // Convert to relative coordinates (floating windows are position:absolute within rootEl)
-        fx -= rootRect.left;
-        fy -= rootRect.top;
-        this.dispatch({
-          type: 'FLOAT_PANEL',
-          panelId, x: fx, y: fy, width: fw, height: fh,
-        });
+        const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
+        const fx = clamp(rect ? rect.left + 40 : 200, rootRect.left, rootRect.right - fw - 20) - rootRect.left;
+        const fy = clamp(rect ? rect.top + 40 : 200, rootRect.top, rootRect.bottom - fh - 20) - rootRect.top;
+        this.dispatch({ type: 'FLOAT_PANEL', panelId, x: fx, y: fy, width: fw, height: fh });
         break;
       }
-      case 'unpin': {
-        this.dispatch({ type: 'UNPIN_PANEL', panelId });
-        break;
-      }
+      case 'unpin': this.dispatch({ type: 'UNPIN_PANEL', panelId }); break;
       case 'dock-back': {
-        const panelConfig = this.state.panels.get(panelId);
-        if (panelConfig?.dockable === false) break;
-        // Pass 'default' as targetGroupId so the reducer uses the saved
-        // sourceGroupId from when the panel was originally floated
-        this.dispatch({
-          type: 'DOCK_FLOATING',
-          panelId, targetGroupId: 'default', position: 'center',
-        });
+        if (this.state.panels.get(panelId)?.dockable === false) break;
+        this.dispatch({ type: 'DOCK_FLOATING', panelId, targetGroupId: 'default', position: 'center' });
         break;
       }
-      case 'pin': {
-        this.dispatch({ type: 'PIN_PANEL', panelId });
-        break;
-      }
+      case 'pin': this.dispatch({ type: 'PIN_PANEL', panelId }); break;
     }
   };
 
-  // ── Content management ──────────────────────────────────────────
+  /** Close a panel, respecting the onWillClose callback. */
+  private closePanel(panelId: string): void {
+    if (this.options.onWillClose) {
+      const event = createPreventableEvent('willClose', panelId);
+      this.options.onWillClose(event, panelId);
+      if (event.defaultPrevented) return;
+    }
+    this.dispatch({ type: 'CLOSE_PANEL', panelId });
+  }
 
-  /**
-   * Bind a placeholder element to a panel. The persistent content container
-   * (owned by the render manager) is positioned over the placeholder. The
-   * returned disposable hides the container; call destroyContent() to
-   * permanently dispose it when the panel is closed.
-   *
-   * Views call this with whatever wrapper div they previously used as the
-   * createContent parent — the wrapper now serves as a placeholder rather
-   * than a parent. The container is never reparented.
-   */
+  /** Bind a placeholder element to a panel's persistent render container. */
   private getOrCreateContent(panelId: string, parentContainer: HTMLElement): IDisposable {
     return this.renderManager.bindPlaceholder(panelId, parentContainer);
   }
 
-  /**
-   * Permanently destroy a panel's content (called when panel is closed).
-   */
+  /** Permanently destroy a panel's content (called when panel is closed). */
   private destroyContent(panelId: string): void {
     this.renderManager.destroyContainer(panelId);
   }
-
-  // ── Rendering ───────────────────────────────────────────────────
 
   private render(): void {
     try {
@@ -911,43 +566,25 @@ export class DockviewComponent {
       this.propagatePanelApiState();
     } catch (err) {
       console.error('[DockviewComponent] Render error:', err);
-      // Don't re-throw — prevent DOM manipulation errors from freezing the component.
-      // The component remains interactive and the next dispatch will attempt to re-render.
     }
   }
 
-  // ── Layout rendering ────────────────────────────────────────────
-
   private renderLayout(): void {
     const layoutEl = this.renderLayoutNode(this.state.layout);
-    // Replace content of layoutContentEl
     if (this.layoutContentEl.firstChild !== layoutEl) {
-      // Remove stale children individually instead of innerHTML = '' to avoid
-      // detaching reusable child elements that may still be referenced by views.
-      while (this.layoutContentEl.firstChild) {
-        this.layoutContentEl.removeChild(this.layoutContentEl.firstChild);
-      }
+      while (this.layoutContentEl.firstChild) this.layoutContentEl.removeChild(this.layoutContentEl.firstChild);
       this.layoutContentEl.appendChild(layoutEl);
     }
-    // Remove any extra children (e.g., leftover splitters or child containers
-    // from a split that collapsed to fewer children).
+    // Remove extra children (leftover splitters from collapsed splits)
     while (this.layoutContentEl.lastChild !== this.layoutContentEl.firstChild) {
-      if (this.layoutContentEl.lastChild) {
-        this.layoutContentEl.removeChild(this.layoutContentEl.lastChild);
-      }
+      if (this.layoutContentEl.lastChild) this.layoutContentEl.removeChild(this.layoutContentEl.lastChild);
     }
-
-    // Clean up stale views and panel APIs
     this.cleanupStaleViews();
     this.cleanupPanelApis();
   }
 
   private renderLayoutNode(node: LayoutNode): HTMLElement {
-    if (node.type === 'tabgroup') {
-      return this.renderTabGroup(node);
-    } else {
-      return this.renderSplit(node);
-    }
+    return node.type === 'tabgroup' ? this.renderTabGroup(node) : this.renderSplit(node);
   }
 
   private renderTabGroup(node: TabGroupNode): HTMLElement {
@@ -958,47 +595,17 @@ export class DockviewComponent {
     }
 
     const callbacks: TabGroupViewCallbacks = {
-      onClosePanel: (panelId) => {
-        if (this.options.onWillClose) {
-          const event = createPreventableEvent('willClose', panelId);
-          this.options.onWillClose(event, panelId);
-          if (event.defaultPrevented) return;
-        }
-        this.dispatch({ type: 'CLOSE_PANEL', panelId });
-      },
-      onFloatPanel: (panelId) => {
-        this.dispatch({
-          type: 'FLOAT_PANEL',
-          panelId, x: 200, y: 200, width: 400, height: 300,
-        });
-      },
-      onMaximizePanel: (panelId) => {
-        this.dispatch({ type: 'MAXIMIZE_PANEL', panelId });
-      },
-      onRestorePanel: (panelId) => {
-        this.dispatch({ type: 'RESTORE_PANEL', panelId });
-      },
-      onUnpinPanel: (panelId) => {
-        this.dispatch({ type: 'UNPIN_PANEL', panelId });
-      },
-      onSetActivePanel: (tabGroupId, panelId) => {
-        this.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: tabGroupId, panelId });
-      },
-      onSetActivePane: (panelId) => {
-        this.dispatch({ type: 'SET_ACTIVE_PANE', panelId });
-      },
-      onSaveLayout: this.options.onSaveLayout
-        ? () => this.options.onSaveLayout!(this.state)
-        : undefined,
-      onSetHeaderCollapsed: (tabGroupId, collapsed) => {
-        this.dispatch({ type: 'SET_HEADER_COLLAPSED', groupId: tabGroupId, collapsed });
-      },
+      onClosePanel: (panelId) => { this.closePanel(panelId); },
+      onFloatPanel: (panelId) => { this.dispatch({ type: 'FLOAT_PANEL', panelId, x: 200, y: 200, width: 400, height: 300 }); },
+      onMaximizePanel: (panelId) => { this.dispatch({ type: 'MAXIMIZE_PANEL', panelId }); },
+      onRestorePanel: (panelId) => { this.dispatch({ type: 'RESTORE_PANEL', panelId }); },
+      onUnpinPanel: (panelId) => { this.dispatch({ type: 'UNPIN_PANEL', panelId }); },
+      onSetActivePanel: (tabGroupId, panelId) => { this.dispatch({ type: 'SET_ACTIVE_PANEL', groupId: tabGroupId, panelId }); },
+      onSetActivePane: (panelId) => { this.dispatch({ type: 'SET_ACTIVE_PANE', panelId }); },
+      onSaveLayout: this.options.onSaveLayout ? () => this.options.onSaveLayout!(this.state) : undefined,
+      onSetHeaderCollapsed: (tabGroupId, collapsed) => { this.dispatch({ type: 'SET_HEADER_COLLAPSED', groupId: tabGroupId, collapsed }); },
       onToggleMaximize: (panelId) => {
-        if (this.state.maximizedPanelId === panelId) {
-          this.dispatch({ type: 'RESTORE_PANEL', panelId });
-        } else {
-          this.dispatch({ type: 'MAXIMIZE_PANEL', panelId });
-        }
+        this.dispatch({ type: this.state.maximizedPanelId === panelId ? 'RESTORE_PANEL' : 'MAXIMIZE_PANEL', panelId });
       },
       createContent: (panelId, container) => this.getOrCreateContent(panelId, container),
       createTab: this.options.createTab,
@@ -1020,52 +627,32 @@ export class DockviewComponent {
   private renderSplit(node: SplitNode): HTMLElement {
     const existing = this.splitViews.get(node.id);
     if (existing) {
-      // Check if structure changed
       const containers = existing.getChildContainers();
+      // Try to reuse if structure unchanged
       if (containers.length === node.children.length) {
-        // Pre-resolve children and check for DOM cycles. A cycle occurs when a
-        // drop swaps an ancestor with one of its descendants — the reused outer
-        // SplitView would be asked to appendChild a node that currently contains
-        // its own destination container, throwing HierarchyRequestError.
+        // Pre-resolve children and check for DOM cycles (ancestor/descendant swap)
         const childEls: HTMLElement[] = [];
         let cycle = false;
         for (let i = 0; i < node.children.length; i++) {
           const childEl = this.renderLayoutNode(node.children[i]);
-          if (childEl === existing.element || childEl.contains(containers[i])) {
-            cycle = true;
-            break;
-          }
+          if (childEl === existing.element || childEl.contains(containers[i])) { cycle = true; break; }
           childEls.push(childEl);
         }
         if (!cycle) {
           existing.updateSizes(node.sizes);
           for (let i = 0; i < node.children.length; i++) {
-            const childEl = childEls[i];
-            const container = containers[i];
-            if (container.firstChild !== childEl) {
-              while (container.firstChild) {
-                container.removeChild(container.firstChild);
-              }
-              container.appendChild(childEl);
+            if (containers[i].firstChild !== childEls[i]) {
+              while (containers[i].firstChild) containers[i].removeChild(containers[i].firstChild!);
+              containers[i].appendChild(childEls[i]);
             }
           }
           return existing.element;
         }
-        // Cycle detected — fall through to recreate this SplitView fresh.
-        if (existing.element.parentNode) {
-          existing.element.parentNode.removeChild(existing.element);
-        }
-        existing.dispose();
-        this.splitViews.delete(node.id);
-      } else {
-        // Structure changed — detach the element from the DOM before disposing
-        // so that dispose() doesn't try to remove an already-orphaned element.
-        if (existing.element.parentNode) {
-          existing.element.parentNode.removeChild(existing.element);
-        }
-        existing.dispose();
-        this.splitViews.delete(node.id);
       }
+      // Structure changed or cycle — recreate
+      existing.element.parentNode?.removeChild(existing.element);
+      existing.dispose();
+      this.splitViews.delete(node.id);
     }
 
     const view = new SplitView(node, {
@@ -1080,8 +667,6 @@ export class DockviewComponent {
     return view.element;
   }
 
-  // ── Floating panels ─────────────────────────────────────────────
-
   private renderFloatingPanels(): void {
     // Collect current floating panel IDs from placements
     const floatingPlacements = new Map<string, Placement & { type: 'floating' }>();
@@ -1091,79 +676,37 @@ export class DockviewComponent {
       }
     }
 
-    // Remove stale floating views (panel was docked back or closed)
     for (const [id, view] of this.floatingViews) {
       if (!floatingPlacements.has(id)) {
         view.dispose();
         this.floatingViews.delete(id);
-
-        // Reparent content back into the TabGroupView
         if (this.state.panels.has(id)) {
           for (const [, tgView] of this.tabGroupViews) {
-            if (tgView.containsPanel(id)) {
-              tgView.invalidateContentSlot(id);
-              break;
-            }
+            if (tgView.containsPanel(id)) { tgView.invalidateContentSlot(id); break; }
           }
         }
       }
     }
 
-    // Create or update floating views
     for (const [fpId, placement] of floatingPlacements) {
       const panel = this.state.panels.get(fpId);
       if (!panel) continue;
-
-      // Build a FloatingPanel-compatible object from the placement
-      const fp: FloatingPanel = {
-        panelId: fpId,
-        x: placement.x,
-        y: placement.y,
-        width: placement.width,
-        height: placement.height,
-        zIndex: placement.zIndex,
-      };
+      const fp: FloatingPanel = { panelId: fpId, x: placement.x, y: placement.y, width: placement.width, height: placement.height, zIndex: placement.zIndex };
 
       const existing = this.floatingViews.get(fpId);
       if (existing) {
         existing.update(fp, panel, this.state.activePaneId);
       } else {
         const callbacks: FloatingWindowViewCallbacks = {
-          onUpdateFloating: (panelId, updates) => {
-            this.dispatch({
-              type: 'UPDATE_FLOATING',
-              panelId, ...updates,
-            });
-          },
-          onBringToFront: (panelId) => {
-            this.dispatch({ type: 'BRING_TO_FRONT', panelId });
-          },
+          onUpdateFloating: (panelId, updates) => { this.dispatch({ type: 'UPDATE_FLOATING', panelId, ...updates }); },
+          onBringToFront: (panelId) => { this.dispatch({ type: 'BRING_TO_FRONT', panelId }); },
           onDockBack: (panelId) => {
             const targetId = findFirstTabGroup(this.state.layout);
-            if (targetId) {
-              this.dispatch({
-                type: 'DOCK_FLOATING',
-                panelId, targetGroupId: targetId, position: 'center',
-              });
-            }
+            if (targetId) this.dispatch({ type: 'DOCK_FLOATING', panelId, targetGroupId: targetId, position: 'center' });
           },
-          onClosePanel: (panelId) => {
-            if (this.options.onWillClose) {
-              const event = createPreventableEvent('willClose', panelId);
-              this.options.onWillClose(event, panelId);
-              if (event.defaultPrevented) return;
-            }
-            this.dispatch({ type: 'CLOSE_PANEL', panelId });
-          },
-          onSetActivePane: (panelId) => {
-            this.dispatch({ type: 'SET_ACTIVE_PANE', panelId });
-          },
-          onDockToTarget: (panelId, targetId, position) => {
-            this.dispatch({
-              type: 'DOCK_FLOATING',
-              panelId, targetGroupId: targetId, position,
-            });
-          },
+          onClosePanel: (panelId) => { this.closePanel(panelId); },
+          onSetActivePane: (panelId) => { this.dispatch({ type: 'SET_ACTIVE_PANE', panelId }); },
+          onDockToTarget: (panelId, targetId, position) => { this.dispatch({ type: 'DOCK_FLOATING', panelId, targetGroupId: targetId, position }); },
           getDragManager: () => this.dragManager,
           createContent: (panelId, container) => this.getOrCreateContent(panelId, container),
         };
@@ -1175,7 +718,10 @@ export class DockviewComponent {
     }
   }
 
-  // ── Unpinned strips ─────────────────────────────────────────────
+  private getStripContainer(edge: DockEdge): HTMLDivElement {
+    return edge === 'left' ? this.leftStripContainer : edge === 'right' ? this.rightStripContainer
+      : edge === 'top' ? this.topStripContainer : this.bottomStripContainer;
+  }
 
   private renderUnpinnedStrips(): void {
     const edges: DockEdge[] = ['left', 'right', 'top', 'bottom'];
@@ -1190,22 +736,11 @@ export class DockviewComponent {
 
     for (const edge of edges) {
       const edgePanels = unpinnedPanels.filter((p) => p.edge === edge);
-      const container =
-        edge === 'left'
-          ? this.leftStripContainer
-          : edge === 'right'
-          ? this.rightStripContainer
-          : edge === 'top'
-          ? this.topStripContainer
-          : this.bottomStripContainer;
+      const container = this.getStripContainer(edge);
 
       if (edgePanels.length === 0) {
-        // Remove strip if present
         const existing = this.unpinnedStripViews.get(edge);
-        if (existing) {
-          existing.dispose();
-          this.unpinnedStripViews.delete(edge);
-        }
+        if (existing) { existing.dispose(); this.unpinnedStripViews.delete(edge); }
         container.style.display = 'none';
         continue;
       }
@@ -1217,20 +752,9 @@ export class DockviewComponent {
         existing.update(edgePanels, this.state.panels);
       } else {
         const view = new UnpinnedStripView(edge, edgePanels, this.state.panels, {
-          onPinPanel: (panelId) => {
-            this.dispatch({ type: 'PIN_PANEL', panelId });
-          },
-          onClosePanel: (panelId) => {
-            if (this.options.onWillClose) {
-              const event = createPreventableEvent('willClose', panelId);
-              this.options.onWillClose(event, panelId);
-              if (event.defaultPrevented) return;
-            }
-            this.dispatch({ type: 'CLOSE_PANEL', panelId });
-          },
-          onResizeUnpinned: (panelId, size) => {
-            this.dispatch({ type: 'RESIZE_UNPINNED', panelId, size });
-          },
+          onPinPanel: (panelId) => { this.dispatch({ type: 'PIN_PANEL', panelId }); },
+          onClosePanel: (panelId) => { this.closePanel(panelId); },
+          onResizeUnpinned: (panelId, size) => { this.dispatch({ type: 'RESIZE_UNPINNED', panelId, size }); },
           createContent: (panelId, cont) => this.getOrCreateContent(panelId, cont),
         });
         this.unpinnedStripViews.set(edge, view);
@@ -1238,8 +762,6 @@ export class DockviewComponent {
       }
     }
   }
-
-  // ── Maximize overlay ────────────────────────────────────────────
 
   private renderMaximizeOverlay(): void {
     if (this.state.maximizedPanelId) {
@@ -1252,62 +774,36 @@ export class DockviewComponent {
         }
         if (!this.maximizeOverlay) {
           this.maximizeOverlayPanelId = this.state.maximizedPanelId;
-          this.maximizeOverlay = new MaximizeOverlayView(
-            this.state.maximizedPanelId,
-            panel,
-            {
-              onRestorePanel: (panelId) => {
-                this.dispatch({ type: 'RESTORE_PANEL', panelId });
-              },
-              createContent: (panelId, container) => this.getOrCreateContent(panelId, container),
-            },
-          );
+          this.maximizeOverlay = new MaximizeOverlayView(this.state.maximizedPanelId, panel, {
+            onRestorePanel: (panelId) => { this.dispatch({ type: 'RESTORE_PANEL', panelId }); },
+            createContent: (panelId, container) => this.getOrCreateContent(panelId, container),
+          });
           this.rootEl.appendChild(this.maximizeOverlay.element);
         }
       }
     } else if (this.maximizeOverlay) {
       const restoredPanelId = this.maximizeOverlayPanelId;
-
       this.maximizeOverlay.dispose();
       this.maximizeOverlay = null;
       this.maximizeOverlayPanelId = undefined;
-
-      // Invalidate the TabGroupView's stale content slot so it re-requests
-      // the content via getOrCreateContent, which reparents the cached DOM.
+      // Invalidate TabGroupView content slot so it re-requests via getOrCreateContent
       if (restoredPanelId) {
         for (const [, view] of this.tabGroupViews) {
-          if (view.containsPanel(restoredPanelId)) {
-            view.invalidateContentSlot(restoredPanelId);
-            break;
-          }
+          if (view.containsPanel(restoredPanelId)) { view.invalidateContentSlot(restoredPanelId); break; }
         }
       }
     }
   }
 
-  // ── Cleanup stale views ─────────────────────────────────────────
-
   private cleanupStaleViews(): void {
-    // Collect all current tab group IDs and split IDs from the layout
     const currentTabGroupIds = new Set<string>();
     const currentSplitIds = new Set<string>();
     this.collectNodeIds(this.state.layout, currentTabGroupIds, currentSplitIds);
-
-    // Remove stale tab group views
-    for (const [id, view] of this.tabGroupViews) {
-      if (!currentTabGroupIds.has(id)) {
-        view.dispose();
-        this.tabGroupViews.delete(id);
-      }
-    }
-
-    // Remove stale split views
-    for (const [id, view] of this.splitViews) {
-      if (!currentSplitIds.has(id)) {
-        view.dispose();
-        this.splitViews.delete(id);
-      }
-    }
+    const pruneMap = <V extends { dispose(): void }>(map: Map<string, V>, live: Set<string>) => {
+      for (const [id, view] of map) { if (!live.has(id)) { view.dispose(); map.delete(id); } }
+    };
+    pruneMap(this.tabGroupViews, currentTabGroupIds);
+    pruneMap(this.splitViews, currentSplitIds);
   }
 
   private collectNodeIds(node: LayoutNode, tabGroupIds: Set<string>, splitIds: Set<string>): void {
