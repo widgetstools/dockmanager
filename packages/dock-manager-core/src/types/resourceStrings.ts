@@ -1,9 +1,3 @@
-/**
- * Resource strings for localization of dock manager UI elements.
- *
- * Consumers can provide partial overrides via `DockviewComponentOptions.resourceStrings`.
- */
-
 export interface DockResourceStrings {
   close: string;
   closeOthers: string;

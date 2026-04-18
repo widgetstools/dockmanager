@@ -1,13 +1,6 @@
 import type {
-  DockManagerState,
-  LayoutNode,
-  TabGroupNode,
-  SplitNode,
-  FloatingPanel,
-  DockPosition,
-  PreventableDockEvent,
-  DockEdge,
-  Placement,
+  DockManagerState, LayoutNode, TabGroupNode, SplitNode,
+  FloatingPanel, DockPosition, PreventableDockEvent, DockEdge, Placement,
 } from '../types/dock';
 import { createPreventableEvent } from '../types/dock';
 import { dockReducer, type DockAction } from '../reducer/dockReducer';
@@ -31,78 +24,46 @@ import { applyTheme, vsCodeLight, vsCodeDark } from '../theme/DockTheme';
 import { ensureStyles, releaseStyles } from './styleInjector';
 import { debugLog, isDockManagerDebugEnabled } from '../utils/debug';
 
-/** A resource that can release its DOM and event listener references. */
 export interface IDisposable {
-  /** Release all resources held by this object. */
   dispose(): void;
 }
 
-/**
- * Configuration options for {@link DockviewComponent}.
- */
 export interface DockviewComponentOptions {
-  /** The initial layout and panel state to render. */
   initialState: DockManagerState;
-  /** Factory to render a panel's content into a container. Returns a disposable for cleanup. */
   createContent: (panelId: string, container: HTMLElement, api: PanelApi) => IDisposable;
-  /** Optional factory to render a custom tab for a panel. */
   createTab?: (panelId: string, container: HTMLElement, isActive: boolean) => IDisposable;
-  /** Optional factory to render custom header action buttons in a tab group. */
   createHeaderActions?: (slot: 'left' | 'right' | 'prefix', tabGroupId: string, container: HTMLElement) => IDisposable;
-  /** Optional factory to render a watermark into an empty tab group. */
   createWatermark?: (container: HTMLElement) => IDisposable;
-  /** Called after every state change with the new state. */
   onStateChange?: (state: DockManagerState) => void;
-  /** Called before a panel is closed. Call `event.preventDefault()` to cancel. */
   onWillClose?: (event: PreventableDockEvent, panelId: string) => void;
-  /** Called before a drag-and-drop completes. Call `event.preventDefault()` to cancel. */
   onWillDrop?: (event: PreventableDockEvent, sourceId: string, targetId: string, position: DockPosition) => void;
-  /** Called when the user explicitly requests a layout save via context menu. */
   onSaveLayout?: (state: DockManagerState) => void;
-  /** Color theme: `'light'` | `'dark'` or a custom `DockTheme` object. Defaults to `'light'`. */
   theme?: 'light' | 'dark' | DockTheme;
-  /** Whether to show edge dock indicators. Defaults to true. */
   allowRootDock?: boolean;
-  /** Whether to allow dropping on splitters. Defaults to true. */
   allowSplitterDock?: boolean;
-  /** Custom strings for UI elements (tooltips, context menu, etc.) */
   resourceStrings?: Partial<import('../types/resourceStrings').DockResourceStrings>;
+  strictMode?: boolean;
 }
 
-/**
- * Framework-agnostic dock layout manager.
- *
- * Owns the entire DOM tree for the dock layout: tab groups, split panes,
- * floating windows, unpinned strips, drag-and-drop, and keyboard navigation.
- * Framework wrappers (React, Vue, Angular) instantiate this class and supply
- * framework-specific content renderers.
- */
 export class DockviewComponent {
   private container: HTMLElement;
   private options: DockviewComponentOptions;
   private state: DockManagerState;
-
-  // Sub-managers
   private dragManager: DockDragManager;
   private focusManager: FocusManager;
   private keyboardManager: KeyboardManager;
   private historyManager: StateHistoryManager;
-
-  // View maps for incremental rendering
   private tabGroupViews = new Map<string, TabGroupView>();
   private splitViews = new Map<string, SplitView>();
   private floatingViews = new Map<string, FloatingWindowView>();
   private unpinnedStripViews = new Map<DockEdge, UnpinnedStripView>();
   private panelApis = new Map<string, PanelApi>();
-  /** Stable render container manager — one persistent content container per panel, no reparenting. */
   private renderManager!: RenderContainerManager;
   private _api: DockviewApi | null = null;
   private maximizeOverlay: MaximizeOverlayView | null = null;
   private maximizeOverlayPanelId: string | undefined;
   private panelFinder: PanelFinder | null = null;
   private debugOverlayEl: HTMLDivElement | null = null;
-
-  // DOM layout containers
   private rootEl: HTMLDivElement;
   private layoutRowEl: HTMLDivElement;
   private topStripContainer: HTMLDivElement;
@@ -112,7 +73,6 @@ export class DockviewComponent {
   private bottomStripContainer: HTMLDivElement;
   private layoutContentEl: HTMLDivElement;
 
-  /** Create a new dock layout manager inside the given host element. */
   constructor(element: HTMLElement, options: DockviewComponentOptions) {
     ensureStyles();
     this.container = element;
@@ -121,39 +81,30 @@ export class DockviewComponent {
     syncIdCounter(this.state.layout);
     this.historyManager = new StateHistoryManager();
 
-    // Build root DOM structure matching DockManager.tsx
+    // Build root DOM
     this.rootEl = document.createElement('div');
     this.rootEl.className = 'dock-manager-root';
     this.rootEl.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;display:flex;flex-direction:column;background:hsl(var(--dock-bg));';
     this.rootEl.tabIndex = -1;
-
-    // Apply theme
     this.applyThemeOption(options.theme);
 
     const mkDiv = (css: string) => { const d = document.createElement('div'); d.style.cssText = css; return d; };
     const stripCss = 'position:relative;display:none;';
-
-    // Main row: [left-strip] [center-layout] [right-strip]
     this.layoutRowEl = mkDiv('flex:1;display:flex;flex-direction:row;overflow:hidden;position:relative;');
     this.leftStripContainer = mkDiv(stripCss);
     this.centerEl = mkDiv('flex:1;overflow:hidden;position:relative;');
     this.rightStripContainer = mkDiv(stripCss);
     this.layoutRowEl.append(this.leftStripContainer, this.centerEl, this.rightStripContainer);
-
     this.topStripContainer = mkDiv(stripCss);
     this.bottomStripContainer = mkDiv(stripCss);
     this.rootEl.append(this.topStripContainer, this.layoutRowEl, this.bottomStripContainer);
-
-    // Layout content area (inside center)
     this.layoutContentEl = mkDiv('width:100%;height:100%;');
     this.centerEl.appendChild(this.layoutContentEl);
-
     this.container.appendChild(this.rootEl);
 
-    // Render container manager — created after rootEl is attached, before views.
+    // Render container manager
     this.renderManager = new RenderContainerManager(this.rootEl, (panelId, container) => {
       const api = this.getPanelApi(panelId);
-      // Observe container resizes and forward to the PanelApi as dimension events.
       let ro: ResizeObserver | null = null;
       if (typeof ResizeObserver !== 'undefined') {
         ro = new ResizeObserver(entries => {
@@ -163,15 +114,9 @@ export class DockviewComponent {
         ro.observe(container);
       }
       const inner = this.options.createContent(panelId, container, api);
-      return {
-        dispose: () => {
-          if (ro) ro.disconnect();
-          inner.dispose();
-        },
-      };
+      return { dispose: () => { ro?.disconnect(); inner.dispose(); } };
     });
 
-    // Event delegation for action buttons (mousedown fires before re-render on mouseup)
     this.rootEl.addEventListener('mousedown', this.onActionClick);
 
     this.dragManager = new DockDragManager({
@@ -238,13 +183,9 @@ export class DockviewComponent {
         this.dispatch({ type: 'SET_ACTIVE_PANE', panelId });
       },
     });
-
-    // Initial render
     this.render();
   }
 
-  /** Dispatch a {@link DockAction} to update state and re-render. */
-  /** Actions that are purely visual / navigational — don't push undo state for these */
   private static readonly NON_UNDOABLE_ACTIONS = new Set([
     'SET_ACTIVE_PANEL', 'SET_ACTIVE_PANE', 'NAVIGATE', 'BRING_TO_FRONT',
     'UPDATE_FLOATING', 'ACTIVATE_OVERFLOW_TAB', 'RESIZE_SPLIT',
@@ -252,79 +193,60 @@ export class DockviewComponent {
 
   dispatch(action: DockAction): void {
     const prevState = this.state;
-
-    if (isDockManagerDebugEnabled()) {
-      debugLog('DOCK_ACTION', action.type, action);
-    }
-
-    // Push state to history before mutation (for undo support)
-    if (!DockviewComponent.NON_UNDOABLE_ACTIONS.has(action.type)) {
-      this.historyManager.push(prevState);
-    }
-
+    if (isDockManagerDebugEnabled()) debugLog('DOCK_ACTION', action.type, action);
+    if (!DockviewComponent.NON_UNDOABLE_ACTIONS.has(action.type)) this.historyManager.push(prevState);
     try { this.state = dockReducer(this.state, action); }
     catch (err) { console.error('[DockviewComponent] Reducer error for', action.type, err); return; }
-
     if (this.state !== prevState) {
-      // Detect reducer bugs that silently drop panels
       const lost = findLostPanels(prevState, this.state);
       if (lost.length > 0) {
         console.error('[DockManager] PANEL LOST after', action.type, 'panels=', lost,
           { action, prevLayout: prevState.layout, nextLayout: this.state.layout });
+        if (this.options.strictMode) {
+          console.warn('[DockManager] strictMode: rolling back to previous state');
+          this.state = prevState;
+          return;
+        }
       }
-
-      // Invariant checks (debug-gated)
-      if (isDockManagerDebugEnabled()) {
+      if (isDockManagerDebugEnabled() || this.options.strictMode) {
         const violations = checkLayoutInvariants(this.state);
         if (violations.length > 0) {
           const summary = violations.map(v => `[${v.kind}] ${v.detail}`).join('\n  ');
           console.warn(`[DockManager] ${violations.length} invariant violation(s) after ${action.type}:\n  ${summary}`);
-          const byType = (s: DockManagerState, t: string) => [...s.placements.entries()].filter(([, p]) => p.type === t).map(([id]) => id);
-          console.warn('[DockManager] violation context', {
-            action, violations,
-            prevLayout: prevState.layout, nextLayout: this.state.layout,
-            floating: [byType(prevState, 'floating'), byType(this.state, 'floating')],
-            unpinned: [byType(prevState, 'unpinned'), byType(this.state, 'unpinned')],
-            popout: [byType(prevState, 'popout'), byType(this.state, 'popout')],
-          });
+          if (isDockManagerDebugEnabled()) {
+            const byType = (s: DockManagerState, t: string) => [...s.placements.entries()].filter(([, p]) => p.type === t).map(([id]) => id);
+            console.warn('[DockManager] violation context', {
+              action, violations,
+              prevLayout: prevState.layout, nextLayout: this.state.layout,
+              floating: [byType(prevState, 'floating'), byType(this.state, 'floating')],
+              unpinned: [byType(prevState, 'unpinned'), byType(this.state, 'unpinned')],
+              popout: [byType(prevState, 'popout'), byType(this.state, 'popout')],
+            });
+          }
+          if (this.options.strictMode) {
+            console.warn('[DockManager] strictMode: rolling back due to invariant violation(s)');
+            this.state = prevState;
+            return;
+          }
         }
       }
-
       try { this.render(); } catch (e) { console.error('[DockviewComponent] Render error after', action.type, e); }
       try { this.options.onStateChange?.(this.state); } catch (e) { console.error('[DockviewComponent] onStateChange error:', e); }
     }
   }
 
-  /** Undo the last state change. */
   undo(): void {
-    const prevState = this.historyManager.undo(this.state);
-    if (prevState) {
-      this.state = prevState;
-      this.render();
-      this.options.onStateChange?.(this.state);
-    }
+    const s = this.historyManager.undo(this.state);
+    if (s) { this.state = s; this.render(); this.options.onStateChange?.(this.state); }
   }
 
-  /** Redo a previously undone state change. */
   redo(): void {
-    const nextState = this.historyManager.redo(this.state);
-    if (nextState) {
-      this.state = nextState;
-      this.render();
-      this.options.onStateChange?.(this.state);
-    }
+    const s = this.historyManager.redo(this.state);
+    if (s) { this.state = s; this.render(); this.options.onStateChange?.(this.state); }
   }
 
-  /**
-   * Get the current dock manager state.
-   *
-   * @returns The current {@link DockManagerState}.
-   */
-  getState(): DockManagerState {
-    return this.state;
-  }
+  getState(): DockManagerState { return this.state; }
 
-  /** Get a high-level API for programmatic control (lazy-initialized). */
   get api(): DockviewApi {
     if (!this._api) {
       this._api = new DockviewApi(
@@ -338,14 +260,12 @@ export class DockviewComponent {
     return this._api;
   }
 
-  /** Resolve a theme option to a 'light' | 'dark' mode string */
   private resolveThemeMode(theme?: 'light' | 'dark' | DockTheme): 'light' | 'dark' {
     if (!theme) return 'light';
     if (typeof theme === 'string') return theme;
     return theme.mode;
   }
 
-  /** Apply theme option — handles string ('light'/'dark') or DockTheme object */
   private applyThemeOption(theme?: 'light' | 'dark' | DockTheme): void {
     const mode = this.resolveThemeMode(theme);
     this.rootEl.classList.toggle('dark', mode === 'dark');
@@ -353,14 +273,9 @@ export class DockviewComponent {
     if (this.dragManager) this.dragManager.setTheme(mode);
   }
 
-  /** Update component options at runtime (e.g., switch theme or change callbacks). */
   updateOptions(options: Partial<DockviewComponentOptions>): void {
     Object.assign(this.options, options);
-
-    if (options.theme !== undefined) {
-      this.applyThemeOption(options.theme);
-    }
-
+    if (options.theme !== undefined) this.applyThemeOption(options.theme);
     if (options.onWillDrop !== undefined) {
       this.dragManager.setOnWillDrop(options.onWillDrop
         ? (event, sourceId, targetId, position) => { options.onWillDrop?.(event, sourceId, targetId, position); }
@@ -368,7 +283,6 @@ export class DockviewComponent {
     }
   }
 
-  /** Get or create a cached {@link PanelApi} wired to dispatch back into this component. */
   getPanelApi(panelId: string): PanelApi {
     let api = this.panelApis.get(panelId);
     if (!api) {
@@ -383,28 +297,21 @@ export class DockviewComponent {
     return api;
   }
 
-  /** Compute the minimum size (px) a layout node can occupy along an axis. */
   private computeNodeMinSize(node: LayoutNode, axis: 'horizontal' | 'vertical'): number {
     if (node.type === 'tabgroup') {
       let maxMin = 0;
       for (const pid of node.panels) {
         const p = this.state.panels.get(pid);
         if (!p) continue;
-        const m = axis === 'horizontal'
-          ? (p.minimumWidth ?? p.minimumSize ?? 0)
-          : (p.minimumHeight ?? p.minimumSize ?? 0);
+        const m = axis === 'horizontal' ? (p.minimumWidth ?? p.minimumSize ?? 0) : (p.minimumHeight ?? p.minimumSize ?? 0);
         if (m > maxMin) maxMin = m;
       }
       return maxMin;
     }
-    // split
-    if (node.direction === axis) {
-      return node.children.reduce((sum, c) => sum + this.computeNodeMinSize(c, axis), 0);
-    }
+    if (node.direction === axis) return node.children.reduce((sum, c) => sum + this.computeNodeMinSize(c, axis), 0);
     return node.children.reduce((m, c) => Math.max(m, this.computeNodeMinSize(c, axis)), 0);
   }
 
-  /** Compute the maximum size (px) a layout node can occupy along an axis. */
   private computeNodeMaxSize(node: LayoutNode, axis: 'horizontal' | 'vertical'): number {
     if (node.type === 'tabgroup') {
       let minMax = Infinity;
@@ -416,13 +323,10 @@ export class DockviewComponent {
       }
       return minMax;
     }
-    if (node.direction === axis) {
-      return node.children.reduce((sum, c) => sum + this.computeNodeMaxSize(c, axis), 0);
-    }
+    if (node.direction === axis) return node.children.reduce((sum, c) => sum + this.computeNodeMaxSize(c, axis), 0);
     return node.children.reduce((m, c) => Math.min(m, this.computeNodeMaxSize(c, axis)), Infinity);
   }
 
-  /** Push visibility + active flags to each cached PanelApi after render. */
   private propagatePanelApiState(): void {
     const visible = new Set<string>();
     const walk = (node: LayoutNode): void => {
@@ -440,7 +344,6 @@ export class DockviewComponent {
     }
   }
 
-  /** Dispose PanelApis and render containers for panels no longer in state. */
   private cleanupPanelApis(): void {
     for (const [panelId, api] of this.panelApis) {
       if (!this.state.panels.has(panelId)) { api._dispose(); this.panelApis.delete(panelId); this.destroyContent(panelId); }
@@ -450,7 +353,6 @@ export class DockviewComponent {
     }
   }
 
-  /** Enable or disable the debug overlay showing layout IDs and split ratios. */
   private setDebugOverlay(enabled: boolean): void {
     if (!enabled) { this.debugOverlayEl?.remove(); this.debugOverlayEl = null; return; }
     if (!this.debugOverlayEl) {
@@ -477,13 +379,9 @@ export class DockviewComponent {
     });
   }
 
-  /** Clean up all resources. After calling `dispose()`, this instance must not be used again. */
   dispose(): void {
-    // Dispose sub-managers
     for (const m of [this.dragManager, this.focusManager, this.keyboardManager]) m.dispose();
     this.panelFinder?.dispose();
-
-    // Dispose all view maps and panel APIs
     const disposeMap = (map: Map<unknown, { dispose(): void }>) => { for (const [, v] of map) v.dispose(); map.clear(); };
     for (const [, api] of this.panelApis) api._dispose();
     this.panelApis.clear();
@@ -491,7 +389,6 @@ export class DockviewComponent {
     disposeMap(this.splitViews);
     disposeMap(this.floatingViews);
     disposeMap(this.unpinnedStripViews);
-
     if (this.maximizeOverlay) { this.maximizeOverlay.dispose(); this.maximizeOverlay = null; }
     this.renderManager.dispose();
     this.rootEl.removeEventListener('mousedown', this.onActionClick);
@@ -500,19 +397,12 @@ export class DockviewComponent {
   }
 
   private onActionClick = (e: MouseEvent): void => {
-    // Only handle primary mouse button
     if (e.button !== 0) return;
-
-    const target = e.target as HTMLElement;
-    const btn = target.closest<HTMLElement>('button[data-action]');
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('button[data-action]');
     if (!btn) return;
-
-    // Stop propagation so DockDragManager doesn't also process this mousedown
     e.stopPropagation();
-
     const action = btn.getAttribute('data-action');
     const panelId = btn.getAttribute('data-panel-id') || '';
-
     switch (action) {
       case 'close': this.closePanel(panelId); break;
       case 'maximize': this.dispatch({ type: 'MAXIMIZE_PANEL', panelId }); break;
@@ -537,7 +427,6 @@ export class DockviewComponent {
     }
   };
 
-  /** Close a panel, respecting the onWillClose callback. */
   private closePanel(panelId: string): void {
     if (this.options.onWillClose) {
       const event = createPreventableEvent('willClose', panelId);
@@ -547,12 +436,10 @@ export class DockviewComponent {
     this.dispatch({ type: 'CLOSE_PANEL', panelId });
   }
 
-  /** Bind a placeholder element to a panel's persistent render container. */
   private getOrCreateContent(panelId: string, parentContainer: HTMLElement): IDisposable {
     return this.renderManager.bindPlaceholder(panelId, parentContainer);
   }
 
-  /** Permanently destroy a panel's content (called when panel is closed). */
   private destroyContent(panelId: string): void {
     this.renderManager.destroyContainer(panelId);
   }
@@ -564,9 +451,7 @@ export class DockviewComponent {
       this.renderUnpinnedStrips();
       this.renderMaximizeOverlay();
       this.propagatePanelApiState();
-    } catch (err) {
-      console.error('[DockviewComponent] Render error:', err);
-    }
+    } catch (err) { console.error('[DockviewComponent] Render error:', err); }
   }
 
   private renderLayout(): void {
@@ -575,7 +460,6 @@ export class DockviewComponent {
       while (this.layoutContentEl.firstChild) this.layoutContentEl.removeChild(this.layoutContentEl.firstChild);
       this.layoutContentEl.appendChild(layoutEl);
     }
-    // Remove extra children (leftover splitters from collapsed splits)
     while (this.layoutContentEl.lastChild !== this.layoutContentEl.firstChild) {
       if (this.layoutContentEl.lastChild) this.layoutContentEl.removeChild(this.layoutContentEl.lastChild);
     }
@@ -593,7 +477,6 @@ export class DockviewComponent {
       existing.update(node, this.state.panels, this.state.activePaneId, this.state.maximizedPanelId);
       return existing.element;
     }
-
     const callbacks: TabGroupViewCallbacks = {
       onClosePanel: (panelId) => { this.closePanel(panelId); },
       onFloatPanel: (panelId) => { this.dispatch({ type: 'FLOAT_PANEL', panelId, x: 200, y: 200, width: 400, height: 300 }); },
@@ -612,14 +495,7 @@ export class DockviewComponent {
       createHeaderActions: this.options.createHeaderActions,
       createWatermark: this.options.createWatermark,
     };
-
-    const view = new TabGroupView(
-      node,
-      this.state.panels,
-      this.state.activePaneId,
-      this.state.maximizedPanelId,
-      callbacks,
-    );
+    const view = new TabGroupView(node, this.state.panels, this.state.activePaneId, this.state.maximizedPanelId, callbacks);
     this.tabGroupViews.set(node.id, view);
     return view.element;
   }
@@ -628,9 +504,7 @@ export class DockviewComponent {
     const existing = this.splitViews.get(node.id);
     if (existing) {
       const containers = existing.getChildContainers();
-      // Try to reuse if structure unchanged
       if (containers.length === node.children.length) {
-        // Pre-resolve children and check for DOM cycles (ancestor/descendant swap)
         const childEls: HTMLElement[] = [];
         let cycle = false;
         for (let i = 0; i < node.children.length; i++) {
@@ -649,16 +523,12 @@ export class DockviewComponent {
           return existing.element;
         }
       }
-      // Structure changed or cycle — recreate
       existing.element.parentNode?.removeChild(existing.element);
       existing.dispose();
       this.splitViews.delete(node.id);
     }
-
     const view = new SplitView(node, {
-      onResizeSplit: (splitId, sizes) => {
-        this.dispatch({ type: 'RESIZE_SPLIT', splitId, sizes });
-      },
+      onResizeSplit: (splitId, sizes) => { this.dispatch({ type: 'RESIZE_SPLIT', splitId, sizes }); },
       createChildView: (childNode) => this.renderLayoutNode(childNode),
       getChildMinSize: (childNode, axis) => this.computeNodeMinSize(childNode, axis),
       getChildMaxSize: (childNode, axis) => this.computeNodeMaxSize(childNode, axis),
@@ -668,14 +538,10 @@ export class DockviewComponent {
   }
 
   private renderFloatingPanels(): void {
-    // Collect current floating panel IDs from placements
     const floatingPlacements = new Map<string, Placement & { type: 'floating' }>();
     for (const [panelId, placement] of this.state.placements) {
-      if (placement.type === 'floating') {
-        floatingPlacements.set(panelId, placement as Placement & { type: 'floating' });
-      }
+      if (placement.type === 'floating') floatingPlacements.set(panelId, placement as Placement & { type: 'floating' });
     }
-
     for (const [id, view] of this.floatingViews) {
       if (!floatingPlacements.has(id)) {
         view.dispose();
@@ -687,12 +553,10 @@ export class DockviewComponent {
         }
       }
     }
-
     for (const [fpId, placement] of floatingPlacements) {
       const panel = this.state.panels.get(fpId);
       if (!panel) continue;
       const fp: FloatingPanel = { panelId: fpId, x: placement.x, y: placement.y, width: placement.width, height: placement.height, zIndex: placement.zIndex };
-
       const existing = this.floatingViews.get(fpId);
       if (existing) {
         existing.update(fp, panel, this.state.activePaneId);
@@ -710,7 +574,6 @@ export class DockviewComponent {
           getDragManager: () => this.dragManager,
           createContent: (panelId, container) => this.getOrCreateContent(panelId, container),
         };
-
         const view = new FloatingWindowView(fp, panel, this.state.activePaneId, callbacks);
         this.floatingViews.set(fpId, view);
         this.rootEl.appendChild(view.element);
@@ -725,28 +588,20 @@ export class DockviewComponent {
 
   private renderUnpinnedStrips(): void {
     const edges: DockEdge[] = ['left', 'right', 'top', 'bottom'];
-
-    // Collect unpinned panels from placements
     const unpinnedPanels: import('../types/dock').UnpinnedPanel[] = [];
     for (const [panelId, placement] of this.state.placements) {
-      if (placement.type === 'unpinned') {
-        unpinnedPanels.push({ panelId, edge: placement.edge, size: placement.size });
-      }
+      if (placement.type === 'unpinned') unpinnedPanels.push({ panelId, edge: placement.edge, size: placement.size });
     }
-
     for (const edge of edges) {
       const edgePanels = unpinnedPanels.filter((p) => p.edge === edge);
       const container = this.getStripContainer(edge);
-
       if (edgePanels.length === 0) {
         const existing = this.unpinnedStripViews.get(edge);
         if (existing) { existing.dispose(); this.unpinnedStripViews.delete(edge); }
         container.style.display = 'none';
         continue;
       }
-
       container.style.display = '';
-
       const existing = this.unpinnedStripViews.get(edge);
       if (existing) {
         existing.update(edgePanels, this.state.panels);
@@ -767,7 +622,6 @@ export class DockviewComponent {
     if (this.state.maximizedPanelId) {
       const panel = this.state.panels.get(this.state.maximizedPanelId);
       if (panel) {
-        // If overlay exists but for a different panel, dispose and recreate
         if (this.maximizeOverlay && this.maximizeOverlayPanelId !== this.state.maximizedPanelId) {
           this.maximizeOverlay.dispose();
           this.maximizeOverlay = null;
@@ -786,7 +640,6 @@ export class DockviewComponent {
       this.maximizeOverlay.dispose();
       this.maximizeOverlay = null;
       this.maximizeOverlayPanelId = undefined;
-      // Invalidate TabGroupView content slot so it re-requests via getOrCreateContent
       if (restoredPanelId) {
         for (const [, view] of this.tabGroupViews) {
           if (view.containsPanel(restoredPanelId)) { view.invalidateContentSlot(restoredPanelId); break; }
@@ -796,24 +649,18 @@ export class DockviewComponent {
   }
 
   private cleanupStaleViews(): void {
-    const currentTabGroupIds = new Set<string>();
-    const currentSplitIds = new Set<string>();
-    this.collectNodeIds(this.state.layout, currentTabGroupIds, currentSplitIds);
-    const pruneMap = <V extends { dispose(): void }>(map: Map<string, V>, live: Set<string>) => {
-      for (const [id, view] of map) { if (!live.has(id)) { view.dispose(); map.delete(id); } }
+    const tgIds = new Set<string>();
+    const splitIds = new Set<string>();
+    this.collectNodeIds(this.state.layout, tgIds, splitIds);
+    const prune = <V extends { dispose(): void }>(map: Map<string, V>, live: Set<string>) => {
+      for (const [id, v] of map) { if (!live.has(id)) { v.dispose(); map.delete(id); } }
     };
-    pruneMap(this.tabGroupViews, currentTabGroupIds);
-    pruneMap(this.splitViews, currentSplitIds);
+    prune(this.tabGroupViews, tgIds);
+    prune(this.splitViews, splitIds);
   }
 
   private collectNodeIds(node: LayoutNode, tabGroupIds: Set<string>, splitIds: Set<string>): void {
-    if (node.type === 'tabgroup') {
-      tabGroupIds.add(node.id);
-    } else {
-      splitIds.add(node.id);
-      for (const child of node.children) {
-        this.collectNodeIds(child, tabGroupIds, splitIds);
-      }
-    }
+    if (node.type === 'tabgroup') { tabGroupIds.add(node.id); }
+    else { splitIds.add(node.id); for (const c of node.children) this.collectNodeIds(c, tabGroupIds, splitIds); }
   }
 }
