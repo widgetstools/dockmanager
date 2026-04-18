@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PanelFinder } from '../dom/PanelFinder';
+import { PanelFinder } from '../dom/Overlays';
 import type { DockManagerState } from '../types/dock';
 
 // ─── Helpers ─────────────────────────────────────────────────────────

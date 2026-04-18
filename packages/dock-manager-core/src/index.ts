@@ -116,8 +116,8 @@ export type { ContextMenuManagerOptions } from './dom/ContextMenuManager';
 
 // ─── Pane Navigator ──────────────────────────────────────────────────
 
-export { PaneNavigator } from './dom/PaneNavigator';
-export type { PaneNavigatorOptions } from './dom/PaneNavigator';
+export { PaneNavigator } from './dom/Overlays';
+export type { PaneNavigatorOptions } from './dom/Overlays';
 
 // ─── State History Manager ──────────────────────────────────────────
 
@@ -125,8 +125,8 @@ export { StateHistoryManager } from './dom/StateHistoryManager';
 
 // ─── Panel Finder ───────────────────────────────────────────────────
 
-export { PanelFinder } from './dom/PanelFinder';
-export type { PanelFinderOptions } from './dom/PanelFinder';
+export { PanelFinder } from './dom/Overlays';
+export type { PanelFinderOptions } from './dom/Overlays';
 
 // ─── Internal (exported for testing and advanced customization) ───────
 // These are used internally by DockviewComponent and are not part of

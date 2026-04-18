@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PaneNavigator } from '../dom/PaneNavigator';
+import { PaneNavigator } from '../dom/Overlays';
 import type { DockManagerState } from '../types/dock';
 
 // ─── Helpers ─────────────────────────────────────────────────────────
