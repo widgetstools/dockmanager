@@ -16,7 +16,7 @@ import { findFirstTabGroup, findTabGroupForPanel, findTabGroupById, syncIdCounte
 import { checkLayoutInvariants, findLostPanels } from '../layout/layoutInvariants';
 import { PanelApi } from '../api/PanelApi';
 import { DockviewApi } from '../api/DockviewApi';
-import { DockDragManager } from './DockDragManager';
+import { DragManager as DockDragManager } from './DragManager';
 import { FocusManager } from './FocusManager';
 import { KeyboardManager } from './KeyboardManager';
 import { StateHistoryManager } from './StateHistoryManager';

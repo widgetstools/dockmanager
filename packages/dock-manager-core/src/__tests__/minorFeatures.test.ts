@@ -2,7 +2,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { FloatingWindowView } from '../dom/views/FloatingWindowView';
-import { DockDragManager } from '../dom/DockDragManager';
+import { DragManager as DockDragManager } from '../dom/DragManager';
 import { ContextMenuManager } from '../dom/ContextMenuManager';
 import type { DockManagerState, FloatingPanel, PanelConfig } from '../types/dock';
 import type { DockAction } from '../reducer/dockReducer';

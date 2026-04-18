@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ContextMenuManager } from '../dom/ContextMenuManager';
 import { KeyboardManager } from '../dom/KeyboardManager';
-import { DockDragManager } from '../dom/DockDragManager';
+import { DragManager as DockDragManager } from '../dom/DragManager';
 import type { DockManagerState } from '../types/dock';
 import type { DockAction } from '../reducer/dockReducer';
 

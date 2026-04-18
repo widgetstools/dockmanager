@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { TabReorderManager } from '../dom/TabReorderManager';
+import { TabReorderManager } from '../dom/DragManager';
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 

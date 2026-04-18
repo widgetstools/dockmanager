@@ -2,7 +2,7 @@ import type { FloatingPanel, PanelConfig, DockPosition } from '../../types/dock'
 import type { DockResourceStrings } from '../../types/resourceStrings';
 import { defaultResourceStrings } from '../../types/resourceStrings';
 import { iconClose, iconDockBack } from '../icons';
-import type { DockDragManager } from '../DockDragManager';
+import type { DragManager as DockDragManager } from '../DragManager';
 import {
   CompositeDisposable,
   MutableDisposable,
