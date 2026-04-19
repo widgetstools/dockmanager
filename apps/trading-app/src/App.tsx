@@ -218,7 +218,7 @@ export default function App() {
 
           {/* Risk Lock toggle */}
           <button onClick={() => {
-            const p = latestStateRef.current.panels['riskMetrics'];
+            const p = latestStateRef.current.panels.get('riskMetrics');
             if (p) api?.updatePanel('riskMetrics', { disabled: !p.disabled });
           }} style={{
             background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
