@@ -32,7 +32,7 @@ npm error 404 Not Found - PUT https://registry.npmjs.org/@widgetstools%2fdock-ma
 npm answers `404` (not `401`/`403`) when the publish is not authorized. Usual causes:
 
 - the `@widgetstools` organization does not exist, or your npm user is not a member who can publish to it;
-- the `NPM_TOKEN` secret is missing, expired or lacks write access to the packages; and
+- the `NPM_TOKEN` secret is missing, expired or lacks write access to the packages; or
 - trusted publishing is not configured for that package (or names a different repository/workflow file).
 
 Work through the steps below to fix it.
@@ -111,10 +111,12 @@ For **each** of the three packages:
 3. Save.
 4. Recommended: under **Publishing access**, select
    **Require two-factor authentication and disallow tokens** so only the trusted workflow can publish.
+   This disables the `NPM_TOKEN` fallback for that package.
 
 After all three packages are configured and a release has published successfully, you can delete the
 `NPM_TOKEN` secret (and revoke the token on npmjs.com). The workflow then publishes with trusted
-publishing only. If you keep the secret, it remains a fallback — but it must be renewed before it expires.
+publishing only. If you keep the secret, it remains a fallback (unless tokens are disallowed, step 5.4) — but it must be
+renewed before it expires.
 
 ## Troubleshooting
 
