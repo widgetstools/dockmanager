@@ -6,6 +6,8 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-04
+
 ### Added
 - **Panel content keeps its state across layout changes** — floating, docking back, maximizing, restoring and splitting no longer reload an iframe (or reset media, focus or scroll) in a panel. Content is moved with `Element.moveBefore()` where the browser has it (Chrome/Edge 133+, Firefox 144+, OpenFin), and is never left inside an element that is being removed: a panel whose new placeholder is not yet in the document waits in the render root, new split views are built in the document, and a replaced split is removed only after its children have moved out. Safari (no `moveBefore`) still reloads an iframe on a move.
 - **Auto-inject CSS** — dock manager styles are automatically injected into `<head>` on first mount; no manual CSS import required for React or Angular consumers
