@@ -170,3 +170,62 @@ describe('RenderContainerManager', () => {
     m.dispose();
   });
 });
+
+describe('RenderContainerManager — keeping content state across moves', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('moves with moveBefore where the browser has it, so an iframe inside keeps its page', () => {
+    const host = makeHost();
+    const m = new RenderContainerManager(host, () => toDisposable(() => {}));
+    const ph1 = document.createElement('div');
+    const ph2 = document.createElement('div');
+    host.append(ph1, ph2);
+    const calls: Array<[Element, Node]> = [];
+    const proto = Element.prototype as unknown as { moveBefore?: (n: Node, c: Node | null) => void };
+    const had = proto.moveBefore;
+    proto.moveBefore = function (this: Element, node: Node, child: Node | null) {
+      calls.push([this, node]);
+      this.insertBefore(node, child); // jsdom has no moveBefore: the move itself, recorded
+    };
+    try {
+      m.bindPlaceholder('p1', ph1);
+      const c = m.getContainer('p1')!;
+      m.bindPlaceholder('p1', ph2);
+      expect(c.parentElement).toBe(ph2);
+      expect(calls.some(([parent, node]) => parent === ph2 && node === c)).toBe(true);
+    } finally {
+      if (had) proto.moveBefore = had; else delete proto.moveBefore;
+      m.dispose();
+    }
+  });
+
+  it('waits in limbo for a placeholder not yet in the document, then moves into it', async () => {
+    const host = makeHost();
+    const m = new RenderContainerManager(host, () => toDisposable(() => {}));
+    const ph = document.createElement('div'); // detached, as a floating window builds its content
+    m.bindPlaceholder('p1', ph);
+    const c = m.getContainer('p1')!;
+    expect(c.parentElement).toBe(m.element);
+    host.appendChild(ph);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    expect(c.parentElement).toBe(ph);
+    expect(c.style.display).toBe('');
+    m.dispose();
+  });
+
+  it('a later bind supersedes a bind still waiting for its placeholder', async () => {
+    const host = makeHost();
+    const m = new RenderContainerManager(host, () => toDisposable(() => {}));
+    const late = document.createElement('div');
+    const now = document.createElement('div');
+    host.appendChild(now);
+    m.bindPlaceholder('p1', late);
+    m.bindPlaceholder('p1', now);
+    host.appendChild(late);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    expect(m.getContainer('p1')!.parentElement).toBe(now);
+    m.dispose();
+  });
+});

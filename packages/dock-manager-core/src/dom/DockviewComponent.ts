@@ -18,7 +18,7 @@ import { TabGroupView, type TabGroupViewCallbacks } from './views/TabGroupView';
 import { SplitView } from './views/SplitView';
 import { FloatingWindowView, type FloatingWindowViewCallbacks } from './views/FloatingWindowView';
 import { UnpinnedStripView } from './views/UnpinnedStripView';
-import { RenderContainerManager } from './RenderContainerManager';
+import { RenderContainerManager, moveInto } from './RenderContainerManager';
 import type { DockTheme } from '../theme/DockTheme';
 import { applyTheme, vsCodeLight, vsCodeDark } from '../theme/DockTheme';
 import { ensureStyles, releaseStyles } from './styleInjector';
@@ -456,13 +456,9 @@ export class DockviewComponent {
 
   private renderLayout(): void {
     const layoutEl = this.renderLayoutNode(this.state.layout);
-    if (this.layoutContentEl.firstChild !== layoutEl) {
-      while (this.layoutContentEl.firstChild) this.layoutContentEl.removeChild(this.layoutContentEl.firstChild);
-      this.layoutContentEl.appendChild(layoutEl);
-    }
-    while (this.layoutContentEl.lastChild !== this.layoutContentEl.firstChild) {
-      if (this.layoutContentEl.lastChild) this.layoutContentEl.removeChild(this.layoutContentEl.lastChild);
-    }
+    // Moved, never detached and re-inserted: panel content inside (an iframe) keeps its state.
+    if (this.layoutContentEl.firstChild !== layoutEl) moveInto(this.layoutContentEl, layoutEl);
+    for (const child of Array.from(this.layoutContentEl.childNodes)) if (child !== layoutEl) this.layoutContentEl.removeChild(child);
     this.cleanupStaleViews();
     this.cleanupPanelApis();
   }
@@ -516,15 +512,13 @@ export class DockviewComponent {
           existing.updateSizes(node.sizes);
           for (let i = 0; i < node.children.length; i++) {
             if (containers[i].firstChild !== childEls[i]) {
-              while (containers[i].firstChild) containers[i].removeChild(containers[i].firstChild!);
-              containers[i].appendChild(childEls[i]);
+              moveInto(containers[i], childEls[i]);
+              for (const child of Array.from(containers[i].childNodes)) if (child !== childEls[i]) containers[i].removeChild(child);
             }
           }
           return existing.element;
         }
       }
-      existing.element.parentNode?.removeChild(existing.element);
-      existing.dispose();
       this.splitViews.delete(node.id);
     }
     const view = new SplitView(node, {
@@ -532,7 +526,14 @@ export class DockviewComponent {
       createChildView: (childNode) => this.renderLayoutNode(childNode),
       getChildMinSize: (childNode, axis) => this.computeNodeMinSize(childNode, axis),
       getChildMaxSize: (childNode, axis) => this.computeNodeMaxSize(childNode, axis),
+      // Built in the document (limbo), so the views it takes keep their content.
+      stage: (element) => moveInto(this.renderManager.element, element),
     });
+    // The view it replaces goes only now, once the new one has taken the children it keeps.
+    if (existing) {
+      existing.element.parentNode?.removeChild(existing.element);
+      existing.dispose();
+    }
     this.splitViews.set(node.id, view);
     return view.element;
   }

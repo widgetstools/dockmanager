@@ -1,9 +1,15 @@
 import type { SplitNode, LayoutNode } from '../../types/dock';
+import { moveInto } from '../RenderContainerManager';
 
 export interface SplitViewCallbacks {
   onResizeSplit: (splitId: string, sizes: number[]) => void;
   onResetSizes?: (splitId: string) => void;
   createChildView: (node: LayoutNode) => HTMLElement;
+  /**
+   * Puts the new view's element somewhere in the document before its children are built, so the
+   * existing views moved into it (and any iframe in them) are moved, not detached and reloaded.
+   */
+  stage?: (element: HTMLElement) => void;
   /** Returns minimum pixel size a child node can occupy along the split axis */
   getChildMinSize?: (node: LayoutNode, axis: 'horizontal' | 'vertical') => number;
   /** Returns maximum pixel size (Infinity for unconstrained) */
@@ -31,6 +37,7 @@ export class SplitView {
     this.element = document.createElement('div');
     this.element.style.cssText = `display:flex;height:100%;width:100%;flex-direction:${
       node.direction === 'horizontal' ? 'row' : 'column'};`;
+    callbacks.stage?.(this.element);
     this.buildChildren();
   }
 
@@ -67,8 +74,8 @@ export class SplitView {
       c.style.cssText = 'position:relative;overflow:hidden;';
       if (isH) { c.style.width = `${this.node.sizes[i]}%`; c.style.minWidth = '40px'; c.style.height = '100%'; }
       else { c.style.height = `${this.node.sizes[i]}%`; c.style.minHeight = '40px'; c.style.width = '100%'; }
-      c.appendChild(this.callbacks.createChildView(this.node.children[i]));
       this.element.appendChild(c);
+      moveInto(c, this.callbacks.createChildView(this.node.children[i]));
       this.childContainers.push(c);
       if (i < this.node.children.length - 1) {
         const s = this.createSplitter(i, isH);

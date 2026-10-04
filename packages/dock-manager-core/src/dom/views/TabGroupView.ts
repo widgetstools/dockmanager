@@ -160,7 +160,8 @@ export class TabGroupView {
 
   invalidateContentSlot(panelId: string): void {
     const slot = this.contentSlots.get(panelId);
-    if (slot) { slot.container.remove(); this.contentSlots.delete(panelId); }
+    // Released before the slot goes: the content is parked, not removed with it (an iframe in it would reload).
+    if (slot) { slot.disposable.dispose(); slot.container.remove(); this.contentSlots.delete(panelId); }
     this.previousActiveId = null;
     this.buildContent();
   }
