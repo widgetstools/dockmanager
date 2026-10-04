@@ -1,5 +1,9 @@
 name: Publish to npm
 
+# Published with npm trusted publishing: npm trusts this workflow (OIDC, `id-token: write`) for
+# each of the three packages, so there is no token to keep or to expire. Each package names this
+# repo and `publish.yml` as its trusted publisher on npmjs.com.
+
 on:
   release:
     types: [published]
@@ -36,6 +40,10 @@ jobs:
           node-version: 22
           cache: npm
           registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships an older one.
+      - name: Update npm
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
@@ -83,18 +91,12 @@ jobs:
       - name: Publish @widgetstools/dock-manager-core
         if: steps.packages.outputs.core == 'true'
         run: npm publish --workspace=@widgetstools/dock-manager-core --provenance --access public ${{ steps.flags.outputs.flag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @widgetstools/react-dock-manager
         if: steps.packages.outputs.react == 'true'
         run: npm publish --workspace=@widgetstools/react-dock-manager --provenance --access public ${{ steps.flags.outputs.flag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @widgetstools/angular-dock-manager
         if: steps.packages.outputs.angular == 'true'
         working-directory: dist/angular-dock-manager
         run: npm publish --provenance --access public ${{ steps.flags.outputs.flag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
