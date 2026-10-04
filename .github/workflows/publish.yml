@@ -1,8 +1,11 @@
 name: Publish to npm
 
-# Published with npm trusted publishing: npm trusts this workflow (OIDC, `id-token: write`) for
-# each of the three packages, so there is no token to keep or to expire. Each package names this
-# repo and `publish.yml` as its trusted publisher on npmjs.com.
+# Authentication (see NPM_SETUP.md):
+# - npm trusted publishing (OIDC, `id-token: write`): preferred once each package exists on npm and
+#   names this repo and `publish.yml` as its trusted publisher on npmjs.com. No token needed.
+# - NPM_TOKEN secret: used when set. Required for the first publish of a package (a trusted
+#   publisher can only be configured for a package that already exists) or while trusted
+#   publishing is not configured. npm tries OIDC first and falls back to the token.
 
 on:
   release:
@@ -78,6 +81,16 @@ jobs:
             done
           fi
 
+      - name: Check npm authentication
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "NPM_TOKEN secret is set: publishing with OIDC trusted publishing, falling back to the token."
+          else
+            echo "::notice::NPM_TOKEN secret is not set: publishing with OIDC trusted publishing only. A package's first publish, or any package without a trusted publisher configured, fails with E404. See NPM_SETUP.md."
+          fi
+
       - name: Set dry-run flag
         id: flags
         run: |
@@ -89,14 +102,20 @@ jobs:
           fi
 
       - name: Publish @widgetstools/dock-manager-core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         if: steps.packages.outputs.core == 'true'
         run: npm publish --workspace=@widgetstools/dock-manager-core --provenance --access public ${{ steps.flags.outputs.flag }}
 
       - name: Publish @widgetstools/react-dock-manager
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         if: steps.packages.outputs.react == 'true'
         run: npm publish --workspace=@widgetstools/react-dock-manager --provenance --access public ${{ steps.flags.outputs.flag }}
 
       - name: Publish @widgetstools/angular-dock-manager
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         if: steps.packages.outputs.angular == 'true'
         working-directory: dist/angular-dock-manager
         run: npm publish --provenance --access public ${{ steps.flags.outputs.flag }}
